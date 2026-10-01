@@ -10,6 +10,8 @@ and the source spec. Every claim below points at the code that carries it.
 | Unit tests (31) | `pnpm test` | `pass 31 / fail 0` |
 | Type + Svelte diagnostics | `pnpm run check` | `svelte-check found 0 errors and 0 warnings` |
 | Production build | `pnpm run build` | Vite build succeeds (Cloudflare adapter) |
+| Worker config validation | `pnpm run deploy:dry` | Bundle + `wrangler.jsonc` validate without uploading |
+| Worker deploy | `pnpm run build` + `wrangler deploy --var PUBLIC_CONVEX_URL:<prod> --var PUBLIC_CONVEX_SITE_URL:<prod-site>` | Worker live on prod Convex; observability on, query strings redacted |
 | Backend push/preview | `pnpm exec convex dev --once` | Schema + functions push, `autoCloseExpired` cron registered |
 | Manual smoke | `pnpm dev` → open `/`, `/lecturer`, `/records`, `/a/<sessionId>` | See §4 |
 
