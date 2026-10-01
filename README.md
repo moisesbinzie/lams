@@ -45,7 +45,11 @@ pnpm dev
 
 The app ships as a Worker (`@sveltejs/adapter-cloudflare` → `.svelte-kit/cloudflare/_worker.js`,
 see `wrangler.jsonc`). No Worker secrets are needed — the admin password lives in Convex and
-`PUBLIC_CONVEX_URL` is baked into the client bundle at **build time**.
+the Convex URLs reach the Worker as `vars`.
+
+> **Dev mode (current):** the committed `vars` in `wrangler.jsonc` point at the dev Convex
+> deployment (`dev:affable-fly-983`), so Git-connected builds work with no dashboard setup.
+> When going live, replace them with the prod URLs (dashboard Variables or `--var` flags).
 
 1. Ship the backend to production Convex first (needs your explicit go-ahead — it creates/updates
    the prod deployment, separate from `dev:affable-fly-983`):
