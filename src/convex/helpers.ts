@@ -38,6 +38,38 @@ export async function sha256Hex(text: string): Promise<string> {
 export type AutoStatus = 'Present' | 'Late' | 'Out_of_Range' | 'Absent';
 
 /**
+ * Whether a scan may be recorded for a person, given which phone it came from.
+ *
+ * Split out from the guard in `auth.ts` so the decision itself is testable
+ * without a Convex context, and so the rule can be read in one place.
+ *
+ * Three ways to fail, and they need different messages because the student has
+ * to know whether to sign in again or to go and find their new phone:
+ *
+ *   unknown-session — no live session for this token at all
+ *   mismatch        — the token was moved onto a different handset
+ *   moved           — the account is now bound to a different handset
+ */
+export type DeviceVerdict =
+	| { ok: true }
+	| { ok: false; reason: 'unknown-session' | 'mismatch' | 'moved' };
+
+export function judgeScanDevice(
+	/** Device the token was issued to, read from the session row. */
+	issuedTo: string | null,
+	/** Device this request claims to be coming from. */
+	presented: string,
+	/** Device the account is bound to, if it has ever signed in. */
+	boundTo?: string
+): DeviceVerdict {
+	if (!presented) return { ok: false, reason: 'unknown-session' };
+	if (issuedTo === null) return { ok: false, reason: 'unknown-session' };
+	if (issuedTo !== presented) return { ok: false, reason: 'mismatch' };
+	if (boundTo && boundTo !== presented) return { ok: false, reason: 'moved' };
+	return { ok: true };
+}
+
+/**
  * Turns elapsed time plus distance into a status.
  *
  * Three time tiers, both thresholds adjustable by the lecturer:

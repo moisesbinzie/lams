@@ -2,16 +2,18 @@
 
 Attend • Track • Succeed.
 
-Students show a personal rotating code, the class rep or lecturer scans it, and
-the time and location are recorded automatically. Built for phones first:
-attendance for a lecture hall takes a couple of minutes and nobody types a
+A QR code sits on a screen at the front of the hall and refreshes every 30
+seconds. Students scan it with their own phones; their name, the time and how far
+their phone was from the screen are recorded automatically. Built for phones
+first: attendance for a lecture hall takes a couple of minutes and nobody types a
 roster by hand.
 
 > `assessment/` and `DECISIONS.md` are the original spec and the historical
-> decision log from the first build. The system has since been rebuilt around
-> per-person accounts and an inverted scan flow — those documents are archived
-> history, not the source of truth. This README and `QA.md` describe the
-> current system.
+> decision log from the first build. The system has since been rebuilt three times —
+> around per-person accounts, then the station-scan flow, then device-bound scans —
+> so those documents are archived history, not the source of truth. This README and
+> `QA.md` describe the current system. See `SECURITY.md` for the threat model and,
+> importantly, for what the location check cannot do.
 
 ## How the system fits together
 
@@ -37,14 +39,40 @@ Offering ──< Meeting (weekly slot or one-off makeup) ──< Session (live w
   like everyone else in that offering.
 - **Attendance statuses**: `Present`, `Late`, `Out_of_Range`, `Absent`, `Excused`.
   Excused lectures leave the percentage denominator.
+- **Sessions** carry both a lecture radius and a station radius, because the code
+  students scan is usually on a screen at the front of the hall rather than at the
+  lecture's centre. The station radius defaults to the lecture position.
 
 ## Roles and routes
 
 | Role | Signs in with | Routes |
 | --- | --- | --- |
-| Student | Registration number + PIN (device-bound) | `/home` `/code` `/timetable` `/courses` `/attendance` |
-| Class rep | Same as a student | adds `/scan` — take attendance for their class |
+| Student | Registration number + PIN (device-bound) | `/home` `/timetable` `/courses` `/attendance`, and `/a/<session>` when they scan the station |
+| Class rep | Same as a student | adds `/scan` — run the station and take attendance for their class |
 | Lecturer | Username + password (seeded `admin`/`admin` — change it immediately) | `/manage` (console) `/scan` `/records` `/settings` |
+
+## Taking attendance
+
+1. A rep or lecturer opens a lecture on `/scan`. That mints a **per-lecture station
+   secret** and pins the station's position and radius.
+2. The same page shows the QR for the front of the hall — full screen, with the
+   rotating code in large type beside it and a countdown. It re-derives the code
+   locally every 30 seconds, so it keeps working with no signal.
+3. Students scan with their own phone cameras. The link opens the app, which asks
+   for location and submits the code, the device id and the position fix in one
+   request. **A scan is refused unless it came from the one device that student's
+   account is bound to**, so a copied token cannot be used to mark them present
+   from another phone.
+4. Records appear on the rep's list as they arrive. Anything that did not add up is
+   surfaced separately rather than buried.
+5. **No phone, or a record that needs changing**: the rep adds the student by hand
+   (roster autocomplete + required reason) or overrides a record, while the lecture
+   is open. Lecturer-only `override` still works after it closes. Both are
+   audit-logged.
+6. Closing the lecture marks everyone with no record **Absent**.
+
+A student who scans while signed out has the scan held for them: signing in returns
+them straight to the lecture and it records automatically.
 
 ## Setup flow (lecturer console, `/manage`)
 

@@ -6,11 +6,59 @@ import assert from 'node:assert/strict';
 import {
 	computeAutoStatus,
 	haversineM,
+	judgeScanDevice,
 	normalizeId,
 	normalizeReg,
 	randomHex,
 	sha256Hex
 } from '../src/convex/helpers.ts';
+
+describe('judgeScanDevice', () => {
+	const PHONE = 'device-abc';
+	const OTHER = 'device-xyz';
+
+	it('accepts a scan from the phone the token was issued to', () => {
+		assert.deepEqual(judgeScanDevice(PHONE, PHONE, PHONE), { ok: true });
+	});
+
+	it('accepts an account that has never recorded a bound device', () => {
+		// A freshly activated account may reach this before staff have seen it;
+		// refusing here would strand a legitimate student.
+		assert.deepEqual(judgeScanDevice(PHONE, PHONE, undefined), { ok: true });
+	});
+
+	it('rejects a token carried onto another phone', () => {
+		// This is the sharing case: an absentee holds someone else's token and
+		// scans the station with it. The record would land on the wrong student.
+		assert.deepEqual(judgeScanDevice(PHONE, OTHER, OTHER), {
+			ok: false,
+			reason: 'mismatch'
+		});
+	});
+
+	it('rejects a scan after the account was moved to a new phone', () => {
+		// Both the session and the presented device agree, but the account now
+		// belongs to a different handset — an old session outliving the move.
+		assert.deepEqual(judgeScanDevice(PHONE, PHONE, OTHER), { ok: false, reason: 'moved' });
+	});
+
+	it('rejects a dead session before looking at devices', () => {
+		assert.deepEqual(judgeScanDevice(null, PHONE, PHONE), {
+			ok: false,
+			reason: 'unknown-session'
+		});
+	});
+
+	it('rejects a request that identifies no device', () => {
+		assert.deepEqual(judgeScanDevice(PHONE, '', PHONE), { ok: false, reason: 'unknown-session' });
+	});
+
+	it('does not accept a prefix or truncation of the device id', () => {
+		assert.equal(judgeScanDevice('device-abcdef', 'device-abc', 'device-abc').ok, false);
+		assert.equal(judgeScanDevice('device-abc', 'device-abc ', 'device-abc').ok, false);
+		assert.equal(judgeScanDevice('Device-ABC', 'device-abc', 'device-abc').ok, false);
+	});
+});
 
 describe('normalizeReg / normalizeId', () => {
 	it('upper-cases, trims and collapses inner spaces', () => {

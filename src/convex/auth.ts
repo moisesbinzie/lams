@@ -13,7 +13,7 @@
 // of identity arrived, which keeps the permission rules in one place.
 
 import type { GenericId } from 'convex/values';
-import { sha256Hex } from './helpers';
+import { judgeScanDevice, sha256Hex } from './helpers';
 
 export const SCHEME = 'sha2i';
 export const ITERATIONS = 2048;
@@ -197,6 +197,62 @@ export async function requirePerson(ctx: any, token: string): Promise<PersonDoc>
 		throw new Error('This action is for students and class representatives.');
 	}
 	return actor.person;
+}
+
+/**
+ * The device a token was issued to, read from the session row itself rather than
+ * from anything the caller sent. Null when the token is unknown or expired.
+ */
+export async function sessionDeviceId(ctx: any, token: string): Promise<string | null> {
+	if (!token) return null;
+	const sess = await ctx.db
+		.query('authSessions')
+		.withIndex('by_token', (q: any) => q.eq('token', token))
+		.unique();
+	if (!sess || sess.expiresAt < Date.now()) return null;
+	return sess.deviceId;
+}
+
+/**
+ * A person, *and* proof that this request is coming from the one phone their
+ * account is bound to.
+ *
+ * Sign-in already refuses a second device, but that check happens once, at login.
+ * A token is still a bearer credential afterwards: it sits in `localStorage`, so
+ * it can be copied to another phone by hand, restored from a backup, or carried
+ * across by a browser profile sync. Without this guard, a student could hand their
+ * token to an absentee and have the scan land on their own record.
+ *
+ * Two comparisons are needed, and they fail differently:
+ *
+ *   - the presented device must equal the session's device — otherwise someone
+ *     moved a valid token onto a different handset;
+ *   - the session's device must equal the account's bound device — otherwise the
+ *     account was moved to a new phone while an old session was still alive.
+ */
+export async function requirePersonOnDevice(
+	ctx: any,
+	token: string,
+	deviceId: string
+): Promise<PersonDoc> {
+	const person = await requirePerson(ctx, token);
+	const issuedTo = await sessionDeviceId(ctx, token);
+	const verdict = judgeScanDevice(issuedTo, deviceId, person.boundDeviceId);
+
+	switch (verdict.ok ? true : verdict.reason) {
+		case true:
+			return person;
+		case 'unknown-session':
+			throw new Error('This device could not be identified. Please sign in again.');
+		case 'mismatch':
+			throw new Error(
+				'This scan came from a different phone from the one you signed in on, so it was refused. Sign in again on this phone.'
+			);
+		case 'moved':
+			throw new Error(
+				'Your account has been moved to another phone. Sign in again on the phone that now holds it.'
+			);
+	}
 }
 
 // ------------------------------------------------------- class-level rights

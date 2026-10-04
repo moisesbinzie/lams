@@ -233,9 +233,25 @@ export default defineSchema({
 		subjectId: v.id('subjects'),
 		semesterId: v.id('semesters'),
 		classId: v.id('classes'),
+		/**
+		 * Where the QR station physically stands. Kept separate from the lecture
+		 * position so the two radii can differ — the screen may sit at a doorway
+		 * while the lecture is at the back of the hall. `startSession` currently
+		 * sets these from the lecture coordinates; they are separate fields so a
+		 * station can be pinned on its own without a schema change.
+		 */
+		stationLat: v.number(),
+		stationLng: v.number(),
+		/** Distance from the station at which a student's phone still counts as present. */
+		stationRadiusM: v.number(),
 		lectureLat: v.number(),
 		lectureLng: v.number(),
 		radiusM: v.number(),
+		/**
+		 * Per-session secret behind the rotating station code. Minted when the
+		 * lecture opens, never reused, never returned to a student.
+		 */
+		stationSecret: v.optional(v.string()),
 		/** Within this many seconds of the start -> Present. Default 300 (5 min). */
 		onTimeSec: v.number(),
 		/** By this many seconds -> Late; after it, scans record Absent. Default 600 (10 min). */
@@ -262,14 +278,23 @@ export default defineSchema({
 		regNorm: v.string(),
 		method: v.union(
 			v.literal('scan'),
+			/** Student scanned the station with their own phone. */
+			v.literal('station'),
+			/** A rep added them by hand because they have no usable phone. */
 			v.literal('rep'),
 			v.literal('manual'),
 			v.literal('absent')
 		),
+		/** Why a record was entered by hand — kept for the audit trail. */
+		overrideReason: v.optional(v.string()),
 		/** Who recorded it, for every non-absent method. */
 		recordedBy: v.optional(v.string()),
 		recordedByRole: v.optional(v.union(v.literal('rep'), v.literal('lecturer'))),
 		recordedById: v.optional(v.id('people')),
+		/**
+		 * The handset a scan came from. For station scans this is the student's
+		 * own device, already checked against their bound device server-side.
+		 */
 		scannerDeviceId: v.optional(v.string()),
 		latitude: v.optional(v.number()),
 		longitude: v.optional(v.number()),
@@ -282,7 +307,13 @@ export default defineSchema({
 		 *   weak       — location was captured but too imprecise to trust
 		 */
 		verification: v.optional(
-			v.union(v.literal('scan_only'), v.literal('confirmed'), v.literal('weak'))
+			v.union(
+				v.literal('scan_only'),
+				v.literal('confirmed'),
+				v.literal('weak'),
+				/** No usable position fix at all, so presence could not be judged. */
+				v.literal('unconfirmed')
+			)
 		),
 		/** Student's own location, reported by their phone after being scanned. */
 		studentLat: v.optional(v.number()),

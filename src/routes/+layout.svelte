@@ -30,28 +30,32 @@
 	 * nav flicker through "Home + Sign in" on every load.
 	 */
 	const nav = $derived.by(() => {
-		if (!me) return [{ href: '/', label: 'Home' }];
+		// Explaining the system is useful before anyone has an account, so this
+		// page is the one link every visitor gets regardless of role.
+		const how = { href: '/how-it-works', label: 'How it works' };
+		if (!me) return [{ href: '/', label: 'Home' }, how];
 		if (me.role === 'lecturer') {
 			return [
 				{ href: '/manage', label: 'Set up' },
 				{ href: '/scan', label: 'Take attendance' },
 				{ href: '/records', label: 'Records' },
+				how,
 				{ href: '/settings', label: 'Settings' }
 			];
 		}
 		if (me.role === 'rep') {
 			return [
 				{ href: '/home', label: 'My account' },
-				{ href: '/code', label: 'My code' },
 				{ href: '/timetable', label: 'Timetable' },
 				{ href: '/scan', label: 'Take attendance' },
+				how,
 				{ href: '/courses', label: 'My subjects' }
 			];
 		}
 		return [
 			{ href: '/home', label: 'My account' },
-			{ href: '/code', label: 'My code' },
 			{ href: '/timetable', label: 'Timetable' },
+			how,
 			{ href: '/courses', label: 'My subjects' },
 			{ href: '/attendance', label: 'My attendance' }
 		];
@@ -73,7 +77,7 @@
 	<title>LAMS — Lecture Attendance</title>
 	<meta
 		name="description"
-		content="Lecture attendance made fast and simple. Students show a personal code, the class representative or lecturer scans it, and the time and location are recorded automatically. Attend • Track • Succeed."
+		content="Lecture attendance made fast and simple. Students scan a QR code on the screen at the front of the hall, and their name, time and distance from the station are recorded automatically. Attend • Track • Succeed."
 	/>
 	<link rel="icon" href="/lams-mark.png" />
 	<link rel="apple-touch-icon" href="/lams-logo.png" />
@@ -128,7 +132,7 @@
 			class="mx-auto flex max-w-6xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left"
 		>
 			<p class="font-semibold text-lams-navy">Attend • Track • Succeed</p>
-			<p>Students show a code, their class representative scans it, and the rest is recorded for them.</p>
+			<p>Scan the screen at the front of the hall, and the rest is recorded for you.</p>
 		</div>
 	</footer>
 </div>

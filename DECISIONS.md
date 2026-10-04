@@ -127,3 +127,101 @@ Locked:
 - Attendance form is reg-number-first: typing a roster reg auto-fills name + ID (public `students.findByReg`, minimal fields) and locks the fields.
 - Server accepts blank name/ID when the reg resolves from the roster (`attendance.submitSelf` fills from roster, rejects unknowns with "not on roster" errors).
 - Phone remembers last submission in `localStorage` (`lams_me`) and prefills next session; "Not you?" clears it.
+
+## Round 6 — Station scan, and distance-based presence (2026-10-04)
+
+### Q23: Should the QR stay on the student's phone, or move to a fixed screen?
+**A:** Fixed screen at the front of the hall. Students scan it; they are not scanned.
+
+Locked — the direction of the scan is the security decision, not the QR itself:
+- Session mints a per-lecture `stationSecret`; the display derives a 6-digit code
+  from it every 30s and encodes `https://<host>/a/<sessionId>?c=<code>`.
+- `station.verifyStationCode` accepts ±1 slot for display-vs-server clock skew
+  (90s worst-case replay, judged acceptable because the distance check covers it).
+- This reverses Q22's flow. Superseded: the rep no longer scans.
+
+### Q24: Is the 30-second rotation enough to stop sharing?
+**A:** No. It stops *delayed* use, not immediate forwarding.
+
+Locked — the two controls are complementary and each covers the other's gap:
+- The station is public, so anyone near it can photograph the code and send it on.
+  The photograph is therefore **not** the control.
+- What actually stops remote sharing is that the redeeming phone reports its own
+  position: a phone in a bedroom is `Out_of_Range` and flagged.
+- This is only possible because the scanning device is the student's own, so the
+  distance is a first-party measurement. The old flow could only use the rep's phone
+  as a proxy, with the student's phone as a later confirmation step.
+
+### Q25: What if the student's phone reports no location, or a poor one?
+**A:** Record it and flag it. Never silently count it as a clean Present.
+
+Locked — `verification` is the audit surface:
+- Fix coarser than 2× the station radius → distance withheld from the status
+  calculation entirely (`positionUsable` false), time tier decides, `weak` + flag.
+- No fix at all → `unconfirmed` + flag.
+- Rationale: a coarse fix cannot distinguish inside from outside, so it must not
+  produce a confident verdict either way; but a phone with broken GPS is not a
+  cheater, so the record is not destroyed.
+
+### Q26: Students without a phone?
+**A:** Hand-add by a rep or lecturer, with attribution; rep-level override added.
+
+Locked:
+- `attendance.addManually` (roster autocomplete + optional `reason`) → `method: 'rep'`,
+  `recordedBy`, `overrideReason`, `verification: 'scan_only'` — the distance there is
+  the *rep's* phone and is never evidence about the student.
+- `attendance.overrideDuringSession` lets a class rep change any record in their
+  class while the lecture is open (Q20's lecturer-only `override` still handles
+  settled lectures). Audit-logged: `prevStatus`, `overriddenBy`, `overriddenAt`.
+- Sessions now carry `stationLat/Lng/RadiusM` separately from the lecture position.
+
+### Q27: Should a scan be tied to one phone?
+**A:** Yes, checked at scan time as well as at sign-in.
+
+Locked — sign-in already refuses a second device, but that runs once. Afterwards a
+token is a bearer credential sitting in `localStorage`, so it can be copied, backed
+up, or synced to another phone, and an absentee holding it would land the record on
+the student's own attendance. `submitStationScan` therefore also takes `deviceId`:
+- presented device == the session's device, else `mismatch`
+- session's device == `people.boundDeviceId`, else `moved`
+- `attendance.scannerDeviceId` records it (the column already existed, unused)
+- `helpers.judgeScanDevice` holds the pure rule; both branches have distinct student-
+  facing messages because the fix differs (re-sign-in vs. go find your new phone)
+
+Honest limit, recorded in `SECURITY.md`: bound phone **plus** PIN is still the
+account. Borrowing both defeats this; only the distance check remains.
+
+### Q28: What if the student scans while signed out?
+**A:** Stash the scan, sign in, land straight back on the lecture, submit
+automatically.
+
+Locked — the scan is held in `sessionStorage` (not `localStorage`: a station code is
+worthless in about a minute). `pendingScanTarget()` is read by `/signin`, which
+returns the student to `/a/<sessionId>` instead of `/home`. Entries expire after 15
+minutes and are keyed to one `sessionId`, so a stash cannot be spent on a different
+lecture. An expired or moved token mid-submit routes back through the same path.
+
+Net effect for requirement "a scan completes the registration without doing anything
+else": signed in, one scan and one location grant is the whole flow.
+
+### Q29: Audit gaps found and fixed (2026-10-04)
+**A:** Six, all now closed.
+
+- **Station code brute force.** Six digits, server-verified, previously unthrottled.
+  Now `ratelimit.noteFailure` keyed `station:<personId>` with deliberately generous
+  `STATION_LIMITS` (40 / 5 min) — a student whose camera will not focus must not be
+  punished like a PIN-guesser. Success clears the count.
+- **Rep override with no reason.** The largest remaining integrity gap: a rep could
+  rewrite the register with nothing recorded. `reason` is now **required** on both
+  `addManually` and `overrideDuringSession`, enforced server-side. `/scan` offers a
+  datalist of the reasons that actually occur.
+- **Expired-code dead end.** A stale code failed with a "Try again" button that
+  retried the *same* dead code. The landing page now detects it and asks for a fresh
+  camera scan instead.
+- **`stationLat/Lng` comment overpromised** a pinnable station location that
+  `startSession` never accepted. Comment corrected to say they are seeded from the
+  lecture position.
+- **Stale copy** on `/scan` and `start-session-form` still said "start scanning";
+  now describes the station and labels the field "Station radius".
+- **`clearDevice` was already sound** (it deletes the person's sessions) — the new
+  scan-time check makes it belt-and-braces rather than the only barrier.

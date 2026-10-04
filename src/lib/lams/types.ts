@@ -128,6 +128,42 @@ export interface TimetableMakeup extends TimetableEntry {
 	note: string;
 }
 
+/** What the station screen needs to render its rotating code. */
+export interface StationFeed {
+	_id: string;
+	secret: string | null;
+	subjectCode: string;
+	subjectTitle: string;
+	className: string;
+	status: 'open' | 'closed';
+	startedAt: number;
+	closesAt: number;
+	stationRadiusM: number;
+}
+
+/** What a student sees on the page the QR opened, before and after scanning. */
+export interface StationPreview {
+	subjectCode: string;
+	subjectTitle: string;
+	className: string;
+	status: 'open' | 'closed';
+	startedAt: number;
+	closesAt: number;
+}
+
+export interface StationScanResult {
+	ok: true;
+	fullName: string;
+	subjectCode: string;
+	subjectTitle: string;
+	status: AttendanceStatus;
+	distanceM: number | null;
+	/** False when the fix was missing or too coarse to judge. */
+	positionUsable: boolean;
+	flagged: boolean;
+	lateByMinutes: number | null;
+}
+
 export interface MyEnrolment {
 	_id: string;
 	offeringId: string;
@@ -148,18 +184,36 @@ export interface MyEnrolment {
 	}[];
 }
 
+export type AttendanceMethod = 'scan' | 'station' | 'rep' | 'manual' | 'absent';
+
+/**
+ * How far the record's position evidence actually goes.
+ *   confirmed   — the student's own phone reported a precise fix inside the radius
+ *   weak        — a fix was reported but too coarse to decide inside from outside
+ *   unconfirmed — no usable fix, so presence could not be judged either way
+ *   scan_only   — only the recorder's phone was located; no claim about the student
+ */
+export type Verification = 'scan_only' | 'confirmed' | 'weak' | 'unconfirmed';
+
 export interface AttendanceRecord {
 	_id: string;
 	personId: string | null;
 	fullName: string;
 	regNumber: string;
-	method: 'scan' | 'rep' | 'manual' | 'absent';
+	method: AttendanceMethod;
 	status: AttendanceStatus;
 	recordedBy: string | null;
 	recordedById: string | null;
 	recordedByRole: Role | null;
 	distanceM: number | null;
 	accuracyM: number | null;
+	/** The student's own distance from the station, when their phone reported one. */
+	studentDistanceM: number | null;
+	verification: Verification;
+	flagged: boolean;
+	flagReason: string | null;
+	/** Why a record was entered by hand instead of scanned. */
+	overrideReason: string | null;
 	submittedAt: number;
 	overriddenBy: string | null;
 	prevStatus: AttendanceStatus | null;
@@ -200,11 +254,11 @@ export interface MyAttendanceRow {
 	subjectCode: string;
 	subjectTitle: string;
 	status: AttendanceStatus;
-	method: 'scan' | 'rep' | 'manual' | 'absent';
-	recordedBy: string | null;
-	disputed: boolean;
-	disputeNote: string | null;
-}
+		method: AttendanceMethod;
+		recordedBy: string | null;
+		disputed: boolean;
+		disputeNote: string | null;
+	}
 
 export interface SubjectSummary {
 	subjectId: string;

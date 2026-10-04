@@ -9,7 +9,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { LogOut, QrCode, CalendarDays, BarChart3, ScanLine, Settings, Pencil } from '@lucide/svelte';
+	import { LogOut, CalendarDays, BarChart3, ScanLine, Settings, Pencil } from '@lucide/svelte';
 	import type { Me, MyEnrolment, MyAttendanceRow, RepClass } from '$lib/lams/types';
 
 	let me = $state<Me | null>(null);
@@ -178,11 +178,6 @@
 		{/if}
 
 		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-			<Button href="/code" size="lg" class="h-auto flex-col items-start gap-1 py-4 text-left">
-				<QrCode class="size-5" />
-				<span class="text-sm font-semibold">My attendance code</span>
-				<span class="text-xs font-normal opacity-80">Show this to be scanned</span>
-			</Button>
 			<Button href="/timetable" size="lg" variant="outline" class="h-auto flex-col items-start gap-1 py-4 text-left">
 				<CalendarDays class="size-5" />
 				<span class="text-sm font-semibold">My timetable</span>
@@ -197,7 +192,7 @@
 				<Button href="/scan" size="lg" variant="secondary" class="h-auto flex-col items-start gap-1 py-4 text-left">
 					<ScanLine class="size-5" />
 					<span class="text-sm font-semibold">Take attendance</span>
-					<span class="text-xs font-normal opacity-80">Scan students in</span>
+					<span class="text-xs font-normal opacity-80">Put my station on screen</span>
 				</Button>
 			{:else}
 				<Button href="/courses" size="lg" variant="secondary" class="h-auto flex-col items-start gap-1 py-4 text-left">

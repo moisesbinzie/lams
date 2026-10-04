@@ -16,7 +16,8 @@
 		Smartphone,
 		CalendarDays,
 		BookOpen,
-		BarChart3
+		BarChart3,
+		ArrowRight
 	} from '@lucide/svelte';
 
 	const steps = [
@@ -32,8 +33,8 @@
 		},
 		{
 			icon: ScanLine,
-			title: '3 · Rep or lecturer scans you',
-			body: 'At the start of the lecture you show your code and it is scanned. Your name and the time are recorded for you.'
+			title: '3 · You scan the screen',
+			body: 'Point your phone camera at the QR on the screen at the front of the hall. Your name, the time and how far you are from the screen are recorded for you.'
 		}
 	];
 
@@ -44,7 +45,7 @@
 			tone: 'text-lams-navy',
 			lines: [
 				'Sign in with your registration number and PIN.',
-				'Show your code — it refreshes every 30 seconds.',
+				'Scan the QR on the screen with your own camera — it refreshes every 30 seconds.',
 				'Check your own attendance and report anything wrong.'
 			]
 		},
@@ -54,8 +55,8 @@
 			tone: 'text-lams-green',
 			lines: [
 				'Add students to your class and assign subjects.',
-				'Scan your classmates in around the room.',
-				'Every scan is recorded under your name.'
+				'Put the station QR on your screen at the front of the hall.',
+				'Add anyone without a working phone by hand — under your name.'
 			]
 		},
 		{
@@ -93,8 +94,8 @@
 				Attendance in seconds, not minutes.
 			</h1>
 			<p class="max-w-xl text-muted-foreground">
-				LAMS replaces the paper register. Students show a code on their phone, their class representative or
-				lecturer scans it, and the date, time and location are recorded automatically. The lecture closes
+				LAMS replaces the paper register. Students scan a QR code on the screen at the front of the hall, and
+				the date, time and their distance from the screen are recorded automatically. The lecture closes
 				itself and your percentages add up on their own.
 			</p>
 			<div class="flex flex-wrap gap-2">
@@ -130,6 +131,13 @@
 			</Card.Root>
 		{/each}
 	</section>
+
+	<div class="-mt-4 flex justify-center">
+		<Button variant="outline" size="sm" href="/how-it-works">
+			See the whole flow as diagrams
+			<ArrowRight class="size-3.5" />
+		</Button>
+	</div>
 
 	<section class="grid gap-4 md:grid-cols-2">
 		<Card.Root>
@@ -247,11 +255,17 @@
 					</li>
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
-						<span>Your code changes every 30 seconds, so a photo of it stops working almost immediately.</span>
+						<span
+							>The code on the screen changes every 30 seconds, so a photo of the screen stops working almost
+							immediately.</span
+						>
 					</li>
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
-						<span>Your location is checked against the lecture hall at the moment you are scanned.</span>
+						<span
+							>Your own phone reports where it is at the moment you scan, so being in the hall is checked
+							by your device and not anyone else's.</span
+						>
 					</li>
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>

@@ -96,8 +96,9 @@
 	<Card.Header>
 		<Card.Title>Start a lecture now</Card.Title>
 		<Card.Description>
-			Set where the lecture is and how long students have to arrive, then start scanning. Anyone not
-			recorded when it closes is marked absent.
+			Set where the lecture is and how long students have to arrive, then start. The station QR
+			appears and students scan it from their own phones. Anyone not recorded when it closes is
+			marked absent.
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="flex flex-col gap-4">
@@ -152,7 +153,7 @@
 					<p class="mb-2 text-sm font-medium">Attendance rules</p>
 					<div class="grid gap-2 sm:grid-cols-3">
 						<div class="flex flex-col gap-1">
-							<Label for="srad">Allowed distance (m)</Label>
+							<Label for="srad">Station radius (m)</Label>
 							<Input id="srad" type="number" min="5" max="2000" bind:value={radius} />
 						</div>
 						<div class="flex flex-col gap-1">
@@ -165,8 +166,9 @@
 						</div>
 					</div>
 					<p class="mt-2 text-xs text-muted-foreground">
-						On time for {onTimeMin} minute(s), then late until {lateUntilMin} minute(s). Anyone scanned
-						after that is recorded as absent. Students more than {radius} m away are flagged for review.
+						On time for {onTimeMin} minute(s), then late until {lateUntilMin} minute(s). A student's own
+						phone is accepted within {radius} m of the QR, and anything further off is flagged for
+						review. Set this to the size of the room, not the campus.
 					</p>
 				</div>
 

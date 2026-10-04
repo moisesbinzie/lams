@@ -5,6 +5,7 @@
 	import { requireConvexClient } from '$lib/convexClient';
 	import { beginSession, ensureSession, sessionMe, sessionStatus } from '$lib/lams/session.svelte';
 	import { getDeviceId } from '$lib/lams/auth';
+		import { pendingScanTarget } from '$lib/lams/station';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -30,6 +31,15 @@
 	let error = $state('');
 	let loadError = $state('');
 	let checking = $state(true);
+
+		/**
+		 * A student who scanned the station while signed out has a scan waiting. They
+		 * are only ever one step from a record, so finishing sign-in takes them
+		 * straight back to the lecture rather than dumping them on their home page.
+		 */
+		function afterSignIn(): string {
+			return pendingScanTarget() ?? '/home';
+		}
 
 	onMount(async () => {
 		// Reuse the shared session check instead of querying again: if the
@@ -100,7 +110,7 @@
 			// Record the token in the shared session so the navbar is already
 			// signed in when the target page renders.
 			await beginSession(res.token);
-			await goto('/home');
+			await goto(afterSignIn());
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Could not sign you in.';
 		} finally {
@@ -136,7 +146,7 @@
 			// Record the token in the shared session so the navbar is already
 			// signed in when the target page renders.
 			await beginSession(res.token);
-			await goto('/home');
+			await goto(afterSignIn());
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Could not set up your account.';
 		} finally {

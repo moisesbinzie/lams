@@ -12,7 +12,7 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "node --test src/lib/lams/csv.test.ts src/lib/lams/time.test.ts src/lib/lams/geo.test.ts src/lib/lams/totp.test.ts src/lib/lams/session-state.test.ts tests/convex-helpers.test.ts tests/convex-proximity.test.ts",
+		"test": "node --test src/lib/lams/csv.test.ts src/lib/lams/time.test.ts src/lib/lams/geo.test.ts src/lib/lams/totp.test.ts src/lib/lams/station.test.ts src/lib/lams/session-state.test.ts tests/convex-helpers.test.ts tests/convex-proximity.test.ts",
 		"gen": "wrangler types"
 	},
 	"devDependencies": {

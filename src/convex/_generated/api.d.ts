@@ -21,6 +21,7 @@ import type * as reports from "../reports.js";
 import type * as reps from "../reps.js";
 import type * as scancode from "../scancode.js";
 import type * as staff from "../staff.js";
+import type * as station from "../station.js";
 import type * as timetable from "../timetable.js";
 
 import type {
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   reps: typeof reps;
   scancode: typeof scancode;
   staff: typeof staff;
+  station: typeof station;
   timetable: typeof timetable;
 }>;
 

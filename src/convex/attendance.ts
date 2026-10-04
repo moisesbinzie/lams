@@ -6,12 +6,15 @@ import {
 	recorderFields,
 	requireActor,
 	requirePerson,
+	requirePersonOnDevice,
 	requireRecorder,
 	requireStaff
 } from './auth';
-import { computeAutoStatus, haversineM, normalizeReg } from './helpers';
-import { describeContradiction, judgeProximity } from './proximity';
+import { computeAutoStatus, haversineM, normalizeReg, randomHex } from './helpers';
+import { describeContradiction, judgeProximity, STUDENT_ACCURACY_TOLERANCE } from './proximity';
+import { isBlocked, noteFailure, noteSuccess, STATION_LIMITS } from './ratelimit';
 import { parseScanCode, verifyScanCode } from './scancode';
+import { verifyStationCode } from './station';
 
 const DEFAULT_ON_TIME_SEC = 300;
 const DEFAULT_LATE_UNTIL_SEC = 600;
@@ -67,7 +70,9 @@ export const startSession = mutation({
 		lectureLng: v.number(),
 		radiusM: v.optional(v.number()),
 		onTimeSec: v.optional(v.number()),
-		lateUntilSec: v.optional(v.number())
+		lateUntilSec: v.optional(v.number()),
+		/** Defaults to the lecture position — a station in the room is the usual case. */
+		stationRadiusM: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
@@ -85,6 +90,14 @@ export const startSession = mutation({
 		const onTimeSec = args.onTimeSec ?? DEFAULT_ON_TIME_SEC;
 		const lateUntilSec = args.lateUntilSec ?? DEFAULT_LATE_UNTIL_SEC;
 		if (radiusM < 5 || radiusM > 2000) throw new Error('The allowed distance must be between 5 and 2000 metres.');
+				// The station is what students actually scan, so its radius is the one that
+				// decides most attendance. It gets its own bound rather than inheriting the
+				// lecture radius, which a lecturer may widen for reasons that have nothing
+				// to do with where the door is.
+				const stationRadiusM = args.stationRadiusM ?? 50;
+				if (stationRadiusM < 5 || stationRadiusM > 2000) {
+					throw new Error('The station distance must be between 5 and 2000 metres.');
+				}
 		if (onTimeSec < 30 || onTimeSec > 3600) throw new Error('The on-time window must be between 30 seconds and 60 minutes.');
 		if (lateUntilSec < 60 || lateUntilSec > 7200) throw new Error('The late window must be between 1 and 120 minutes.');
 		if (onTimeSec >= lateUntilSec) throw new Error('The late window must be longer than the on-time window.');
@@ -108,9 +121,13 @@ export const startSession = mutation({
 			subjectId: offering.subjectId,
 			semesterId: offering.semesterId,
 			classId: offering.classId,
+			stationLat: args.lectureLat,
+			stationLng: args.lectureLng,
+			stationRadiusM,
 			lectureLat: args.lectureLat,
 			lectureLng: args.lectureLng,
 			radiusM,
+			stationSecret: randomHex(16),
 			onTimeSec,
 			lateUntilSec,
 			status: 'open',
@@ -275,6 +292,232 @@ export const recordScan = mutation({
 			}
 		});
 
+/**
+ * What the station screen needs to render itself: the rotating code's secret
+ * plus the countdown and title around it.
+ *
+ * Only a recorder who may take this class's attendance can call it. The secret
+ * is deliberately returned rather than the code itself — the display derives
+ * each code locally so the screen keeps refreshing on a timer with no network
+ * round trip, and in a hall with poor signal that is the difference between a
+ * working station and a frozen one. A rep is already fully trusted over their
+ * own class's attendance, so the secret adds no exposure they did not have.
+ */
+export const stationFeed = query({
+	args: { token: v.string(), sessionId: v.id('sessions') },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const session = await ctx.db.get('sessions', args.sessionId);
+		if (!session) return null;
+		if (!(await canRecordFor(ctx, actor, session.classId))) {
+			throw new Error('You are not a class rep for this class.');
+		}
+		const subject = await ctx.db.get('subjects', session.subjectId);
+		const classDoc = await ctx.db.get('classes', session.classId);
+		return {
+			_id: session._id,
+			secret: session.stationSecret ?? null,
+			subjectCode: subject?.code ?? '',
+			subjectTitle: subject?.title ?? '',
+			className: classDoc?.name ?? '',
+			status: session.status,
+			startedAt: session.startedAt,
+			closesAt: session.closesAt,
+			stationRadiusM: session.stationRadiusM
+		};
+	}
+});
+
+/**
+ * Minimal, non-sensitive details a student sees on the page the QR opened.
+ * Any signed-in person may read it — it reveals no location and no secret, and
+ * it has to render before the scan is submitted.
+ */
+export const stationPreview = query({
+	args: { token: v.string(), sessionId: v.id('sessions') },
+	handler: async (ctx, args) => {
+		await requireActor(ctx, args.token);
+		const session = await ctx.db.get('sessions', args.sessionId);
+		if (!session) return null;
+		const subject = await ctx.db.get('subjects', session.subjectId);
+		const classDoc = await ctx.db.get('classes', session.classId);
+		return {
+			subjectCode: subject?.code ?? '',
+			subjectTitle: subject?.title ?? '',
+			className: classDoc?.name ?? '',
+			status: session.status,
+			startedAt: session.startedAt,
+			closesAt: session.closesAt
+		};
+	}
+});
+
+/**
+ * A student scans the station with their own phone.
+ *
+ * This is the new front door for attendance and it inverts the old flow: the
+ * device that proves presence is the student's, not the class rep's, so the
+ * record carries a first-party position fix instead of a proxy. That is what
+ * makes "in range" mean something — it is the student's own phone reporting,
+ * at the moment of scanning, how far it is from the code it just read.
+ */
+export const submitStationScan = mutation({
+	args: {
+		token: v.string(),
+		sessionId: v.id('sessions'),
+		code: v.string(),
+		/**
+		 * The scanning handset's id, compared against the one the token was issued
+		 * to. This is what stops a student's token being carried to another phone
+		 * and used to mark their own attendance from there.
+		 */
+		deviceId: v.string(),
+		latitude: v.optional(v.number()),
+		longitude: v.optional(v.number()),
+		accuracyM: v.optional(v.number())
+	},
+	handler: async (ctx, args) => {
+		const person = await requirePersonOnDevice(ctx, args.token, args.deviceId);
+		if (person.status === 'blocked') {
+			throw new Error('Your account is suspended. Speak to your class rep.');
+		}
+
+		// The code is six digits, so cap how fast one account can guess at it. A
+		// successful scan clears the count, so this only ever bites a brute-forcer
+		// or a student whose camera will not read the screen.
+		const limitKey = `station:${String(person._id)}`;
+		const limiter = await ctx.db
+			.query('authAttempts')
+			.withIndex('by_key', (q) => q.eq('key', limitKey))
+			.unique();
+		if (isBlocked(ctx, limiter)) {
+			throw new Error('Too many attempts at reading that code. Wait a few minutes and scan again.');
+		}
+
+		const session = await ctx.db.get('sessions', args.sessionId);
+		if (!session) throw new Error('This lecture could not be found.');
+		if (session.status !== 'open') throw new Error('This lecture is closed.');
+		if (Date.now() > session.closesAt) {
+			throw new Error('The attendance window for this lecture has closed.');
+		}
+		if (!session.stationSecret) throw new Error('This lecture is not taking scans.');
+
+		// A photographed screen is refused, which is the whole point of the code
+		// rolling every 30 seconds.
+		if (!verifyStationCode(args.code, session.stationSecret)) {
+			await noteFailure(ctx, limitKey, STATION_LIMITS);
+			throw new Error('That station code has expired. Scan the screen again.');
+		}
+		await noteSuccess(ctx, limitKey);
+
+		const enrolments = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', person._id))
+			.take(300);
+		const enrolled = enrolments.find(
+			(e: any) => e.offeringId === session.offeringId && e.status === 'active'
+		);
+		if (!enrolled) {
+			throw new Error('You are not enrolled in this subject.');
+		}
+
+		const dup = await ctx.db
+			.query('attendance')
+			.withIndex('by_session_and_reg', (q) =>
+				q.eq('sessionId', args.sessionId).eq('regNorm', person.regNorm)
+			)
+			.unique();
+		if (dup) {
+			throw new Error(
+				`You are already recorded as ${String(dup.status).replace('_', ' ')} for this lecture.`
+			);
+		}
+
+		// Judged against the station, not the lecture centre: this is the distance
+		// between the phone that scanned and the screen it scanned.
+		const proximity = judgeProximity(
+			session.stationLat,
+			session.stationLng,
+			args.latitude,
+			args.longitude,
+			args.accuracyM,
+			session.stationRadiusM
+		);
+		const distanceM = proximity.distanceM ?? undefined;
+
+		// A fix coarser than a small multiple of the radius cannot tell inside
+		// from outside — a phone reporting ±150 m for a 50 m radius is not
+		// evidence either way. So the distance is withheld from the status
+		// calculation entirely and the record is flagged for a human instead.
+		// Letting a coarse fix produce a confident verdict in either direction
+		// would either fail honest students or wave through absent ones.
+		const noFix = proximity.distanceM === null;
+		const positionUsable =
+			!noFix &&
+			(args.accuracyM === undefined ||
+				args.accuracyM <= session.stationRadiusM * STUDENT_ACCURACY_TOLERANCE);
+
+		const elapsedSec = Math.floor((Date.now() - session.startedAt) / 1000);
+		const status = computeAutoStatus(
+			elapsedSec,
+			session.onTimeSec,
+			session.lateUntilSec,
+			positionUsable ? proximity.distanceM : null,
+			session.stationRadiusM
+		);
+
+		const flagReason = !positionUsable
+			? noFix
+				? 'No location was reported, so it could not be confirmed that this student was at the station.'
+				: `Location was too imprecise (±${Math.round(args.accuracyM ?? 0)} m for a ${session.stationRadiusM} m station radius), so it could not be confirmed that this student was there.`
+			: undefined;
+
+		await ctx.db.insert('attendance', {
+			sessionId: session._id,
+			personId: person._id,
+			offeringId: session.offeringId,
+			subjectId: session.subjectId,
+			semesterId: session.semesterId,
+			fullName: person.fullName,
+			regNumber: person.regNumber,
+			regNorm: person.regNorm,
+			method: 'station',
+			scannerDeviceId: args.deviceId,
+			// The generic position fields are this student's own — there is no
+			// rep proxy in this flow — so every existing report and listing keeps
+			// working without special-casing. The `student*` fields say the same
+			// thing in words, and their presence also stops the legacy
+			// `confirmMyLocation` pass from picking this record up a second time.
+			...(args.latitude !== undefined ? { latitude: args.latitude } : {}),
+			...(args.longitude !== undefined ? { longitude: args.longitude } : {}),
+			...(args.accuracyM !== undefined ? { accuracyM: args.accuracyM } : {}),
+			...(distanceM !== undefined ? { distanceM } : {}),
+			...(args.latitude !== undefined ? { studentLat: args.latitude } : {}),
+			...(args.longitude !== undefined ? { studentLng: args.longitude } : {}),
+			...(args.accuracyM !== undefined ? { studentAccuracyM: args.accuracyM } : {}),
+			...(distanceM !== undefined ? { studentDistanceM: distanceM } : {}),
+			verification: positionUsable ? 'confirmed' : noFix ? 'unconfirmed' : 'weak',
+			...(flagReason ? { flagged: true, flagReason } : {}),
+			status,
+			submittedAt: Date.now()
+		});
+
+		const subject = await ctx.db.get('subjects', session.subjectId);
+		return {
+			ok: true as const,
+			fullName: person.fullName,
+			subjectCode: subject?.code ?? '',
+			subjectTitle: subject?.title ?? '',
+			status,
+			distanceM: distanceM ?? null,
+			positionUsable,
+			flagged: Boolean(flagReason),
+			lateByMinutes:
+				status === 'Absent' ? Math.max(1, Math.ceil((elapsedSec - session.lateUntilSec) / 60)) : null
+		};
+	}
+});
+
 /** Staff add a student by hand — the phone-less case. */
 export const addManually = mutation({
 	args: {
@@ -288,7 +531,13 @@ export const addManually = mutation({
 			v.literal('Excused')
 		),
 		latitude: v.optional(v.number()),
-		longitude: v.optional(v.number())
+		longitude: v.optional(v.number()),
+		/**
+		 * Required. A record entered by hand is the one thing in this system no
+		 * scan can corroborate, so leaving the reason blank would make the whole
+		 * override invisible in the audit trail.
+		 */
+		reason: v.string()
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
@@ -300,6 +549,8 @@ export const addManually = mutation({
 		if (session.status !== 'open') throw new Error('This lecture is closed.');
 		const regNorm = normalizeReg(args.regNumber);
 		if (!regNorm) throw new Error('Enter the registration number.');
+		const reason = args.reason.trim();
+		if (!reason) throw new Error('Say why this student was added by hand — it is kept on the record.');
 		const person = await ctx.db
 			.query('people')
 			.withIndex('by_reg', (q) => q.eq('regNorm', regNorm))
@@ -319,9 +570,13 @@ export const addManually = mutation({
 			.unique();
 		if (dup) throw new Error(`${person.fullName} already has a record for this lecture.`);
 
+		// This distance is the recorder's phone, not the student's — it says only
+		// that the rep was standing near the station. It is never evidence about
+		// this student, so it is tagged `scan_only` and the record is only as good
+		// as the rep's word.
 		let distanceM: number | undefined = undefined;
 		if (args.latitude !== undefined && args.longitude !== undefined) {
-			distanceM = Math.round(haversineM(session.lectureLat, session.lectureLng, args.latitude, args.longitude));
+			distanceM = Math.round(haversineM(session.stationLat, session.stationLng, args.latitude, args.longitude));
 		}
 		await ctx.db.insert('attendance', {
 			sessionId: session._id,
@@ -334,9 +589,11 @@ export const addManually = mutation({
 			regNorm,
 			method: 'rep',
 			...recorderFields(actor),
+			overrideReason: reason,
 			...(args.latitude !== undefined ? { latitude: args.latitude } : {}),
 			...(args.longitude !== undefined ? { longitude: args.longitude } : {}),
 			...(distanceM !== undefined ? { distanceM } : {}),
+			verification: 'scan_only',
 			status: args.status,
 			submittedAt: Date.now()
 		});
@@ -393,6 +650,66 @@ export const override = mutation({
 			status: args.status,
 			overriddenBy: actor.name,
 			overriddenAt: Date.now()
+		});
+		return { ok: true };
+	}
+});
+
+/**
+ * Override a record while the lecture is still open.
+ *
+ * `override` above is lecturer-only because it settles a finished lecture. This
+ * is the one a class rep can reach, and it exists for the cases the new station
+ * flow creates rather than replaces:
+ *
+ *   - a phone-less student, added by hand, who needs a status changed;
+ *   - a student whose scan was marked Out of range by a bad GPS fix;
+ *   - a student whose phone refused to give a location, so their record came
+ *     through unconfirmed and the rep knows they were sitting right there.
+ *
+ * A rep may only touch records for a class they represent, and only while the
+ * lecture is open. Everything it does is written to the audit trail, so a
+ * lecturer reviewing the session afterwards can see whose word it was.
+ */
+export const overrideDuringSession = mutation({
+	args: {
+		token: v.string(),
+		attendanceId: v.id('attendance'),
+		status: v.union(
+			v.literal('Present'),
+			v.literal('Late'),
+			v.literal('Absent'),
+			v.literal('Excused')
+		),
+		/**
+		 * Required, for the same reason as `addManually`: an override is the rep
+		 * speaking against the evidence, and the ledger has to record what that
+		 * claim was.
+		 */
+		reason: v.string()
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const record = await ctx.db.get('attendance', args.attendanceId);
+		if (!record) throw new Error('That record no longer exists.');
+		const session = await ctx.db.get('sessions', record.sessionId);
+		if (!session) throw new Error('That lecture could not be found.');
+		if (!(await canRecordFor(ctx, actor, session.classId))) {
+			throw new Error('You are only a class representative for your own class.');
+		}
+		if (session.status !== 'open') {
+			throw new Error('This lecture is closed. Ask your lecturer to change the record.');
+		}
+		const reason = args.reason.trim();
+		if (!reason) throw new Error('Say why this record is being changed — it is kept on the record.');
+		if (record.status === args.status) return { ok: true };
+
+		await ctx.db.patch(args.attendanceId, {
+			prevStatus: record.status,
+			status: args.status,
+			overriddenBy: actor.name,
+			overriddenAt: Date.now(),
+			overrideReason: reason
 		});
 		return { ok: true };
 	}
@@ -471,6 +788,7 @@ export const listBySession = query({
 			verification: r.verification ?? 'scan_only',
 			flagged: r.flagged ?? false,
 			flagReason: r.flagReason ?? null,
+			overrideReason: r.overrideReason ?? null,
 			submittedAt: r.submittedAt,
 			overriddenBy: r.overriddenBy ?? null,
 			prevStatus: r.prevStatus ?? null,
