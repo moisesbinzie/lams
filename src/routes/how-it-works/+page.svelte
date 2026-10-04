@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
@@ -48,7 +48,7 @@
 		{
 			icon: MapPin,
 			title: 'Say yes when asked for your location',
-			body: 'Your phone asks once. Allowing it is what marks you present â€” without it, LAMS cannot tell whether you are in the hall.'
+			body: 'Your phone asks once. Allowing it is what marks you present — without it, LAMS cannot tell whether you are in the hall.'
 		}
 	];
 
@@ -81,13 +81,13 @@
 			icon: Smartphone,
 			question: 'My location will not turn on',
 			answer:
-				'Nothing is lost â€” a scan still goes through, marked for your lecturer to check. It also helps to turn location on for the browser you are scanning with, so the check works next time.'
+				'Nothing is lost — a scan still goes through, marked for your lecturer to check. It also helps to turn location on for the browser you are scanning with, so the check works next time.'
 		},
 		{
 			icon: Ban,
 			question: 'I have no phone, or the camera will not focus',
 			answer:
-				'Your class rep can add you by hand. They have to say why, and their name goes on the record â€” that is normal and it is not held against you.'
+				'Your class rep can add you by hand. They have to say why, and their name goes on the record — that is normal and it is not held against you.'
 		},
 		{
 			icon: AlertTriangle,
@@ -99,7 +99,7 @@
 			icon: Clock,
 			question: 'The screen says the code has expired',
 			answer:
-				'The code changes every 30 seconds so a photo of the screen cannot be used later. Just scan the screen again â€” the page opens by itself.'
+				'The code changes every 30 seconds so a photo of the screen cannot be used later. Just scan the screen again — the page opens by itself.'
 		},
 		{
 			icon: ShieldCheck,
@@ -131,7 +131,7 @@
 		{ at: 'Before', title: 'Your rep or lecturer opens the lecture', body: 'They set where the screen stands and how long you have to arrive.' },
 		{ at: 'Start', title: 'The screen appears', body: 'A code is created for this lecture only, and the barcode goes live.' },
 		{ at: 'Every 30s', title: 'The code changes', body: 'This is what stops a photo of the screen being used later.' },
-		{ at: '0â€“10 min', title: 'You scan as you arrive', body: 'Your name shows up on the repâ€™s list straight away, with the time and your distance.' },
+		{ at: '0–10 min', title: 'You scan as you arrive', body: 'Your name shows up on the rep’s list straight away, with the time and your distance.' },
 		{ at: 'Close', title: 'Anyone not scanned becomes absent', body: 'The lecture closes itself, so nobody is left out by an oversight.' },
 		{ at: 'After', title: 'Anything can be put right', body: 'A lecturer can correct, excuse or remove any record. What it was before is always kept.' }
 	];
@@ -156,7 +156,7 @@
 </script>
 
 <svelte:head>
-	<title>How LAMS works â€” LAMS</title>
+	<title>How LAMS works — LAMS</title>
 	<meta
 		name="description"
 		content="How to mark yourself present for a lecture with LAMS: scan the screen at the front of the hall, allow your location, and that is it. What each status means and what to do if something goes wrong."
@@ -169,7 +169,7 @@
 		<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">How it works</h1>
 		<p class="max-w-2xl text-muted-foreground">
 			Recording your attendance takes about three seconds. You scan a square barcode on the screen at the
-			front of the hall, and the rest is written down for you â€” no paper list, no typing your name, no queue at a
+			front of the hall, and the rest is written down for you — no paper list, no typing your name, no queue at a
 			desk.
 		</p>
 		<nav aria-label="Sections of this page" class="flex flex-wrap gap-2 pt-1">
@@ -179,7 +179,7 @@
 		</nav>
 	</section>
 
-	<!-- â”€â”€ Marking present â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<!-- ── Marking present ─────────────────────────────────────────────────── -->
 	<section id="mark" aria-labelledby="mark-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
@@ -191,7 +191,7 @@
 					{#each steps as step, i (step.title)}
 						<li class="flex flex-col gap-2 rounded-lg border border-border bg-lams-light/60 p-4">
 							<span class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
-								<step.icon class="size-4" aria-hidden="true" /> {i + 1} Â· {step.title}
+								<step.icon class="size-4" aria-hidden="true" /> {i + 1} · {step.title}
 							</span>
 							<span class="text-sm text-muted-foreground">{step.body}</span>
 						</li>
@@ -216,7 +216,7 @@
 
 	<Separator />
 
-	<!-- â”€â”€ Statuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<!-- ── Statuses ────────────────────────────────────────────────────────── -->
 	<section id="status" aria-labelledby="status-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
@@ -248,7 +248,7 @@
 
 	<Separator />
 
-	<!-- â”€â”€ Problems â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<!-- ── Problems ────────────────────────────────────────────────────────── -->
 	<section id="wrong" aria-labelledby="wrong-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
@@ -277,7 +277,7 @@
 
 	<Separator />
 
-	<!-- â”€â”€ Why it cannot be faked, said plainly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<!-- ── Why it cannot be faked, said plainly ────────────────────────────── -->
 	<section aria-labelledby="why-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
@@ -292,7 +292,7 @@
 				<ul class="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
 					{#each [
 						{ head: 'The screen keeps changing.', body: 'The barcode holds a code that changes every 30 seconds, so a photograph of it stops working almost immediately. There is nothing useful to send to someone at home.' },
-						{ head: 'Your phone says where it is.', body: 'It reports its own position at the moment you scan, so being in the hall is checked by your handset rather than by somebody elseâ€™s.' },
+						{ head: 'Your phone says where it is.', body: 'It reports its own position at the moment you scan, so being in the hall is checked by your handset rather than by somebody else’s.' },
 						{ head: 'The screen has to stay put.', body: 'LAMS knows which room the screen belongs to. If it is carried out of that room it stops recording, so attendance cannot be taken in the wrong place.' },
 						{ head: 'You sign in on one phone.', body: 'Your account belongs to the handset you set it up on, so somebody else cannot use your sign-in on theirs.' }
 					] as r (r.head)}
@@ -306,7 +306,7 @@
 					{/each}
 				</ul>
 				<p class="mt-4 text-sm text-muted-foreground">
-					And where a check cannot be certain, it says so rather than guessing. If your phoneâ€™s location is too
+					And where a check cannot be certain, it says so rather than guessing. If your phone’s location is too
 					imprecise to tell, your record is marked for a person to look at instead of being quietly counted for
 					or against you.
 				</p>
@@ -316,7 +316,7 @@
 
 	<Separator />
 
-	<!-- â”€â”€ Roles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<!-- ── Roles ────────────────────────────────────────────────────────── -->
 	<section aria-labelledby="roles-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
