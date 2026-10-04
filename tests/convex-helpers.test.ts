@@ -5,13 +5,38 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	computeAutoStatus,
+	DEFAULT_STATION_RADIUS_M,
+	DEFAULT_STATION_TOLERANCE_M,
 	haversineM,
 	judgeScanDevice,
 	normalizeId,
 	normalizeReg,
 	randomHex,
-	sha256Hex
+	sha256Hex,
+	toleranceFor
 } from '../src/convex/helpers.ts';
+
+describe('toleranceFor', () => {
+	it('uses the session tolerance when it has one', () => {
+		assert.equal(toleranceFor({ stationToleranceM: 25, stationRadiusM: 200 }), 25);
+	});
+
+	it('falls back to the student radius on a session opened before the check', () => {
+		// Wider, so an un-backfilled session blocks later rather than earlier.
+		assert.equal(toleranceFor({ stationRadiusM: 50 }), 50);
+	});
+
+	it('never returns a negative or unusable tolerance', () => {
+		assert.equal(toleranceFor({}), DEFAULT_STATION_TOLERANCE_M);
+		assert.equal(DEFAULT_STATION_TOLERANCE_M, 15);
+	});
+
+	it('defaults the station tolerance to less than the student radius', () => {
+		// The whole design: a screen that may wander as far as the students do is
+		// not pinned to a room.
+		assert.ok(DEFAULT_STATION_TOLERANCE_M < DEFAULT_STATION_RADIUS_M);
+	});
+});
 
 describe('judgeScanDevice', () => {
 	const PHONE = 'device-abc';

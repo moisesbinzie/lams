@@ -13,9 +13,11 @@ import {
 import {
 	computeAutoStatus,
 	DEFAULT_STATION_RADIUS_M,
+	DEFAULT_STATION_TOLERANCE_M,
 	haversineM,
 	normalizeReg,
-	randomHex
+	randomHex,
+	toleranceFor
 } from './helpers';
 import { describeContradiction, judgeProximity, STUDENT_ACCURACY_TOLERANCE } from './proximity';
 import { isBlocked, noteFailure, noteSuccess, STATION_LIMITS } from './ratelimit';
@@ -77,8 +79,22 @@ export const startSession = mutation({
 		radiusM: v.optional(v.number()),
 		onTimeSec: v.optional(v.number()),
 		lateUntilSec: v.optional(v.number()),
+		/**
+		 * Defaults to the lecture position — a station in the room is the usual case.
+		 * Set when the screen sits somewhere else, e.g. mounted in a doorway while
+		 * the lecture itself is at the back of the hall.
+		 */
+		stationLat: v.optional(v.number()),
+		stationLng: v.optional(v.number()),
 		/** Defaults to the lecture position — a station in the room is the usual case. */
-		stationRadiusM: v.optional(v.number())
+		stationRadiusM: v.optional(v.number()),
+		/**
+		 * How far the screen itself may sit from its pinned spot before scans stop
+		 * working. Defaults to a desk-sized tolerance rather than to
+		 * `stationRadiusM`, because a station that has to stay inside the whole
+		 * student radius is not pinned to a room at all.
+		 */
+		stationToleranceM: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
@@ -104,6 +120,17 @@ export const startSession = mutation({
 		if (stationRadiusM < 5 || stationRadiusM > 2000) {
 			throw new Error('The station distance must be between 5 and 2000 metres.');
 		}
+		// The room the screen belongs to. Explicitly optional so a rep who only
+		// fills in the lecture position still gets a working station — the common
+		// case is the screen and the lecture being in the same room.
+		const stationLat = args.stationLat ?? args.lectureLat;
+		const stationLng = args.stationLng ?? args.lectureLng;
+		if (stationLat < -90 || stationLat > 90) throw new Error('Invalid station latitude.');
+		if (stationLng < -180 || stationLng > 180) throw new Error('Invalid station longitude.');
+		const stationToleranceM = args.stationToleranceM ?? DEFAULT_STATION_TOLERANCE_M;
+		if (stationToleranceM < 1 || stationToleranceM > stationRadiusM) {
+			throw new Error('The station must be allowed to move less than the student radius.');
+		}
 		if (onTimeSec < 30 || onTimeSec > 3600) throw new Error('The on-time window must be between 30 seconds and 60 minutes.');
 		if (lateUntilSec < 60 || lateUntilSec > 7200) throw new Error('The late window must be between 1 and 120 minutes.');
 		if (onTimeSec >= lateUntilSec) throw new Error('The late window must be longer than the on-time window.');
@@ -127,9 +154,10 @@ export const startSession = mutation({
 			subjectId: offering.subjectId,
 			semesterId: offering.semesterId,
 			classId: offering.classId,
-			stationLat: args.lectureLat,
-			stationLng: args.lectureLng,
+			stationLat,
+			stationLng,
 			stationRadiusM,
+			stationToleranceM,
 			lectureLat: args.lectureLat,
 			lectureLng: args.lectureLng,
 			radiusM,
@@ -329,7 +357,18 @@ export const stationFeed = query({
 			status: session.status,
 			startedAt: session.startedAt,
 			closesAt: session.closesAt,
-			stationRadiusM: session.stationRadiusM
+			stationRadiusM: session.stationRadiusM,
+			// The screen's own placement, so the station can show itself what the
+			// server currently thinks about where it is.
+			stationLat: session.stationLat,
+			stationLng: session.stationLng,
+			stationToleranceM: toleranceFor(session),
+			stationMoved: session.stationMoved === true,
+			stationSeenDistanceM: session.stationSeenDistanceM ?? null,
+			stationSeenAt: session.stationSeenAt ?? null,
+			stationUnverified: session.stationUnverified === true,
+			stationRepinnedBy: session.stationRepinnedBy ?? null,
+			stationRepinReason: session.stationRepinReason ?? null
 		};
 	}
 });
@@ -353,7 +392,11 @@ export const stationPreview = query({
 			className: classDoc?.name ?? '',
 			status: session.status,
 			startedAt: session.startedAt,
-			closesAt: session.closesAt
+			closesAt: session.closesAt,
+			// Only the yes/no, never the coordinates: the student is about to be
+			// told why a scan was refused, and has no business learning where the
+			// room is pinned.
+			stationMoved: session.stationMoved === true
 		};
 	}
 });
@@ -407,6 +450,20 @@ export const submitStationScan = mutation({
 			throw new Error('The attendance window for this lecture has closed.');
 		}
 		if (!session.stationSecret) throw new Error('This lecture is not taking scans.');
+
+		// The station is pinned to a room. While it is demonstrably somewhere else,
+		// nothing is recorded at all — not a flagged row, not an absent one. A
+		// refused scan leaves the student untouched, so they can simply rescan once
+		// the screen is back where it belongs.
+		//
+		// Placed before the code check deliberately: a student who scanned a screen
+		// that had been carried out of the building should be told why immediately,
+		// not made to guess from a generic "expired code".
+		if (session.stationMoved) {
+			throw new Error(
+				'The station has been moved out of its room, so it is not accepting attendance right now. Tell your class rep, then scan again.'
+			);
+		}
 
 		// A photographed screen is refused, which is the whole point of the code
 		// rolling every 30 seconds.

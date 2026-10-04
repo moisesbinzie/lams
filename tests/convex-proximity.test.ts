@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	judgeProximity,
+	judgeStationPlacement,
 	describeContradiction,
 	haversineM,
 	STUDENT_ACCURACY_TOLERANCE
@@ -98,5 +99,75 @@ describe('describeContradiction', () => {
 describe('student accuracy tolerance', () => {
 	it('is a deliberate multiple of the radius', () => {
 		assert.equal(STUDENT_ACCURACY_TOLERANCE, 2);
+	});
+});
+
+// The station's own room check. Tolerance is far tighter than the student
+// radius on purpose, so TOL below is the station's own and RADIUS stays the
+// students'.
+const TOL = 15;
+
+describe('judgeStationPlacement', () => {
+	it('reports no idea when the station reported nothing', () => {
+		const result = judgeStationPlacement(LAT, LNG, undefined, undefined, undefined, TOL);
+		assert.equal(result.distanceM, null);
+		assert.equal(result.inside, null);
+		// Never `false`: silence must not be able to block a lecture hall.
+		assert.notEqual(result.inside, false);
+	});
+
+	it('keeps a station standing on its pinned spot', () => {
+		const result = judgeStationPlacement(LAT, LNG, LAT, LNG, 5, TOL);
+		assert.equal(result.distanceM, 0);
+		assert.equal(result.inside, true);
+		assert.equal(result.weak, false);
+	});
+
+	it('blocks a station carried a street away', () => {
+		// ~1.1 km north, precise fix: unambiguously not this room.
+		const result = judgeStationPlacement(LAT, LNG, LAT + 0.01, LNG, 5, TOL);
+		assert.equal(result.inside, false);
+		assert.equal(result.weak, false);
+		assert.ok(result.distanceM! > 1000);
+	});
+
+	it('blocks even a coarse fix when the whole error circle is outside', () => {
+		// ~1.1 km away with a ±400 m error circle: still far outside a 15 m room.
+		const result = judgeStationPlacement(LAT, LNG, LAT + 0.01, LNG, 400, TOL);
+		assert.equal(result.inside, false);
+		assert.equal(result.weak, false);
+	});
+
+	it('does not block on a fix whose error circle still reaches the room', () => {
+		// ~55 m north but ±200 m: the two circles overlap, so this is not
+		// evidence of anything and must not stop a real lecture. The distance is
+		// still recorded, so a lecturer can see what was reported.
+		const result = judgeStationPlacement(LAT, LNG, LAT + 0.0005, LNG, 200, TOL);
+		assert.ok(result.distanceM! > 50 && result.distanceM! < 60, `got ${result.distanceM}`);
+		assert.equal(result.inside, null);
+		assert.equal(result.weak, true);
+	});
+
+	it('treats a missing accuracy as a precise fix rather than an excuse to pass', () => {
+		const far = judgeStationPlacement(LAT, LNG, LAT + 0.01, LNG, undefined, TOL);
+		assert.equal(far.inside, false);
+		const near = judgeStationPlacement(LAT, LNG, LAT + 0.0005, LNG, undefined, TOL);
+		assert.equal(near.inside, false, 'no accuracy reported is still a reading, so judge it as given');
+	});
+
+	it('allows a station at exactly the tolerance and refuses one past it', () => {
+		const dLat = TOL / 111194.9; // ~TOL metres north, converted to degrees.
+		assert.equal(judgeStationPlacement(LAT, LNG, LAT + dLat, LNG, 1, TOL).inside, true);
+		assert.equal(judgeStationPlacement(LAT, LNG, LAT + dLat * 2, LNG, 1, TOL).inside, false);
+	});
+
+	it('is much tighter than the student radius for the same session', () => {
+		// ~110 m from the pinned spot. A student that far out is already outside
+		// the 50 m student radius, but the point here is that the *station* is
+		// out of a 15 m room by seven times over — the two tolerances are
+		// independent, which is what stops one widening the other.
+		const result = judgeStationPlacement(LAT, LNG, LAT + 0.001, LNG, 5, TOL);
+		assert.equal(result.inside, false);
+		assert.ok(judgeProximity(LAT, LNG, LAT + 0.001, LNG, 5, RADIUS).inside === false);
 	});
 });

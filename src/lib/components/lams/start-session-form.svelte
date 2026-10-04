@@ -28,16 +28,25 @@
 	let token = getToken();
 	let offerings = $state<RecordableOffering[]>([]);
 	let offeringId = $state('');
+	let loading = $state(true);
 	let lat = $state('');
 	let lng = $state('');
+	// Where the screen itself stands. Left blank it follows the lecture
+	// position, which is right for the ordinary case of both being in the room.
+	let stationLat = $state('');
+	let stationLng = $state('');
 	let radius = $state('50');
+	// How far the screen may be carried from its spot before scanning stops.
+	let tolerance = $state('15');
 	let onTimeMin = $state('5');
 	let lateUntilMin = $state('10');
-	let loading = $state(true);
 	let locating = $state(false);
 	let busy = $state(false);
 	let error = $state('');
 	let notice = $state('');
+
+	/** Blank station fields mean "same as the lecture", so the API omits them. */
+	const usesLectureSpot = $derived(stationLat.trim() === '' && stationLng.trim() === '');
 
 	onMount(async () => {
 		try {
@@ -67,6 +76,22 @@
 		}
 	}
 
+	/** Pin the station to wherever this device currently is. */
+	async function fillStationWithGps() {
+		locating = true;
+		error = '';
+		try {
+			const pos = await getCurrentPosition();
+			stationLat = pos.lat.toFixed(6);
+			stationLng = pos.lng.toFixed(6);
+			notice = 'Station pinned to where you are standing.';
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not read your location.';
+		} finally {
+			locating = false;
+		}
+	}
+
 	async function start(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
@@ -80,6 +105,11 @@
 				lectureLat: Number(lat),
 				lectureLng: Number(lng),
 				radiusM: Number(radius),
+				stationRadiusM: Number(radius),
+				stationToleranceM: Number(tolerance),
+				// Omitted entirely when blank, so the server falls back to the
+				// lecture position rather than being handed an empty coordinate.
+				...(usesLectureSpot ? {} : { stationLat: Number(stationLat), stationLng: Number(stationLng) }),
 				onTimeSec: Math.round(Number(onTimeMin) * 60),
 				lateUntilSec: Math.round(Number(lateUntilMin) * 60)
 			})) as { sessionId: string };
@@ -147,6 +177,43 @@
 							</Button>
 						</div>
 					</div>
+				</div>
+
+				<div class="rounded-md border border-border p-3">
+					<p class="mb-2 text-sm font-medium">Where is the screen?</p>
+					<p class="mb-2 text-xs text-muted-foreground">
+						Leave these empty if the screen stands where the lecture is, which is nearly always the case.
+						Fill them in only if the screen sits somewhere else, such as a doorway.
+					</p>
+					<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+						<div class="flex flex-col gap-1">
+							<Label for="sstlat">Station latitude</Label>
+							<Input id="sstlat" bind:value={stationLat} placeholder="same as lecture" />
+						</div>
+						<div class="flex flex-col gap-1">
+							<Label for="sstlng">Station longitude</Label>
+							<Input id="sstlng" bind:value={stationLng} placeholder="same as lecture" />
+						</div>
+						<div class="flex items-end">
+							<Button
+								type="button"
+								variant="outline"
+								disabled={locating}
+								onclick={() => fillStationWithGps()}
+							>
+								Screen is where I am
+							</Button>
+						</div>
+					</div>
+					<div class="mt-2 flex flex-col gap-1 sm:max-w-40">
+						<Label for="stol">Screen may move (m)</Label>
+						<Input id="stol" type="number" min="1" max={radius} bind:value={tolerance} />
+					</div>
+					<p class="mt-2 text-xs text-muted-foreground">
+						The screen checks it is still in this room. If it is carried more than {tolerance} m away,
+						scanning stops and students are told why — nobody is marked absent because of it. Keep this small:
+						it is about the screen staying put, not about students.
+					</p>
 				</div>
 
 				<div class="rounded-md border border-border p-3">

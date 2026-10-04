@@ -4,8 +4,13 @@
 	import { api } from '../../convex/_generated/api.js';
 	import { requireConvexClient } from '$lib/convexClient';
 	import { getToken } from '$lib/lams/auth';
-	import { formatCountdown, getCurrentPosition } from '$lib/lams/geo';
-	import { buildStationUrl, currentStationCode, secondsRemaining } from '$lib/lams/station';
+	import { formatCountdown, formatDistance, getCurrentPosition } from '$lib/lams/geo';
+	import {
+		buildStationUrl,
+		currentStationCode,
+		secondsRemaining,
+		STATION_PERIOD_SEC
+	} from '$lib/lams/station';
 	import { qrDataUrl } from '$lib/lams/qr';
 	import StartSessionForm from '$lib/components/lams/start-session-form.svelte';
 	import StatusBadge from '$lib/lams/status-badge.svelte';
@@ -43,6 +48,31 @@
 	let qrImg = $state('');
 	let fullscreen = $state(false);
 	let panel: HTMLDivElement | null = $state(null);
+	/**
+	 * How the server currently judges this screen's own position. Reported by
+	 * `reportPosition` below rather than polled, so the banner appears the moment
+	 * the station is found to have left its room instead of up to five seconds
+	 * later when the record list happens to refresh.
+	 */
+	let placement = $state<{
+		moved: boolean;
+		unverified: boolean;
+		distanceM: number | null;
+		toleranceM: number;
+	}>({ moved: false, unverified: false, distanceM: null, toleranceM: 0 });
+	let repinLat = $state('');
+	let repinLng = $state('');
+	let repinReason = $state('');
+	let repinning = $state(false);
+
+	/**
+	 * How often the screen tells the server where it is.
+	 *
+	 * Matched to the code's 30-second rotation so the two clocks line up: by the
+	 * time a photographed code has expired, the station has also proved it was
+	 * still in the room.
+	 */
+	const PLACEMENT_INTERVAL_MS = STATION_PERIOD_SEC * 1000;
 
 	/**
 		 * Every hand-entered record carries a reason, so these are the ones that
@@ -54,6 +84,8 @@
 			'Phone broken or lost',
 			'Camera would not focus on the screen',
 			'Location would not load',
+			'Lecture moved to another room',
+			'Station was pinned in the wrong room',
 			'Present in person, rep confirmed',
 			'Scanner read the wrong student'
 		];
@@ -85,11 +117,17 @@
 		const poll = setInterval(() => {
 			if (live && live.status === 'open') void loadRecords();
 		}, 5000);
+		const placementPoll = setInterval(() => void reportPosition(), PLACEMENT_INTERVAL_MS);
+		// Report straight away rather than waiting out the first interval, so a
+		// station that was carried in from another room is caught before the first
+		// student arrives rather than half a minute after.
+		if (live && live.status === 'open') void reportPosition();
 		const onFs = () => (fullscreen = !!document.fullscreenElement);
 		document.addEventListener('fullscreenchange', onFs);
 		return () => {
 			clearInterval(tick);
 			clearInterval(poll);
+			clearInterval(placementPoll);
 			document.removeEventListener('fullscreenchange', onFs);
 		};
 	});
@@ -129,6 +167,17 @@
 			live = feed as unknown as StationFeed | null;
 			if (live) {
 				now = Date.now();
+				// Seed the banner from the server rather than from a stale local
+				// report, so reopening a session that was moved while closed shows
+				// the truth immediately.
+				placement = {
+					moved: live.stationMoved,
+					unverified: live.stationUnverified,
+					distanceM: live.stationSeenDistanceM,
+					toleranceM: live.stationToleranceM
+				};
+				repinLat = String(live.stationLat);
+				repinLng = String(live.stationLng);
 				await Promise.all([loadRecords(), loadRoster()]);
 			}
 		} catch (err) {
@@ -180,6 +229,75 @@
 			notice = `Window extended by ${extraMin} minute(s).`;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Could not extend the window.';
+		}
+	}
+
+	/** Fill the re-pin fields with this device's position. */
+	async function useGpsForRepin() {
+		try {
+			const pos = await getCurrentPosition();
+			repinLat = String(pos.lat);
+			repinLng = String(pos.lng);
+			error = '';
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not read your location.';
+		}
+	}
+
+	/**
+	 * Tell the server where this screen is, and remember its answer.
+	 *
+	 * A missing fix is not reported as a failure. A rep whose browser refuses
+	 * location entirely should still be able to run the lecture, so the screen
+	 * just goes on saying nothing — the server treats silence as "cannot check",
+	 * never as "moved".
+	 */
+	async function reportPosition() {
+		if (!live || live.status !== 'open') return;
+		try {
+			const pos = await getCurrentPosition();
+			const res = (await requireConvexClient().mutation(api.stationplace.reportStationPosition, {
+				token,
+				sessionId: live._id as never,
+				latitude: pos.lat,
+				longitude: pos.lng,
+				...(pos.accuracyM !== undefined ? { accuracyM: pos.accuracyM } : {})
+			})) as { moved: boolean; unverified: boolean; distanceM: number | null; toleranceM: number };
+			placement = res;
+		} catch {
+			// Offline, permission refused, or the lecture closed under us. The
+			// previous verdict stands rather than being reset — an unverifiable
+			// reading is not evidence that the station came back.
+		}
+	}
+
+	/**
+	 * Move the station's pinned room. The escape hatch for a lecture that
+	 * genuinely changed rooms, or a pin that was set wrongly to begin with.
+	 * Always needs a reason, because "trust me" is exactly the claim this
+	 * feature exists to check.
+	 */
+	async function repin(e: SubmitEvent) {
+		e.preventDefault();
+		if (!live) return;
+		repinning = true;
+		error = '';
+		try {
+			await requireConvexClient().mutation(api.stationplace.pinStation, {
+				token,
+				sessionId: live._id as never,
+				latitude: Number(repinLat),
+				longitude: Number(repinLng),
+				reason: repinReason.trim()
+			});
+			placement = { ...placement, moved: false, unverified: false, distanceM: 0 };
+			repinReason = '';
+			notice = 'Station pinned to this room. Scans are working again.';
+			await openSession(live._id);
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not move the station.';
+		} finally {
+			repinning = false;
 		}
 	}
 
@@ -360,6 +478,92 @@
 			</Card.Content>
 		</Card.Root>
 
+		<!--
+			The station's own room check. Two states, deliberately kept visually
+			different in weight: red means scans are being refused right now, amber
+			means the check could not run and is proving nothing.
+
+			Red is shown even when the rep is the one who moved the screen, because
+			a rep who does not notice has left a queue of students scanning a dead
+			QR with no idea why.
+		-->
+		{#if !closed && placement.moved}
+			<Card.Root class="border-red-300 bg-red-50">
+				<Card.Header>
+					<Card.Title class="flex items-center gap-2 text-base text-red-900">
+						<TriangleAlert class="size-4" aria-hidden="true" /> This screen has left its room — scanning is
+						stopped
+					</Card.Title>
+					<Card.Description class="text-red-900">
+						{#if placement.distanceM !== null}
+							It is {formatDistance(placement.distanceM)} from where it was set up, which is further than the
+							{placement.toleranceM} m it is allowed to move. Students are not being marked present until this
+							is put back, so nobody is recorded as absent because of it.
+						{:else}
+							It has been reported outside the room it belongs to. Students are not being marked present until
+							this is put back.
+						{/if}
+					</Card.Description>
+				</Card.Header>
+				<Card.Content class="flex flex-col gap-3">
+					<p class="text-sm font-medium">Put it back in the room</p>
+					<p class="text-xs text-muted-foreground">
+						Walking it back to its spot clears this on the next check. If the lecture really has moved rooms,
+						pin it to the new room instead — the reason is kept on the record.
+					</p>
+					<details>
+						<summary class="cursor-pointer text-sm font-medium text-lams-navy">
+							The lecture moved rooms — pin it here instead
+						</summary>
+						<form class="mt-3 flex flex-col gap-3" onsubmit={repin}>
+							<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+								<div class="flex flex-col gap-1">
+									<Label for="rinlat">Room latitude</Label>
+									<Input id="rinlat" bind:value={repinLat} required />
+								</div>
+								<div class="flex flex-col gap-1">
+									<Label for="rinlng">Room longitude</Label>
+									<Input id="rinlng" bind:value={repinLng} required />
+								</div>
+								<div class="flex items-end">
+									<Button type="button" variant="outline" onclick={useGpsForRepin}>
+										Use my location
+									</Button>
+								</div>
+							</div>
+							<div class="flex flex-col gap-1">
+								<Label for="rinwhy">Why it is moving (required)</Label>
+								<Input
+									id="rinwhy"
+									bind:value={repinReason}
+									list="lams-reasons"
+									placeholder="e.g. Lecture moved to Room 4"
+									required
+								/>
+							</div>
+							<div>
+								<Button type="submit" disabled={repinning}>
+									{repinning ? 'Moving…' : 'Pin to this room'}
+								</Button>
+							</div>
+						</form>
+					</details>
+				</Card.Content>
+			</Card.Root>
+		{:else if !closed && placement.unverified}
+			<Card.Root class="border-amber-300 bg-amber-50">
+				<Card.Content class="flex flex-col gap-1 py-4">
+					<p class="flex items-center gap-2 text-sm font-medium text-amber-900">
+						<TriangleAlert class="size-4" aria-hidden="true" /> Location unavailable on this screen
+					</p>
+					<p class="text-xs text-amber-900">
+						LAMS cannot confirm this screen is still in its room, so scanning carries on unchecked. Turn on
+						location for this browser to have the check working.
+					</p>
+				</Card.Content>
+			</Card.Root>
+		{/if}
+
 		{#if closed}
 			<Card.Root>
 				<Card.Content class="flex flex-col items-center gap-2 py-8 text-center">
@@ -370,6 +574,22 @@
 					</p>
 				</Card.Content>
 			</Card.Root>
+		{:else if placement.moved}
+			<!--
+				No QR while the station is out of its room. The server refuses these
+				scans anyway; hiding the code saves a queue of students photographing
+				a screen that will never work.
+			-->
+			<div
+				class="flex flex-col items-center gap-2 rounded-lg border border-red-300 bg-red-50 p-8 text-center"
+			>
+				<TriangleAlert class="size-8 text-red-600" aria-hidden="true" />
+				<p class="text-lg font-semibold text-red-900">Scanning is stopped</p>
+				<p class="max-w-sm text-sm text-red-900">
+					Put this screen back in the room, or pin it to the new one above. Scans start working again on its
+					own.
+				</p>
+			</div>
 		{:else if stationUrl}
 			<div
 				bind:this={panel}

@@ -23,6 +23,7 @@ import type * as reps from "../reps.js";
 import type * as scancode from "../scancode.js";
 import type * as staff from "../staff.js";
 import type * as station from "../station.js";
+import type * as stationplace from "../stationplace.js";
 import type * as timetable from "../timetable.js";
 
 import type {
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   scancode: typeof scancode;
   staff: typeof staff;
   station: typeof station;
+  stationplace: typeof stationplace;
   timetable: typeof timetable;
 }>;
 

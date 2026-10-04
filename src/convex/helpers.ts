@@ -7,6 +7,30 @@
  */
 export const DEFAULT_STATION_RADIUS_M = 50;
 
+/**
+ * How far the station *screen itself* may sit from the room it was pinned to
+ * before every scan is refused.
+ *
+ * Much smaller than `DEFAULT_STATION_RADIUS_M`. The student radius has to hold a
+ * whole lecture hall; the screen is one fixed object and is not supposed to
+ * travel. At 50 m a station could be carried to a neighbouring building and
+ * still pass, which defeats the point of pinning a room to it at all — so the
+ * default here is sized for a screen that stays on the front desk.
+ */
+export const DEFAULT_STATION_TOLERANCE_M = 15;
+
+/**
+ * The tolerance to apply to a session.
+ *
+ * Optional in the schema because sessions predating the station-placement check
+ * have no value. Falling back to the student radius is the conservative choice —
+ * it is wider, so an un-backfilled session blocks later than a fresh one rather
+ * than stranding a whole hall on a stale row.
+ */
+export function toleranceFor(session: { stationToleranceM?: number; stationRadiusM?: number }): number {
+	return session.stationToleranceM ?? session.stationRadiusM ?? DEFAULT_STATION_TOLERANCE_M;
+}
+
 export function normalizeReg(value: string): string {
 	return value.trim().toUpperCase().replace(/\s+/g, ' ');
 }

@@ -29,6 +29,8 @@
 	let result = $state<StationScanResult | null>(null);
 	let locationNote = $state('');
 		let codeExpired = $state(false);
+	/** The screen has left its room, so the refusal is not the student's to fix. */
+	let stationMoved = $state(false);
 	let now = $state(Date.now());
 
 	const closed = $derived(preview ? preview.status === 'closed' || now >= preview.closesAt : false);
@@ -97,6 +99,7 @@
 		error = '';
 		locationNote = '';
 		codeExpired = false;
+			stationMoved = false;
 
 		let pos: { lat: number; lng: number; accuracyM?: number } | null = null;
 		try {
@@ -139,6 +142,11 @@
 			// fail identically, so ask for a fresh scan instead of showing a button
 			// that loops.
 			codeExpired = /expired|not valid/i.test(message);
+			// A station that has left its room stops accepting scans, and the "try
+			// again" button would loop for as long as it stays there. Say plainly
+			// that this is the screen's problem and the student has done nothing
+			// wrong.
+			stationMoved = /station has been moved out of its room/i.test(message);
 		}
 	}
 </script>
@@ -260,23 +268,33 @@
 			</Card.Content>
 		</Card.Root>
 	{:else if stage === 'failed'}
-		<Card.Root>
+		<Card.Root class={stationMoved ? 'border-red-300 bg-red-50' : ''}>
 			<Card.Content class="flex flex-col items-center gap-3 pt-6 text-center">
-				<TriangleAlert class="size-9 text-amber-500" aria-hidden="true" />
-				<p class="text-sm">{error}</p>
-				{#if codeExpired}
-					<p class="text-sm font-medium">Point your camera at the screen again.</p>
-					<p class="text-xs text-muted-foreground">
-						The code on the screen changes every 30 seconds. Scan it once more and this page will open
-						again by itself.
+				<TriangleAlert class="size-9 {stationMoved ? 'text-red-600' : 'text-amber-500'}" aria-hidden="true" />
+				{#if stationMoved}
+					<p class="text-base font-semibold text-red-900">The screen has been moved out of its room</p>
+					<p class="text-sm text-red-900">
+						Scanning is switched off while the screen is away from where it belongs, so nobody's attendance can
+						be recorded in the wrong room. Tell your class rep. You have not lost anything — scan again once the
+						screen is back.
 					</p>
+					<Button variant="outline" href="/attendance">See my attendance</Button>
 				{:else}
-					<div class="flex flex-wrap justify-center gap-3">
-						{#if preview && !closed}
-							<Button onclick={() => submit()}>Try again</Button>
-						{/if}
-						<Button variant="outline" href="/attendance">See my attendance</Button>
-					</div>
+					<p class="text-sm">{error}</p>
+					{#if codeExpired}
+						<p class="text-sm font-medium">Point your camera at the screen again.</p>
+						<p class="text-xs text-muted-foreground">
+							The code on the screen changes every 30 seconds. Scan it once more and this page will open
+							again by itself.
+						</p>
+					{:else}
+						<div class="flex flex-wrap justify-center gap-3">
+							{#if preview && !closed}
+								<Button onclick={() => submit()}>Try again</Button>
+							{/if}
+							<Button variant="outline" href="/attendance">See my attendance</Button>
+						</div>
+					{/if}
 				{/if}
 			</Card.Content>
 		</Card.Root>

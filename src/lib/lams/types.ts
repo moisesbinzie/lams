@@ -128,7 +128,7 @@ export interface TimetableMakeup extends TimetableEntry {
 	note: string;
 }
 
-/** What the station screen needs to render its rotating code. */
+/** What the station screen needs to render its rotating code and say where it is. */
 export interface StationFeed {
 	_id: string;
 	secret: string | null;
@@ -139,6 +139,20 @@ export interface StationFeed {
 	startedAt: number;
 	closesAt: number;
 	stationRadiusM: number;
+	/** The room this screen is pinned to. */
+	stationLat: number;
+	stationLng: number;
+	/** How far the screen itself may sit from that spot before scans stop. */
+	stationToleranceM: number;
+	/** The server currently believes the screen is outside its room. */
+	stationMoved: boolean;
+	/** How far the screen's last reported position was from its pinned spot. */
+	stationSeenDistanceM: number | null;
+	stationSeenAt: number | null;
+	/** The last check could not place the screen either way. Never blocks. */
+	stationUnverified: boolean;
+	stationRepinnedBy: string | null;
+	stationRepinReason: string | null;
 }
 
 /** What a student sees on the page the QR opened, before and after scanning. */
@@ -149,6 +163,8 @@ export interface StationPreview {
 	status: 'open' | 'closed';
 	startedAt: number;
 	closesAt: number;
+	/** The screen is out of its room, so scanning is being refused. */
+	stationMoved: boolean;
 }
 
 export interface StationScanResult {

@@ -41,6 +41,50 @@ export function judgeProximity(
 }
 
 /**
+ * Judges the **station** against its own pinned room, as opposed to a student
+ * against the station.
+ *
+ * This is a different question from `judgeProximity`, and it is answered
+ * differently on purpose:
+ *
+ *   - A student's reading that cannot be decided is recorded and flagged. That
+ *     is the safe direction — it never silently loses a present student.
+ *   - Here the reading *gates* the whole session. Refusing every scan because a
+ *     phone could not get a fix would empty a real lecture hall, so the burden
+ *     of proof is on the accusation: only a reading whose entire error circle
+ *     lies beyond the room counts as "the station moved".
+ *
+ * Silence is never evidence. A station that reports nothing, or reports a fix
+ * too coarse to decide, keeps working and is surfaced as unverified instead.
+ */
+export function judgeStationPlacement(
+	stationLat: number,
+	stationLng: number,
+	lat: number | undefined,
+	lng: number | undefined,
+	accuracyM: number | undefined,
+	toleranceM: number
+): Proximity {
+	if (lat === undefined || lng === undefined) {
+		return { distanceM: null, weak: false, inside: null };
+	}
+	const distanceM = Math.round(haversineM(stationLat, stationLng, lat, lng));
+	// Wholly inside the room, including its whole error circle: in, and no doubt
+	// about it. This is what clears a previous "moved" flag.
+	if (distanceM <= toleranceM) {
+		return { distanceM, weak: false, inside: true };
+	}
+	// Beyond the radius. If the reported accuracy still reaches back inside it,
+	// the two circles overlap and the reading cannot place the station at all.
+	const slack = accuracyM ?? 0;
+	if (distanceM - slack > toleranceM) {
+		return { distanceM, weak: false, inside: false };
+	}
+	// Overlapping circles: recorded and warned about, but not a verdict.
+	return { distanceM, weak: true, inside: null };
+}
+
+/**
  * A student's own location is judged more strictly than the rep's: they are the
  * one whose attendance is in question, so a coarse fix is treated as suspicious
  * rather than accepted.

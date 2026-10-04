@@ -1,273 +1,375 @@
-<script lang="ts">
-	import { onMount } from 'svelte';
+﻿<script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
 	import {
-		ArrowRight,
-		BookOpen,
-		CalendarDays,
+		AlertTriangle,
+		Ban,
+		Camera,
+		CheckCircle2,
 		CircleCheck,
 		ClipboardCheck,
 		Clock,
-		Fingerprint,
+		DoorOpen,
+		GraduationCap,
+		Hand,
+		HelpCircle,
 		MapPin,
-		MapPinCheck,
-		QrCode,
-		Radio,
-		RotateCw,
+		MinusCircle,
+		MonitorSmartphone,
 		ScanLine,
-		Server,
 		ShieldCheck,
 		Smartphone,
-		TriangleAlert,
-		Users,
-		UsersRound
+		XCircle
 	} from '@lucide/svelte';
-	import { stationCodeForSlot, stationSlotAt } from '$lib/lams/station';
 
 	/**
-	 * The four gates a scan has to pass, in the order the server applies them.
-	 * Order is not decoration — each gate is cheaper than the one after it, so a
-	 * forged token is dropped before anything is looked up.
+	 * Written for students, not for whoever specified the system.
+	 *
+	 * Nothing on this page needs a technical vocabulary to be understood: no
+	 * secrets, tokens, hashes, gates or accuracy circles. If a sentence here
+	 * would make a first-year stop reading to work out what it means, it is the
+	 * wrong sentence. The reasoning behind the design lives in the code comments
+	 * next to the code that enforces it.
 	 */
-	const gates = [
+
+	const steps = [
 		{
-			icon: Fingerprint,
-			question: 'Is this the phone the account is bound to?',
-			detail: 'Compared against the sign-in session and the bound device.',
-			stops: 'A token copied, restored from a backup, or synced to another handset.'
+			icon: Camera,
+			title: 'Point your camera at the screen',
+			body: 'The screen at the front of the hall shows a square barcode. Open your camera the way you normally photograph anything and hold it up to the square.'
 		},
 		{
-			icon: QrCode,
-			question: 'Is this the code on the screen right now?',
-			detail: 'A six-digit code that rolls every 30 seconds, unique to this lecture.',
-			stops: 'A photo of the screen, redeemed later.'
-		},
-		{
-			icon: Clock,
-			question: 'Is the lecture still open?',
-			detail: 'Nothing is accepted after the window closes.',
-			stops: 'Yesterday’s code, or a lecture that has finished.'
-		},
-		{
-			icon: BookOpen,
-			question: 'Is this student enrolled in this subject?',
-			detail: 'Checked against the offering, not against a year or a class name.',
-			stops: 'Marking attendance for someone not taking the class.'
-		},
-		{
-			icon: ShieldCheck,
-			question: 'Have they already been recorded?',
-			detail: 'One record per student per lecture, however many times they scan.',
-			stops: 'The same code being spent twice.'
+			icon: Smartphone,
+			title: 'Tap the link that appears',
+			body: 'Your phone opens LAMS by itself. If you are already signed in, that is the last thing you do.'
 		},
 		{
 			icon: MapPin,
-			question: 'How far is their phone from the station?',
-			detail: 'Measured by the scanning device, at the moment it scanned.',
-			stops: 'Redeeming a shared code from outside the hall.'
+			title: 'Say yes when asked for your location',
+			body: 'Your phone asks once. Allowing it is what marks you present â€” without it, LAMS cannot tell whether you are in the hall.'
+		}
+	];
+
+	/** One line each, in the student's own words rather than the system's. */
+	const statuses = [
+		{ icon: CircleCheck, label: 'Present', meaning: 'You were there, in time, inside the room.' },
+		{ icon: Clock, label: 'Late', meaning: 'You were there, but after the lecture had started.' },
+		{
+			icon: MapPin,
+			label: 'Out of range',
+			meaning:
+				'Your phone said you were too far from the screen. If that is wrong, tell your rep or lecturer and they can change it.'
+		},
+		{ icon: XCircle, label: 'Absent', meaning: 'Nothing was recorded for you before the lecture closed.' },
+		{
+			icon: MinusCircle,
+			label: 'Excused',
+			meaning: 'You were away and it was agreed. This does not count against you.'
+		}
+	];
+
+	const problems = [
+		{
+			icon: MapPin,
+			question: 'It said I was too far away, but I was in the room',
+			answer:
+				'Phones are not accurate indoors, especially in a hall full of people. Your rep sees this too and can correct it, and the change is kept on your record. Nothing disappears.'
+		},
+		{
+			icon: Smartphone,
+			question: 'My location will not turn on',
+			answer:
+				'Nothing is lost â€” a scan still goes through, marked for your lecturer to check. It also helps to turn location on for the browser you are scanning with, so the check works next time.'
+		},
+		{
+			icon: Ban,
+			question: 'I have no phone, or the camera will not focus',
+			answer:
+				'Your class rep can add you by hand. They have to say why, and their name goes on the record â€” that is normal and it is not held against you.'
+		},
+		{
+			icon: AlertTriangle,
+			question: 'The screen says it has been moved',
+			answer:
+				'The screen has been carried out of the room it belongs to, so it has stopped recording anything. Tell your class rep. Once it is put back, scanning starts again and you can scan in.'
+		},
+		{
+			icon: Clock,
+			question: 'The screen says the code has expired',
+			answer:
+				'The code changes every 30 seconds so a photo of the screen cannot be used later. Just scan the screen again â€” the page opens by itself.'
+		},
+		{
+			icon: ShieldCheck,
+			question: 'Something on my record looks wrong',
+			answer:
+				'Open My attendance and report it. Say what happened, and your rep or lecturer can put it right. The original value is always kept, so nobody can quietly edit your history.'
+		}
+	];
+
+	const roles = [
+		{
+			icon: ScanLine,
+			who: 'You, as a student',
+			body: 'Scan the screen, allow your location. Then check your own attendance and report anything that looks wrong.'
+		},
+		{
+			icon: Hand,
+			who: 'Class rep',
+			body: 'Start the lecture, put the screen at the front of the hall and leave it there. Add anyone without a working phone by hand, with a reason.'
+		},
+		{
+			icon: GraduationCap,
+			who: 'Lecturer',
+			body: 'Set up subjects and classes, start lectures, and correct or excuse any record afterwards. Every change is logged.'
 		}
 	];
 
 	const timeline = [
-		{ at: 'Before', title: 'A rep or lecturer opens the lecture', body: 'They set where the station is, how big the radius is, and how long students have to arrive.' },
-		{ at: '0:00', title: 'The station appears on screen', body: 'A secret is minted for this lecture only, and a QR is shown at the front of the hall.' },
-		{ at: 'Every 30s', title: 'The code inside it changes', body: 'So a photograph of the screen stops working almost at once.' },
-		{ at: '0–10 min', title: 'Students scan as they arrive', body: 'Each record lands in the rep’s list straight away, with its distance and any flag.' },
-		{ at: 'On close', title: 'Anyone not recorded becomes Absent', body: 'The lecture also closes itself if nobody forgets to.' },
-		{ at: 'After', title: 'A lecturer can review anything', body: 'Correct, excuse or remove any record. The previous value is always kept.' }
+		{ at: 'Before', title: 'Your rep or lecturer opens the lecture', body: 'They set where the screen stands and how long you have to arrive.' },
+		{ at: 'Start', title: 'The screen appears', body: 'A code is created for this lecture only, and the barcode goes live.' },
+		{ at: 'Every 30s', title: 'The code changes', body: 'This is what stops a photo of the screen being used later.' },
+		{ at: '0â€“10 min', title: 'You scan as you arrive', body: 'Your name shows up on the repâ€™s list straight away, with the time and your distance.' },
+		{ at: 'Close', title: 'Anyone not scanned becomes absent', body: 'The lecture closes itself, so nobody is left out by an oversight.' },
+		{ at: 'After', title: 'Anything can be put right', body: 'A lecturer can correct, excuse or remove any record. What it was before is always kept.' }
 	];
 
-	/**
-	 * A live sample of the real generator, so the rolling behaviour is shown
-	 * rather than described. The secret below is a throwaway constant with no
-	 * lecture attached to it — these codes will not verify against anything.
-	 */
-	const DEMO_SECRET = 'illustration-only-not-a-real-lecture-secret';
-	let now = $state(0);
-	const demoCodes = $derived.by(() => {
-		const slot = stationSlotAt(now || 1);
-		return [-3, -2, -1, 0].map((offset) => ({
-			code: stationCodeForSlot(DEMO_SECRET, slot + offset),
-			past: offset < 0
-		}));
-	});
+	const kept = [
+		'Your name and registration number',
+		'The exact time you scanned',
+		'How far your phone was from the screen',
+		'Whether that reading was precise enough to rely on',
+		'Which phone the scan came from',
+		'Anything that looked odd, and why',
+		'Any later change, with the original kept',
+		'Whether you disputed it, and your note'
+	];
 
-	onMount(() => {
-		now = Date.now();
-		const tick = setInterval(() => (now = Date.now()), 1000);
-		return () => clearInterval(tick);
-	});
+	const sections = [
+		['#mark', 'Marking yourself present'],
+		['#status', 'What your record says'],
+		['#wrong', 'If something goes wrong'],
+		['#roles', 'Who does what']
+	];
 </script>
 
 <svelte:head>
-	<title>How LAMS works — LAMS</title>
+	<title>How LAMS works â€” LAMS</title>
 	<meta
 		name="description"
-		content="How lecture attendance is recorded in LAMS: a rotating QR at the front of the hall, a distance check from the student's own phone, and an audit trail a person can read."
+		content="How to mark yourself present for a lecture with LAMS: scan the screen at the front of the hall, allow your location, and that is it. What each status means and what to do if something goes wrong."
 	/>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
 	<section class="flex flex-col items-start gap-3 pt-2">
-		<Badge class="gap-1.5 bg-lams-navy text-white"><Radio class="size-3.5" /> The whole flow, end to end</Badge>
+		<Badge class="gap-1.5 bg-lams-navy text-white"><MonitorSmartphone class="size-3.5" /> In plain language</Badge>
 		<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">How it works</h1>
 		<p class="max-w-2xl text-muted-foreground">
-			Attendance is one scan. Everything else — who you are, what time it is, how far you
-			are from the front of the hall, whether you were here at all — is worked out for you
-			and written to a record your lecturer can read afterwards.
+			Recording your attendance takes about three seconds. You scan a square barcode on the screen at the
+			front of the hall, and the rest is written down for you â€” no paper list, no typing your name, no queue at a
+			desk.
 		</p>
 		<nav aria-label="Sections of this page" class="flex flex-wrap gap-2 pt-1">
-			{#each [['#scan', 'The scan'], ['#gates', 'The checks'], ['#timeline', 'A lecture'], ['#status', 'Your status']] as [href, label] (href)}
+			{#each sections as [href, label] (href)}
 				<Button variant="outline" size="sm" href={href}>{label}</Button>
 			{/each}
 		</nav>
 	</section>
 
-	<!-- ── The scan ─────────────────────────────────────────────────────── -->
-	<section id="scan" aria-labelledby="scan-h" class="scroll-mt-20">
+	<!-- â”€â”€ Marking present â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<section id="mark" aria-labelledby="mark-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title id="scan-h" class="text-lg">What happens when a student scans</Card.Title>
-				<Card.Description>
-					Three parties. The important detail is which phone is measuring the distance.
-				</Card.Description>
+				<Card.Title id="mark-h" class="text-lg">Marking yourself present</Card.Title>
+				<Card.Description>Three steps, and only the first one needs your hands.</Card.Description>
 			</Card.Header>
-			<Card.Content class="flex flex-col gap-5">
-				<ol class="grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
-					<li class="flex flex-col gap-2 rounded-lg border border-border bg-lams-light/60 p-4">
-						<span class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
-							<Server class="size-4" aria-hidden="true" /> 1 · The station
-						</span>
-						<span class="text-sm text-muted-foreground">
-							A screen at the front of the hall shows a QR. The code inside it is new every 30
-							seconds and belongs to this lecture alone.
-						</span>
-					</li>
-
-					<li class="flex items-center justify-center" aria-hidden="true">
-						<div class="flex flex-col items-center gap-1">
-							<ArrowRight class="size-5 rotate-90 text-muted-foreground md:rotate-0" />
-							<span class="text-[0.65rem] text-muted-foreground">camera</span>
-						</div>
-					</li>
-
-					<li class="flex flex-col gap-2 rounded-lg border border-border bg-lams-green/10 p-4">
-						<span class="flex items-center gap-2 text-sm font-semibold text-lams-green">
-							<Smartphone class="size-4" aria-hidden="true" /> 2 · The student’s phone
-						</span>
-						<span class="text-sm text-muted-foreground">
-							The link opens LAMS. It already knows who is signed in, so the student types
-							nothing — the only thing asked for is location.
-						</span>
-					</li>
-
-					<li class="flex items-center justify-center" aria-hidden="true">
-						<div class="flex flex-col items-center gap-1">
-							<ArrowRight class="size-5 rotate-90 text-muted-foreground md:rotate-0" />
-							<span class="text-[0.65rem] text-muted-foreground">one request</span>
-						</div>
-					</li>
-
-					<li class="flex flex-col gap-2 rounded-lg border border-border bg-secondary p-4">
-						<span class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
-							<Server class="size-4" aria-hidden="true" /> 3 · The server
-						</span>
-						<span class="text-sm text-muted-foreground">
-							Receives the code, this device’s id and its position, checks all six gates, and
-							writes one record.
-						</span>
-					</li>
+			<Card.Content>
+				<ol class="grid items-stretch gap-3 md:grid-cols-3">
+					{#each steps as step, i (step.title)}
+						<li class="flex flex-col gap-2 rounded-lg border border-border bg-lams-light/60 p-4">
+							<span class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
+								<step.icon class="size-4" aria-hidden="true" /> {i + 1} Â· {step.title}
+							</span>
+							<span class="text-sm text-muted-foreground">{step.body}</span>
+						</li>
+					{/each}
 				</ol>
 
-				<Card.Root class="border-lams-green/40 bg-lams-green/5">
+				<Card.Root class="mt-4 border-lams-green/40 bg-lams-green/5">
 					<Card.Content class="pt-5">
 						<p class="flex items-start gap-2 text-sm">
-							<MapPinCheck class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
+							<CheckCircle2 class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
 							<span class="text-muted-foreground">
-								<span class="font-medium text-foreground">The distance is measured by the student’s own
-									phone.</span>
-								Not the rep’s, not a proxy — the handset that scanned the code is the one
-								reporting how far it is from the screen it just read, at that instant. That is
-								what makes “in range” mean something.
+								<span class="font-medium text-foreground">That is genuinely the whole job.</span>
+								There is nothing to type, no code to read out, and no app to install. If you have signed in
+								before, you can have your attendance recorded before you have put your phone away.
 							</span>
 						</p>
 					</Card.Content>
 				</Card.Root>
-
-				<div>
-					<p class="mb-2 text-sm font-medium">The code on the station, rolling</p>
-					<p class="mb-3 text-xs text-muted-foreground">
-						Live output from the same generator the station uses. This is an illustration with no
-						lecture behind it — these codes will not verify against anything.
-					</p>
-					<ol class="flex flex-wrap gap-2">
-						{#each demoCodes as c (c.code + String(c.past))}
-							<li
-								class="flex flex-col items-center gap-1 rounded-lg border px-4 py-2 {c.past
-									? 'border-border bg-muted/40 text-muted-foreground line-through'
-									: 'border-lams-green bg-lams-green/10 text-lams-navy'}"
-							>
-								<span class="font-mono text-lg font-semibold tracking-[0.15em]">{c.code}</span>
-								<span class="flex items-center gap-1 text-[0.65rem]">
-									{#if c.past}
-										gone
-									{:else}
-										<RotateCw class="size-2.5" aria-hidden="true" /> now
-									{/if}
-								</span>
-							</li>
-						{/each}
-					</ol>
-				</div>
 			</Card.Content>
 		</Card.Root>
 	</section>
 
-	<!-- ── The gates ────────────────────────────────────────────────────── -->
-	<section id="gates" aria-labelledby="gates-h" class="scroll-mt-20">
+	<Separator />
+
+	<!-- â”€â”€ Statuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<section id="status" aria-labelledby="status-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title id="gates-h" class="text-lg">The six checks, in order</Card.Title>
+				<Card.Title id="status-h" class="text-lg">What your record says</Card.Title>
 				<Card.Description>
-					Each one is cheaper than the next, so a bad token is dropped before anything is looked up.
-					Every check runs in the background — none of it slows a student down.
+					Nobody works this out for you, and nobody can type it in for you either.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<ol class="flex flex-col gap-2">
-					{#each gates as gate, i (gate.question)}
+				<ul class="grid gap-3 sm:grid-cols-2">
+					{#each statuses as s (s.label)}
 						<li class="flex items-start gap-3 rounded-lg border border-border p-3">
-							<span
-								class="flex size-8 shrink-0 items-center justify-center rounded-full bg-lams-navy text-sm font-semibold text-white"
-								aria-hidden="true">{i + 1}</span
-							>
-							<div class="min-w-0 flex-1">
-								<p class="flex items-center gap-2 text-sm font-medium">
-									<gate.icon class="size-4 shrink-0 text-lams-green" aria-hidden="true" />
-									{gate.question}
-								</p>
-								<p class="text-xs text-muted-foreground">{gate.detail}</p>
-								<p class="mt-1 text-xs">
-									<span class="font-medium">Stops:</span>
-									<span class="text-muted-foreground">{gate.stops}</span>
-								</p>
+							<s.icon class="mt-0.5 size-5 shrink-0 text-lams-navy" aria-hidden="true" />
+							<div class="min-w-0">
+								<p class="text-sm font-semibold">{s.label}</p>
+								<p class="text-sm text-muted-foreground">{s.meaning}</p>
 							</div>
 						</li>
 					{/each}
-				</ol>
+				</ul>
+				<p class="mt-4 text-sm text-muted-foreground">
+					You can see all of this yourself under <span class="font-medium text-foreground">My attendance</span>,
+					including how far your phone was from the screen. If you think any of it is wrong, you can report it
+					from the same page.
+				</p>
 			</Card.Content>
 		</Card.Root>
 	</section>
 
-	<!-- ── Timeline ─────────────────────────────────────────────────────── -->
-	<section id="timeline" aria-labelledby="timeline-h" class="scroll-mt-20">
+	<Separator />
+
+	<!-- â”€â”€ Problems â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<section id="wrong" aria-labelledby="wrong-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title id="timeline-h" class="text-lg">A lecture, start to finish</Card.Title>
-				<Card.Description>What a rep does, and what happens without any input.</Card.Description>
+				<Card.Title id="wrong-h" class="flex items-center gap-2 text-lg">
+					<HelpCircle class="size-5 text-lams-navy" aria-hidden="true" /> If something goes wrong
+				</Card.Title>
+				<Card.Description>
+					All of these happen in real halls. None of them should cost you the lecture.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<dl class="flex flex-col gap-2">
+					{#each problems as p (p.question)}
+						<div class="rounded-lg border border-border p-3">
+							<dt class="flex items-start gap-2 text-sm font-semibold">
+								<p.icon class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
+								<span>{p.question}</span>
+							</dt>
+							<dd class="mt-1 pl-6 text-sm text-muted-foreground">{p.answer}</dd>
+						</div>
+					{/each}
+				</dl>
+			</Card.Content>
+		</Card.Root>
+	</section>
+
+	<Separator />
+
+	<!-- â”€â”€ Why it cannot be faked, said plainly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<section aria-labelledby="why-h" class="scroll-mt-20">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title id="why-h" class="flex items-center gap-2 text-lg">
+					<ShieldCheck class="size-5 text-lams-green" aria-hidden="true" /> Why this is hard to fake
+				</Card.Title>
+				<Card.Description>
+					Four ordinary things working together. None of them slows you down.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<ul class="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+					{#each [
+						{ head: 'The screen keeps changing.', body: 'The barcode holds a code that changes every 30 seconds, so a photograph of it stops working almost immediately. There is nothing useful to send to someone at home.' },
+						{ head: 'Your phone says where it is.', body: 'It reports its own position at the moment you scan, so being in the hall is checked by your handset rather than by somebody elseâ€™s.' },
+						{ head: 'The screen has to stay put.', body: 'LAMS knows which room the screen belongs to. If it is carried out of that room it stops recording, so attendance cannot be taken in the wrong place.' },
+						{ head: 'You sign in on one phone.', body: 'Your account belongs to the handset you set it up on, so somebody else cannot use your sign-in on theirs.' }
+					] as r (r.head)}
+						<li class="flex gap-2">
+							<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+							<span>
+								<b class="font-medium text-foreground">{r.head}</b>
+								{r.body}
+							</span>
+						</li>
+					{/each}
+				</ul>
+				<p class="mt-4 text-sm text-muted-foreground">
+					And where a check cannot be certain, it says so rather than guessing. If your phoneâ€™s location is too
+					imprecise to tell, your record is marked for a person to look at instead of being quietly counted for
+					or against you.
+				</p>
+			</Card.Content>
+		</Card.Root>
+	</section>
+
+	<Separator />
+
+	<!-- â”€â”€ Roles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+	<section aria-labelledby="roles-h" class="scroll-mt-20">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title id="roles-h" class="text-lg">Who does what</Card.Title>
+			</Card.Header>
+			<Card.Content class="grid gap-3 sm:grid-cols-3">
+				{#each roles as role (role.who)}
+					<div class="rounded-lg border border-border p-3">
+						<p class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
+							<role.icon class="size-4" aria-hidden="true" />
+							{role.who}
+						</p>
+						<p class="mt-1 text-sm text-muted-foreground">{role.body}</p>
+					</div>
+				{/each}
+			</Card.Content>
+		</Card.Root>
+	</section>
+
+	<Separator />
+
+	<section aria-labelledby="kept-h" class="scroll-mt-20">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title id="kept-h" class="flex items-center gap-2 text-lg">
+					<ClipboardCheck class="size-5 text-lams-green" aria-hidden="true" /> What is written down
+				</Card.Title>
+				<Card.Description>All of it is visible to you, and you can query any of it.</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<ul class="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
+					{#each kept as item (item)}
+						<li class="flex items-start gap-2">
+							<CircleCheck class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
+							<span>{item}</span>
+						</li>
+					{/each}
+				</ul>
+				<p class="mt-4 text-xs text-muted-foreground">
+					Only a class rep or lecturer can add a student by hand, and they have to give a reason. Nobody can put
+					themselves into a class they do not belong to.
+				</p>
+			</Card.Content>
+		</Card.Root>
+	</section>
+
+				<section aria-labelledby="timeline-h" class="scroll-mt-20">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title id="timeline-h" class="flex items-center gap-2 text-lg">
+					<DoorOpen class="size-5 text-lams-navy" aria-hidden="true" /> What happens during a lecture
+				</Card.Title>
+				<Card.Description>The parts you never have to do anything about.</Card.Description>
 			</Card.Header>
 			<Card.Content>
 				<ol class="relative flex flex-col gap-5 border-l-2 border-border pl-6">
@@ -292,135 +394,9 @@
 		</Card.Root>
 	</section>
 
-	<!-- ── Status decision ──────────────────────────────────────────────── -->
-	<section id="status" aria-labelledby="status-h" class="scroll-mt-20">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title id="status-h" class="text-lg">How a status is decided</Card.Title>
-				<Card.Description>
-					Nobody types this in. Distance is checked first, because being in the room is the
-					condition worth knowing about.
-				</Card.Description>
-			</Card.Header>
-			<Card.Content class="flex flex-col gap-4">
-				<div class="rounded-lg border-2 border-border p-4">
-					<p class="text-sm font-medium">Could the position be judged at all?</p>
-					<div class="mt-2 grid gap-2 sm:grid-cols-2">
-						<div class="rounded-md bg-amber-50 p-3">
-							<p class="flex items-center gap-1.5 text-sm font-medium text-amber-900">
-								<TriangleAlert class="size-4" aria-hidden="true" /> No — missing or too coarse
-							</p>
-							<p class="mt-1 text-xs text-amber-900/80">
-								A ±150 m reading cannot tell a seat inside from a corridor outside. The
-								distance is left out of the decision, the clock decides, and the record is
-								flagged for a person to look at.
-							</p>
-						</div>
-						<div class="rounded-md bg-lams-green/10 p-3">
-							<p class="flex items-center gap-1.5 text-sm font-medium text-lams-navy">
-								<CircleCheck class="size-4 text-lams-green" aria-hidden="true" /> Yes — a usable fix
-							</p>
-							<p class="mt-1 text-xs text-muted-foreground">
-								The reading is compared with the station radius, and the result is recorded
-								against the student’s name.
-							</p>
-						</div>
-					</div>
-				</div>
-
-				<div class="rounded-lg border-2 border-border p-4">
-					<p class="text-sm font-medium">Inside the radius?</p>
-					<div class="mt-2 grid gap-2 sm:grid-cols-2">
-						<div class="rounded-md bg-red-50 p-3">
-							<p class="text-sm font-medium text-red-900">No → Out of Range</p>
-							<p class="mt-1 text-xs text-red-900/80">
-								Flagged for review however early the student arrived. Being seen is the thing a
-								lecturer needs to decide on, not absorb.
-							</p>
-						</div>
-						<div class="rounded-md bg-muted/40 p-3">
-							<p class="text-sm font-medium">Yes → the clock decides</p>
-							<div class="mt-2 flex flex-wrap gap-1.5 text-xs">
-								<span class="rounded bg-lams-green/15 px-2 py-1 font-medium text-lams-navy"
-									>within 5 min · Present</span
-								>
-								<span class="rounded bg-amber-100 px-2 py-1 font-medium text-amber-900"
-									>5–10 min · Late</span
-								>
-								<span class="rounded bg-red-100 px-2 py-1 font-medium text-red-900"
-									>after 10 min · Absent</span
-								>
-							</div>
-							<p class="mt-2 text-xs text-muted-foreground">
-								A late arrival is still recorded rather than rejected, so a lecturer can see that
-								the student did turn up and change it if there is a reason. Both thresholds are
-								settable per lecture.
-							</p>
-						</div>
-					</div>
-				</div>
-			</Card.Content>
-		</Card.Root>
-	</section>
-
-	<!-- ── Roles ────────────────────────────────────────────────────────── -->
-	<section aria-labelledby="roles-h" class="scroll-mt-20">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title id="roles-h" class="text-lg">Who does what</Card.Title>
-			</Card.Header>
-			<Card.Content class="grid gap-3 sm:grid-cols-3">
-				{#each [
-					{ icon: ScanLine, who: 'Student', body: 'Scan the screen. Allow location. That is the whole job — your name, the time and your distance are recorded for you.' },
-					{ icon: UsersRound, who: 'Class rep', body: 'Run the station at the front of the hall. Add students by hand when a phone is not working, with a reason against your name.' },
-					{ icon: ClipboardCheck, who: 'Lecturer', body: 'Set up classes and subjects, open the lecture, and correct or excuse any record afterwards. Everything they change is logged.' }
-				] as role (role.who)}
-					<div class="rounded-lg border border-border p-3">
-						<p class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
-							<role.icon class="size-4" aria-hidden="true" />
-							{role.who}
-						</p>
-						<p class="mt-1 text-sm text-muted-foreground">{role.body}</p>
-					</div>
-				{/each}
-			</Card.Content>
-		</Card.Root>
-	</section>
-
 	<Separator />
 
-	<section aria-labelledby="data-h" class="scroll-mt-20">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title id="data-h" class="flex items-center gap-2 text-base">
-					<CalendarDays class="size-4 text-lams-green" aria-hidden="true" /> What a record holds
-				</Card.Title>
-				<Card.Description>
-					Visible to the student at <code class="rounded bg-muted px-1 py-0.5 text-xs">/attendance</code>,
-					who can dispute anything that looks wrong.
-				</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				<ul class="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
-					{#each ['Your name and registration number', 'The exact time of the scan', 'How far your phone was from the station', 'Whether that fix was precise enough to trust', 'The device the scan came from', 'Any flag, and why it was raised', 'Any later change, with the previous value kept', 'Whether you disputed it, and your note'] as item (item)}
-						<li class="flex items-start gap-2">
-							<CircleCheck class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
-							<span>{item}</span>
-						</li>
-					{/each}
-				</ul>
-				<p class="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
-					<Users class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-					<span>
-						Only a class rep or lecturer can add a student, so nobody can put themselves into a class
-						they do not belong to.
-					</span>
-				</p>
-			</Card.Content>
-					</Card.Root>
-				</section>
-
-				<section class="flex flex-col items-center gap-3 rounded-lg bg-lams-light/70 p-8 text-center">
+	<section class="flex flex-col items-center gap-3 rounded-lg bg-lams-light/70 p-8 text-center">
 					<p class="text-lg font-semibold text-lams-navy">That is the whole system.</p>
 					<p class="max-w-md text-sm text-muted-foreground">
 						One scan, one record, and nothing for a student to type. Sign in to see your own attendance, or to run

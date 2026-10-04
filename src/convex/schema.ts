@@ -236,16 +236,60 @@ export default defineSchema({
 		/**
 		 * Where the QR station physically stands. Kept separate from the lecture
 		 * position so the two radii can differ — the screen may sit at a doorway
-		 * while the lecture is at the back of the hall. `startSession` currently
-		 * sets these from the lecture coordinates; they are separate fields so a
-		 * station can be pinned on its own without a schema change. Sessions opened
-		 * before the station existed are backfilled from the lecture coordinates by
+		 * while the lecture is at the back of the hall. Sessions opened before the
+		 * station existed are backfilled from the lecture coordinates by
 		 * `migrations.ts`.
 		 */
 		stationLat: v.number(),
 		stationLng: v.number(),
 		/** Distance from the station at which a student's phone still counts as present. */
 		stationRadiusM: v.number(),
+		/**
+		 * How far the *station itself* may drift from its pinned spot before
+		 * scans are refused. Optional because sessions opened before this existed
+		 * have no value; the gate falls back to `stationRadiusM` when it is absent.
+		 *
+		 * Separate from `stationRadiusM` on purpose: that radius is generous
+		 * because a whole hall of students has to fit inside it, while the screen
+		 * is a fixed object expected to stay put. Defaulting one to the other
+		 * would let the station be carried to the next building and still count.
+		 */
+		stationToleranceM: v.optional(v.number()),
+		/**
+		 * The station's last reported position, and when it reported it. The
+		 * screen re-reports on a timer; `null` simply means it never has, which
+		 * is not by itself a reason to refuse anyone.
+		 */
+		stationSeenLat: v.optional(v.number()),
+		stationSeenLng: v.optional(v.number()),
+		stationSeenAccuracyM: v.optional(v.number()),
+		stationSeenAt: v.optional(v.number()),
+		/** How far that reading put the station from its pinned spot. */
+		stationSeenDistanceM: v.optional(v.number()),
+		/**
+		 * Set when a reading placed the station clear of its room. While this is
+		 * present every scan is refused — that is the whole point of pinning a
+		 * room to the screen. Cleared automatically by the next in-room reading,
+		 * or by an audited `pinStation` when the rep really did change rooms.
+		 */
+		stationMoved: v.optional(v.boolean()),
+		stationMovedAt: v.optional(v.number()),
+		/**
+		 * The last reading could not place the station either way. Surfaced in
+		 * the UI so a rep knows the check is not currently proving anything, but
+		 * it never blocks: a weak fix is an absence of evidence, not evidence of
+		 * absence.
+		 */
+		stationUnverified: v.optional(v.boolean()),
+		/**
+		 * Re-pin trail. Who moved the station's room, when, and why. A station
+		 * that is quietly re-pinned mid-lecture would otherwise be indistinguishable
+		 * from one that was never moved, so this is kept the same way attendance
+		 * corrections are.
+		 */
+		stationRepinnedBy: v.optional(v.string()),
+		stationRepinnedAt: v.optional(v.number()),
+		stationRepinReason: v.optional(v.string()),
 		lectureLat: v.number(),
 		lectureLng: v.number(),
 		radiusM: v.number(),

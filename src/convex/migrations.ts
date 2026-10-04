@@ -7,7 +7,7 @@
 // re-run against any deployment that has not been backfilled yet.
 
 import { internalMutation } from './_generated/server';
-import { DEFAULT_STATION_RADIUS_M } from './helpers';
+import { DEFAULT_STATION_RADIUS_M, DEFAULT_STATION_TOLERANCE_M } from './helpers';
 import { v } from 'convex/values';
 
 /**
@@ -41,6 +41,46 @@ export const backfillSessionStations = internalMutation({
 				stationLat: session.lectureLat,
 				stationLng: session.lectureLng,
 				stationRadiusM: DEFAULT_STATION_RADIUS_M
+			});
+			patched += 1;
+		}
+		return {
+			scanned: page.page.length,
+			patched,
+			cursor: page.continueCursor,
+			isDone: page.isDone
+		};
+	}
+});
+
+/**
+ * Sessions opened before the station-placement check carry no
+ * `stationToleranceM`, no last-seen position and no moved flag.
+ *
+ * All of those are optional and all of them degrade safely on their own — a
+ * missing tolerance falls back to the student radius, and a missing moved flag
+ * reads as "not moved" — so this backfill exists to make those sessions behave
+ * like fresh ones rather than to fix anything broken.
+ *
+ * The tolerance comes from the station default and not from the session's
+ * `radiusM`: as with the station fields above, inheriting a teaching radius
+ * would leave a migrated session far more permissive than any new one.
+ */
+export const backfillStationPlacement = internalMutation({
+	args: { cursor: v.optional(v.union(v.string(), v.null())) },
+	handler: async (ctx, args) => {
+		const page = await ctx.db
+			.query('sessions')
+			.paginate({ cursor: args.cursor ?? null, numItems: 100 });
+		let patched = 0;
+		for (const session of page.page) {
+			if (session.stationToleranceM !== undefined) continue;
+			await ctx.db.patch(session._id, {
+				stationToleranceM: DEFAULT_STATION_TOLERANCE_M,
+				// Never block a session on a reading taken before this feature
+				// existed: there is no evidence it ever moved.
+				stationMoved: false,
+				stationUnverified: false
 			});
 			patched += 1;
 		}
