@@ -167,6 +167,19 @@
 	}
 }
 
+/* A horizontally scrollable nav should look like a single tidy row, not a list
+   with a scrollbar under it. Overflow still works — the fade on the header's
+   right edge is what tells a narrow screen there is more to scroll to. */
+.nav-scroll {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	scroll-behavior: smooth;
+}
+
+.nav-scroll::-webkit-scrollbar {
+	display: none;
+}
+
 /* Fullscreen QR presentation for the lecture room */
 .qr-panel:fullscreen {
 	display: flex;

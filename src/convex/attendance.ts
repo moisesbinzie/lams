@@ -10,7 +10,13 @@ import {
 	requireRecorder,
 	requireStaff
 } from './auth';
-import { computeAutoStatus, haversineM, normalizeReg, randomHex } from './helpers';
+import {
+	computeAutoStatus,
+	DEFAULT_STATION_RADIUS_M,
+	haversineM,
+	normalizeReg,
+	randomHex
+} from './helpers';
 import { describeContradiction, judgeProximity, STUDENT_ACCURACY_TOLERANCE } from './proximity';
 import { isBlocked, noteFailure, noteSuccess, STATION_LIMITS } from './ratelimit';
 import { parseScanCode, verifyScanCode } from './scancode';
@@ -91,13 +97,13 @@ export const startSession = mutation({
 		const lateUntilSec = args.lateUntilSec ?? DEFAULT_LATE_UNTIL_SEC;
 		if (radiusM < 5 || radiusM > 2000) throw new Error('The allowed distance must be between 5 and 2000 metres.');
 				// The station is what students actually scan, so its radius is the one that
-				// decides most attendance. It gets its own bound rather than inheriting the
-				// lecture radius, which a lecturer may widen for reasons that have nothing
-				// to do with where the door is.
-				const stationRadiusM = args.stationRadiusM ?? 50;
-				if (stationRadiusM < 5 || stationRadiusM > 2000) {
-					throw new Error('The station distance must be between 5 and 2000 metres.');
-				}
+		// decides most attendance. It gets its own bound rather than inheriting the
+		// lecture radius, which a lecturer may widen for reasons that have nothing
+		// to do with where the door is.
+		const stationRadiusM = args.stationRadiusM ?? DEFAULT_STATION_RADIUS_M;
+		if (stationRadiusM < 5 || stationRadiusM > 2000) {
+			throw new Error('The station distance must be between 5 and 2000 metres.');
+		}
 		if (onTimeSec < 30 || onTimeSec > 3600) throw new Error('The on-time window must be between 30 seconds and 60 minutes.');
 		if (lateUntilSec < 60 || lateUntilSec > 7200) throw new Error('The late window must be between 1 and 120 minutes.');
 		if (onTimeSec >= lateUntilSec) throw new Error('The late window must be longer than the on-time window.');

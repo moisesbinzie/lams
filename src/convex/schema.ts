@@ -238,7 +238,9 @@ export default defineSchema({
 		 * position so the two radii can differ — the screen may sit at a doorway
 		 * while the lecture is at the back of the hall. `startSession` currently
 		 * sets these from the lecture coordinates; they are separate fields so a
-		 * station can be pinned on its own without a schema change.
+		 * station can be pinned on its own without a schema change. Sessions opened
+		 * before the station existed are backfilled from the lecture coordinates by
+		 * `migrations.ts`.
 		 */
 		stationLat: v.number(),
 		stationLng: v.number(),

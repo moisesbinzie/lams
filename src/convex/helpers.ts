@@ -1,5 +1,12 @@
 // Shared pure helpers for Convex functions. No Node builtins — Web Crypto only.
 
+/**
+ * How far from a QR station a student's phone still counts as present when the
+ * rep does not say otherwise. Shared with the station backfill migration so a
+ * session migrated from the lecture coordinates looks exactly like a fresh one.
+ */
+export const DEFAULT_STATION_RADIUS_M = 50;
+
 export function normalizeReg(value: string): string {
 	return value.trim().toUpperCase().replace(/\s+/g, ' ');
 }

@@ -80,13 +80,6 @@
 		{ at: 'After', title: 'A lecturer can review anything', body: 'Correct, excuse or remove any record. The previous value is always kept.' }
 	];
 
-	const limits = [
-		'Location can be spoofed. A mock-location app, or a desktop browser with developer tools open, can report being in the hall from anywhere. No browser-supplied position is proof of presence.',
-		'The bound phone plus the PIN is still the account. Someone holding both can act as the student. Only the distance check remains, and it can be faked.',
-		'A flat radius cannot tell one floor from another. There is no altitude in the browser’s location data, so in a multi-storey block set the radius small and expect to review.',
-		'Location needs HTTPS. Served over plain HTTP the browser withholds it entirely, so every record arrives flagged for review and no distance check runs.'
-	];
-
 	/**
 	 * A live sample of the real generator, so the rolling behaviour is shown
 	 * rather than described. The secret below is a throwaway constant with no
@@ -127,7 +120,7 @@
 			and written to a record your lecturer can read afterwards.
 		</p>
 		<nav aria-label="Sections of this page" class="flex flex-wrap gap-2 pt-1">
-			{#each [['#scan', 'The scan'], ['#gates', 'The checks'], ['#timeline', 'A lecture'], ['#status', 'Your status'], ['#limits', 'The limits']] as [href, label] (href)}
+			{#each [['#scan', 'The scan'], ['#gates', 'The checks'], ['#timeline', 'A lecture'], ['#status', 'Your status']] as [href, label] (href)}
 				<Button variant="outline" size="sm" href={href}>{label}</Button>
 			{/each}
 		</nav>
@@ -396,39 +389,6 @@
 
 	<Separator />
 
-	<!-- ── Limits ───────────────────────────────────────────────────────── -->
-	<section id="limits" aria-labelledby="limits-h" class="scroll-mt-20">
-		<Card.Root class="border-amber-300 bg-amber-50">
-			<Card.Header>
-				<Card.Title id="limits-h" class="flex items-center gap-2 text-lg text-amber-900">
-					<TriangleAlert class="size-5" aria-hidden="true" /> What this cannot do
-				</Card.Title>
-				<Card.Description class="text-amber-900/80">
-					Worth saying plainly, because the checks above look stronger than they are.
-				</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				<ul class="flex flex-col gap-2.5">
-					{#each limits as limit (limit)}
-						<li class="flex gap-2 text-sm text-amber-900">
-							<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-amber-700" aria-hidden="true"
-							></span>
-							<span>{limit}</span>
-						</li>
-					{/each}
-				</ul>
-				<p class="mt-4 text-sm text-amber-900">
-					Taken together this is a strong deterrent against casual sharing, and a record a lecturer can
-					actually review. It is not proof that a particular person sat in a particular chair.
-				</p>
-				<div class="mt-4 flex flex-wrap gap-2">
-					<Button size="sm" href="/signin">Sign in</Button>
-					<Button size="sm" variant="outline" href="/">Back to the start</Button>
-				</div>
-			</Card.Content>
-		</Card.Root>
-	</section>
-
 	<section aria-labelledby="data-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
@@ -457,6 +417,18 @@
 					</span>
 				</p>
 			</Card.Content>
-		</Card.Root>
-	</section>
-</div>
+					</Card.Root>
+				</section>
+
+				<section class="flex flex-col items-center gap-3 rounded-lg bg-lams-light/70 p-8 text-center">
+					<p class="text-lg font-semibold text-lams-navy">That is the whole system.</p>
+					<p class="max-w-md text-sm text-muted-foreground">
+						One scan, one record, and nothing for a student to type. Sign in to see your own attendance, or to run
+						a lecture.
+					</p>
+					<div class="flex flex-wrap justify-center gap-2">
+						<Button href="/signin">Sign in</Button>
+						<Button variant="outline" href="/">Back to the start</Button>
+					</div>
+				</section>
+			</div>

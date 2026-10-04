@@ -14,6 +14,7 @@ import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as enrolments from "../enrolments.js";
 import type * as helpers from "../helpers.js";
+import type * as migrations from "../migrations.js";
 import type * as people from "../people.js";
 import type * as proximity from "../proximity.js";
 import type * as ratelimit from "../ratelimit.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   enrolments: typeof enrolments;
   helpers: typeof helpers;
+  migrations: typeof migrations;
   people: typeof people;
   proximity: typeof proximity;
   ratelimit: typeof ratelimit;
