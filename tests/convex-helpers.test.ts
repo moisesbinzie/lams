@@ -48,26 +48,56 @@ describe('randomHex / sha256Hex', () => {
 
 describe('computeAutoStatus', () => {
 	const RADIUS = 50;
-	const PRESENT = 300;
+	// Lecturer defaults: on time for 5 minutes, late until 10 minutes.
+	const ON_TIME = 300;
+	const LATE_UNTIL = 600;
 
 	it('marks in-range and on-time submissions Present', () => {
-		assert.equal(computeAutoStatus(0, PRESENT, 10, RADIUS), 'Present');
-		assert.equal(computeAutoStatus(PRESENT, PRESENT, 10, RADIUS), 'Present');
-	});
-
-	it('marks late in-range submissions Late', () => {
-		assert.equal(computeAutoStatus(PRESENT + 1, PRESENT, 10, RADIUS), 'Late');
+		assert.equal(computeAutoStatus(0, ON_TIME, LATE_UNTIL, 10, RADIUS), 'Present');
+		assert.equal(computeAutoStatus(ON_TIME, ON_TIME, LATE_UNTIL, 10, RADIUS), 'Present');
 	});
 
 	it('marks anything beyond the radius Out of Range, even when early', () => {
-		assert.equal(computeAutoStatus(1, PRESENT, RADIUS + 1, RADIUS), 'Out_of_Range');
+		assert.equal(computeAutoStatus(1, ON_TIME, LATE_UNTIL, RADIUS + 1, RADIUS), 'Out_of_Range');
 	});
 
 	it('keeps Out of Range when the student is also late', () => {
-		assert.equal(computeAutoStatus(PRESENT + 60, PRESENT, 500, RADIUS), 'Out_of_Range');
+		assert.equal(computeAutoStatus(ON_TIME + 60, ON_TIME, LATE_UNTIL, 500, RADIUS), 'Out_of_Range');
+	});
+
+	it('keeps Out of Range even after the late window closes', () => {
+		assert.equal(computeAutoStatus(LATE_UNTIL + 120, ON_TIME, LATE_UNTIL, 500, RADIUS), 'Out_of_Range');
 	});
 
 	it('treats a missing GPS fix as in range', () => {
-		assert.equal(computeAutoStatus(60, PRESENT, null, RADIUS), 'Present');
+		assert.equal(computeAutoStatus(60, ON_TIME, LATE_UNTIL, null, RADIUS), 'Present');
+	});
+
+	it('marks a student Late between the two thresholds', () => {
+		assert.equal(computeAutoStatus(ON_TIME + 1, ON_TIME, LATE_UNTIL, 10, RADIUS), 'Late');
+		assert.equal(computeAutoStatus(400, ON_TIME, LATE_UNTIL, 10, RADIUS), 'Late');
+	});
+
+	it('marks a student Late right up to the late threshold', () => {
+		assert.equal(computeAutoStatus(LATE_UNTIL, ON_TIME, LATE_UNTIL, 10, RADIUS), 'Late');
+	});
+
+	it('marks a student Absent after the late threshold', () => {
+		assert.equal(computeAutoStatus(LATE_UNTIL + 1, ON_TIME, LATE_UNTIL, 10, RADIUS), 'Absent');
+		assert.equal(computeAutoStatus(3600, ON_TIME, LATE_UNTIL, 10, RADIUS), 'Absent');
+	});
+
+	it('honours adjusted thresholds', () => {
+		// A lecturer widening the windows to 15 / 30 minutes.
+		assert.equal(computeAutoStatus(700, 900, 1800, 10, RADIUS), 'Present');
+		assert.equal(computeAutoStatus(1000, 900, 1800, 10, RADIUS), 'Late');
+		assert.equal(computeAutoStatus(1900, 900, 1800, 10, RADIUS), 'Absent');
+	});
+
+	it('honours tightened thresholds', () => {
+		// A lecturer narrowing to 2 / 4 minutes.
+		assert.equal(computeAutoStatus(100, 120, 240, 10, RADIUS), 'Present');
+		assert.equal(computeAutoStatus(200, 120, 240, 10, RADIUS), 'Late');
+		assert.equal(computeAutoStatus(300, 120, 240, 10, RADIUS), 'Absent');
 	});
 });

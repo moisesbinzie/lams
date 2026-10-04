@@ -1,0 +1,279 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { api } from '../../../convex/_generated/api.js';
+	import { requireConvexClient } from '$lib/convexClient';
+	import { endSession } from '$lib/lams/session.svelte';
+	import { getToken } from '$lib/lams/auth';
+	import { formatCountdown, getCurrentPosition } from '$lib/lams/geo';
+	import StatusBadge from '$lib/lams/status-badge.svelte';
+	import * as Card from '$lib/components/ui/card';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { TriangleAlert } from '@lucide/svelte';
+	import type { ClassRow, LectureSession, Offering } from '$lib/lams/types';
+
+	let token = getToken();
+	let classes = $state<ClassRow[]>([]);
+	let offerings = $state<Offering[]>([]);
+	let sessions = $state<LectureSession[]>([]);
+	let classId = $state('');
+	let offeringId = $state('');
+	let error = $state('');
+	let notice = $state('');
+	let busy = $state(false);
+	let now = $state(Date.now());
+
+	let lat = $state('');
+	let lng = $state('');
+	let radius = $state('50');
+	// The three-tier window: on time, late, then too late to count.
+	let onTimeMin = $state('5');
+	let lateUntilMin = $state('10');
+
+	const selected = $derived(offerings.find((o) => o._id === offeringId) ?? null);
+	const openSessions = $derived(sessions.filter((s) => s.status === 'open'));
+
+	onMount(() => {
+		if (!token) return;
+		const tick = setInterval(() => (now = Date.now()), 1000);
+		void load();
+		return () => clearInterval(tick);
+	});
+
+	async function load() {
+		if (!token) return;
+		try {
+			const client = requireConvexClient();
+			const me = (await client.query(api.staff.me, { token })) as { role: string } | null;
+			if (!me) {
+				endSession();
+				return;
+			}
+			if (me.role !== 'lecturer') {
+				error = 'Only lecturers start lectures here. Class reps use “Take attendance”.';
+				return;
+			}
+			classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
+			if (!classId && classes.length > 0) classId = classes[0]._id;
+			await loadOfferings();
+			await loadSessions();
+		} catch (err) {
+			// Keep the token: a failed load is usually a network blip.
+			error = err instanceof Error ? err.message : 'Could not load.';
+		}
+	}
+
+	async function loadOfferings() {
+		if (!classId) return;
+		try {
+			const client = requireConvexClient();
+			offerings = (await client.query(api.academics.listOfferings, {
+				token,
+				classId: classId as never
+			})) as unknown as Offering[];
+			if (!offeringId || !offerings.some((o) => o._id === offeringId)) {
+				offeringId = offerings[0]?._id ?? '';
+			}
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not load subjects.';
+		}
+	}
+
+	async function loadSessions() {
+		try {
+			const client = requireConvexClient();
+			sessions = (await client.query(api.attendance.listForRecordKeeper, { token })) as unknown as LectureSession[];
+		} catch {
+			// Non-fatal.
+		}
+	}
+
+	async function useGps() {
+		try {
+			const pos = await getCurrentPosition();
+			lat = String(pos.lat);
+			lng = String(pos.lng);
+			notice = `Lecture location captured to within ${Math.round(pos.accuracyM ?? 0)} metres.`;
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not get your location.';
+		}
+	}
+
+	async function start(e: SubmitEvent) {
+		e.preventDefault();
+		busy = true;
+		error = '';
+		try {
+			const client = requireConvexClient();
+			const res = await client.mutation(api.attendance.startSession, {
+				token,
+				offeringId: offeringId as never,
+				lectureLat: Number(lat),
+				lectureLng: Number(lng),
+				radiusM: Number(radius),
+				onTimeSec: Math.round(Number(onTimeMin) * 60),
+				lateUntilSec: Math.round(Number(lateUntilMin) * 60)
+			});
+			notice =
+				res.closedOthers > 0
+					? 'Lecture started. An earlier open lecture was closed automatically.'
+					: 'Lecture started. Open “Take attendance” to start scanning students in.';
+			await loadSessions();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not start the lecture.';
+		} finally {
+			busy = false;
+		}
+	}
+
+	$effect(() => {
+		if (classId) void loadOfferings();
+	});
+</script>
+
+<div class="flex flex-col gap-4">
+	{#if error}
+		<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
+			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+			<span>{error}</span>
+		</p>
+	{/if}
+	{#if notice}
+		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
+	{/if}
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>Start a lecture</Card.Title>
+			<Card.Description>
+				Set where the lecture is, how far students may be from it, and how long they have to arrive. The
+				lecture closes itself.
+			</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-4">
+			<div class="grid gap-3 sm:grid-cols-2">
+				<div class="flex flex-col gap-1.5">
+					<Label for="cls">Class</Label>
+					<select
+						id="cls"
+						class="w-full rounded-md border border-input bg-background p-2 text-sm"
+						bind:value={classId}
+					>
+						{#each classes as c (c._id)}
+							<option value={c._id}>{c.name}</option>
+						{/each}
+					</select>
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<Label for="off">Subject</Label>
+					<select
+						id="off"
+						class="w-full rounded-md border border-input bg-background p-2 text-sm"
+						bind:value={offeringId}
+					>
+						{#each offerings as o (o._id)}
+							<option value={o._id}>{o.subjectCode} — {o.subjectTitle}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+
+			<div class="rounded-md border border-border p-3">
+				<p class="mb-2 text-sm font-medium">Where is the lecture?</p>
+				<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+					<div class="flex flex-col gap-1">
+						<Label for="la">Latitude</Label>
+						<Input id="la" bind:value={lat} placeholder="-13.9626" required />
+					</div>
+					<div class="flex flex-col gap-1">
+						<Label for="lo">Longitude</Label>
+						<Input id="lo" bind:value={lng} placeholder="33.7741" required />
+					</div>
+					<div class="flex items-end">
+						<Button type="button" variant="outline" onclick={useGps}>Use my location</Button>
+					</div>
+				</div>
+			</div>
+
+			<div class="rounded-md border border-border p-3">
+				<p class="mb-2 text-sm font-medium">Attendance rules</p>
+				<div class="grid gap-2 sm:grid-cols-3">
+					<div class="flex flex-col gap-1">
+						<Label for="rad">Allowed distance (m)</Label>
+						<Input id="rad" type="number" min="5" max="2000" bind:value={radius} />
+					</div>
+					<div class="flex flex-col gap-1">
+						<Label for="ont">On time for (min)</Label>
+						<Input id="ont" type="number" min="0.5" max="60" step="0.5" bind:value={onTimeMin} />
+					</div>
+					<div class="flex flex-col gap-1">
+						<Label for="lat2">Late until (min)</Label>
+						<Input id="lat2" type="number" min="1" max="120" step="0.5" bind:value={lateUntilMin} />
+					</div>
+				</div>
+				<p class="mt-2 text-xs text-muted-foreground">
+					On time for {onTimeMin} minute(s), then late until {lateUntilMin} minute(s). Anyone scanned after
+					that is recorded as absent. Students more than {radius} m from you are flagged for review.
+				</p>
+			</div>
+
+			<form onsubmit={start}>
+				<Button type="submit" disabled={busy || !offeringId || !lat || !lng}>
+					{busy ? 'Starting…' : 'Start lecture'}
+				</Button>
+			</form>
+		</Card.Content>
+	</Card.Root>
+
+	{#if openSessions.length > 0}
+		<Card.Root class="border-emerald-200">
+			<Card.Header>
+				<Card.Title>Open right now</Card.Title>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-2">
+				{#each openSessions as s (s._id)}
+					<div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+						<span>
+							<strong>{s.subjectCode}</strong> — {s.subjectTitle}
+							<span class="text-xs text-muted-foreground">· {s.className}</span>
+						</span>
+						<span class="flex items-center gap-2">
+							<StatusBadge status="open" />
+							<span class="text-xs">closes in {formatCountdown(s.closesAt - now)}</span>
+							<Button size="sm" href="/scan">Scan students</Button>
+						</span>
+					</div>
+				{/each}
+			</Card.Content>
+		</Card.Root>
+	{/if}
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>Recent lectures</Card.Title>
+		</Card.Header>
+		<Card.Content>
+			{#if sessions.length === 0}
+				<p class="text-sm text-muted-foreground">No lectures started yet.</p>
+			{:else}
+				<ul class="flex flex-col divide-y divide-border">
+					{#each sessions.slice(0, 15) as s (s._id)}
+						<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+							<span>
+								<strong>{s.subjectCode}</strong>
+								<span class="text-muted-foreground">
+									· {s.className} · {new Date(s.startedAt).toLocaleString()}
+								</span>
+							</span>
+							<span class="flex items-center gap-2">
+								<StatusBadge status={s.status} />
+								<Button size="sm" variant="outline" href="/scan">Open</Button>
+							</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</Card.Content>
+	</Card.Root>
+</div>

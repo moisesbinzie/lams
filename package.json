@@ -12,13 +12,13 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "node --test src/lib/lams/csv.test.ts src/lib/lams/time.test.ts src/lib/lams/geo.test.ts tests/convex-helpers.test.ts",
+		"test": "node --test src/lib/lams/csv.test.ts src/lib/lams/time.test.ts src/lib/lams/geo.test.ts src/lib/lams/totp.test.ts src/lib/lams/session-state.test.ts tests/convex-helpers.test.ts tests/convex-proximity.test.ts",
 		"gen": "wrangler types"
 	},
 	"devDependencies": {
 		"@fontsource-variable/inter": "^5.3.0",
 		"@internationalized/date": "^3.12.4",
-		"@lucide/svelte": "^1.49.0",
+		"@lucide/svelte": "^1.50.0",
 		"@sveltejs/adapter-cloudflare": "^7.2.8",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
@@ -40,6 +40,7 @@
 	"dependencies": {
 		"convex": "^1.46.0",
 		"convex-svelte": "^0.14.0",
+		"jsqr": "^1.4.0",
 		"qrcode": "^1.5.4"
 	}
 }

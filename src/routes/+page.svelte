@@ -4,7 +4,6 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import StatusBadge from '$lib/lams/status-badge.svelte';
-	import { getConvexClient } from '$lib/convexClient';
 	import {
 		ScanLine,
 		MapPin,
@@ -13,30 +12,28 @@
 		UsersRound,
 		GraduationCap,
 		ShieldCheck,
-		QrCode,
-		ClipboardList,
-		Printer,
-		Wifi,
-		Fingerprint
+		ClipboardCheck,
+		Smartphone,
+		CalendarDays,
+		BookOpen,
+		BarChart3
 	} from '@lucide/svelte';
-
-	const convexOk = getConvexClient() !== null;
 
 	const steps = [
 		{
-			icon: QrCode,
-			title: '1 · Lecturer starts a session',
-			body: 'Sets the lecture location and radius, then displays the signed QR code. Valid for exactly 5 minutes by default — the QR dies the moment the window closes.'
+			icon: ClipboardCheck,
+			title: '1 · Your lecturer adds you',
+			body: 'Your class rep or lecturer adds every student to their class. Nobody can add themselves, so only real students appear on the list.'
+		},
+		{
+			icon: BookOpen,
+			title: '2 · You pick your subjects',
+			body: 'Sign in and choose the subjects you are taking. Your lecturer opens each one, and your timetable builds itself.'
 		},
 		{
 			icon: ScanLine,
-			title: '2 · Students scan and go',
-			body: 'Registration number only — name and student ID resolve from the roster. GPS is captured automatically, never typed.'
-		},
-		{
-			icon: ClipboardList,
-			title: '3 · Attendance lands live',
-			body: 'Present, Late or Out of Range is decided automatically. Reps register students without phones; the lecturer reviews and exports.'
+			title: '3 · Rep or lecturer scans you',
+			body: 'At the start of the lecture you show your code and it is scanned. Your name and the time are recorded for you.'
 		}
 	];
 
@@ -46,9 +43,9 @@
 			title: 'Students',
 			tone: 'text-lams-navy',
 			lines: [
-				'No account, no app, no dashboard.',
-				'Scan → confirm → done in seconds.',
-				'See your status and distance instantly.'
+				'Sign in with your registration number and PIN.',
+				'Show your code — it refreshes every 30 seconds.',
+				'Check your own attendance and report anything wrong.'
 			]
 		},
 		{
@@ -56,9 +53,9 @@
 			title: 'Class representatives',
 			tone: 'text-lams-green',
 			lines: [
-				'For students genuinely without a phone.',
-				'Authorised reps register two or more in one batch.',
-				'Your GPS is the location proxy; every entry is tagged with your name.'
+				'Add students to your class and assign subjects.',
+				'Scan your classmates in around the room.',
+				'Every scan is recorded under your name.'
 			]
 		},
 		{
@@ -66,9 +63,9 @@
 			title: 'Lecturers',
 			tone: 'text-lams-navy',
 			lines: [
-				'Create terms, courses and rosters.',
-				'Monitor submissions from the office in real time.',
-				'Override, excuse or remove records; export CSV / PDF.'
+				'Set up subjects, classes and timetables.',
+				'Open enrolment and choose class reps.',
+				'Correct, excuse or remove any record.'
 			]
 		},
 		{
@@ -76,42 +73,35 @@
 			title: 'Administrators',
 			tone: 'text-lams-green',
 			lines: [
-				'Read-only records review.',
-				'Every session, every submission, with who registered whom.',
-				'CSV export for academic records.'
+				'Review attendance across all past lectures.',
+				'See exactly who recorded each entry.',
+				'Download a full list for your records.'
 			]
 		}
 	];
 </script>
 
-
 <div class="flex flex-col gap-8">
 	<section class="grid items-center gap-8 py-4 md:grid-cols-[1.15fr_1fr]">
 		<div class="flex flex-col items-start gap-4">
 			<div class="flex flex-wrap items-center gap-2">
-				<Badge class="gap-1.5 bg-lams-navy text-white"><Wifi class="size-3.5" /> QR + GPS</Badge>
-				<Badge class="gap-1.5 bg-lams-green text-white"><Timer class="size-3.5" /> 5-min window</Badge>
-				<Badge variant="outline" class="gap-1.5"><Fingerprint class="size-3.5" /> No login for students</Badge>
+				<Badge class="gap-1.5 bg-lams-navy text-white"><MapPin class="size-3.5" /> Location checked</Badge>
+				<Badge class="gap-1.5 bg-lams-green text-white"><Timer class="size-3.5" /> Closes itself</Badge>
+				<Badge variant="outline" class="gap-1.5"><Smartphone class="size-3.5" /> Works on any phone</Badge>
 			</div>
 			<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">
-				Lecture attendance in seconds, not minutes.
+				Attendance in seconds, not minutes.
 			</h1>
 			<p class="max-w-xl text-muted-foreground">
-				LAMS replaces the paper register: the lecturer shows a QR code, students scan and confirm, and the
-				system records the date, time, GPS distance from the lecture hall and attendance status
-				automatically. Sessions close themselves and percentages add up on their own.
+				LAMS replaces the paper register. Students show a code on their phone, their class representative or
+				lecturer scans it, and the date, time and location are recorded automatically. The lecture closes
+				itself and your percentages add up on their own.
 			</p>
 			<div class="flex flex-wrap gap-2">
-				<Button href="/lecturer" size="lg">Open lecturer dashboard</Button>
-				<Button href="/records" variant="outline" size="lg">Review records</Button>
+				<Button href="/signin" size="lg">Sign in</Button>
 			</div>
 			<p class="text-xs text-muted-foreground">
-				Backend status:
-				{#if convexOk}
-					<span class="font-medium text-emerald-700">connected</span> — live data available.
-				{:else}
-					<span class="font-medium text-red-700">not configured</span> — set PUBLIC_CONVEX_URL in .env.local.
-				{/if}
+				New here? Ask your class representative or lecturer to add you, then set your PIN.
 			</p>
 		</div>
 		<div class="flex justify-center">
@@ -123,7 +113,7 @@
 		</div>
 	</section>
 
-	<section aria-label="How LAMS works" class="grid gap-4 md:grid-cols-3">
+	<section aria-label="How attendance works" class="grid gap-4 md:grid-cols-3">
 		{#each steps as step (step.title)}
 			<Card.Root>
 				<Card.Header>
@@ -139,6 +129,69 @@
 				</Card.Content>
 			</Card.Root>
 		{/each}
+	</section>
+
+	<section class="grid gap-4 md:grid-cols-2">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="flex items-center gap-2">
+					<Timer class="size-5 text-lams-green" /> How your status is decided
+				</Card.Title>
+				<Card.Description>
+					Set automatically from the clock and where you are. You never type any of it. Your lecturer can
+					change the times.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-2 text-sm text-muted-foreground">
+				<div class="flex flex-wrap items-center gap-2">
+					<StatusBadge status="Present" /> inside the hall, within 5 minutes of the start.
+				</div>
+				<div class="flex flex-wrap items-center gap-2">
+					<StatusBadge status="Late" /> inside the hall, between 5 and 10 minutes.
+				</div>
+				<div class="flex flex-wrap items-center gap-2">
+					<StatusBadge status="Absent" /> later than 10 minutes after the start.
+				</div>
+				<div class="flex flex-wrap items-center gap-2">
+					<StatusBadge status="Out_of_Range" /> too far from the lecture hall — sent to your lecturer to review.
+				</div>
+				<div class="flex flex-wrap items-center gap-2">
+					<StatusBadge status="Excused" /> an absence your lecturer approves. This one does not count against you.
+				</div>
+			</Card.Content>
+		</Card.Root>
+
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="flex items-center gap-2">
+					<CalendarDays class="size-5 text-lams-green" /> Timetables and subjects
+				</Card.Title>
+				<Card.Description>
+					Subjects are saved once and reused. Lecturers build the weekly timetable, and everybody sees their
+					own.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-3 text-sm text-muted-foreground">
+				<ul class="flex flex-col gap-1.5">
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span>Subjects sit in a catalogue, so they are only entered once.</span>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span>A class is offered a subject in a given semester, with its own weekly meeting times.</span>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span>Extra lectures arranged outside the normal week appear as make-ups.</span>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span>Records are kept for your whole time at the school, and you can check by semester, month or week.</span>
+					</li>
+				</ul>
+			</Card.Content>
+		</Card.Root>
 	</section>
 
 	<Separator />
@@ -166,63 +219,84 @@
 		{/each}
 	</section>
 
-	<section class="grid gap-4 md:grid-cols-2">
+	<section>
 		<Card.Root>
 			<Card.Header>
 				<Card.Title class="flex items-center gap-2">
-					<MapPin class="size-5 text-lams-green" /> Status rules
+					<ShieldCheck class="size-5 text-lams-green" /> How we know it is really you
 				</Card.Title>
-				<Card.Description>Automatic, based on the time window and GPS distance — never typed by the student.</Card.Description>
+				<Card.Description>
+					Scanning is quick, so these checks run in the background without slowing anyone down.
+				</Card.Description>
 			</Card.Header>
-			<Card.Content class="flex flex-col gap-2 text-sm text-muted-foreground">
-				<div class="flex items-center gap-2"><StatusBadge status="Present" /> inside the radius, within the Present window.</div>
-				<div class="flex items-center gap-2"><StatusBadge status="Late" /> inside the radius, after the Present window (until close).</div>
-				<div class="flex items-center gap-2"><StatusBadge status="Out_of_Range" /> GPS distance exceeds the permitted radius — flagged for review.</div>
-				<div class="flex items-center gap-2"><StatusBadge status="Absent" /> on the roster with no submission when the session closes.</div>
-				<div class="flex items-center gap-2"><StatusBadge status="Excused" /> lecturer override, reported as a separate percentage.</div>
-			</Card.Content>
-		</Card.Root>
-
-		<Card.Root>
-			<Card.Header>
-				<Card.Title>Key principle</Card.Title>
-				<Card.Description>Spec §23 — the student does as little as possible; the system does the rest.</Card.Description>
-			</Card.Header>
-			<Card.Content class="flex flex-col gap-3 text-sm text-muted-foreground">
-				<p class="rounded-lg border border-lams-green/30 bg-secondary p-3 text-secondary-foreground">
-					A student scans the QR and confirms their registration number. Date, time, lecture location,
-					distance, session validation and status are all recorded automatically.
-				</p>
-				<ul class="space-y-1">
-					<li>• Sessions close automatically when their window lapses; late submissions are refused.</li>
-					<li>• Every class-rep registration is tagged with the rep's name for lecturer review.</li>
-					<li>• Reports export to CSV or print straight to PDF.</li>
+			<Card.Content>
+				<ul class="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span
+							>Only a class rep or lecturer can add a student, so nobody can put themselves into a class
+							they do not belong to.</span
+						>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span
+							>Your account works on one phone only. If someone signs in as you on a different phone, it is
+							refused.</span
+						>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span>Your code changes every 30 seconds, so a photo of it stops working almost immediately.</span>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span>Your location is checked against the lecture hall at the moment you are scanned.</span>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span>One scan per student per lecture, so the same code cannot be used twice.</span>
+					</li>
+					<li class="flex gap-2">
+						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
+						<span
+							>You can see every record made in your name, who made it, and report anything that is
+							wrong.</span
+						>
+					</li>
 				</ul>
-				<div class="flex flex-wrap gap-2">
-					<Button variant="outline" size="sm" href="/lecturer">
-						<ClipboardList class="size-4" /> Set up a session
-					</Button>
-					<Button variant="outline" size="sm" href="/records">
-						<Printer class="size-4" /> Review &amp; export records
-					</Button>
-				</div>
 			</Card.Content>
 		</Card.Root>
 	</section>
 
-	<section>
+	<section class="grid gap-4 md:grid-cols-2">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title>Developer setup</Card.Title>
-				<Card.Description>Local run in four steps.</Card.Description>
+				<Card.Title class="flex items-center gap-2">
+					<GraduationCap class="size-5 text-lams-green" /> For lecturers
+				</Card.Title>
 			</Card.Header>
-			<Card.Content>
-				<ol class="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-					<li>Copy <code>.env.example</code> to <code>.env.local</code> and set <code>PUBLIC_CONVEX_URL</code>.</li>
-					<li>Run <code>pnpm install</code>, then <code>pnpm exec convex dev</code> to push the schema and seed the admin password.</li>
-					<li>Open <strong>Lecturer tools</strong>, unlock with <code>admin123</code>, and change the password in Settings.</li>
-					<li>Create a term → course → roster, then start your first session.</li>
-				</ol>
+			<Card.Content class="flex flex-col gap-3">
+				<p class="text-sm text-muted-foreground">
+					Set up subjects, classes and semesters, decide who can enrol, build the weekly timetable, choose
+					class reps, start lectures and change any record afterwards.
+				</p>
+				<Button variant="outline" size="sm" href="/signin">Sign in to continue</Button>
+			</Card.Content>
+		</Card.Root>
+
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="flex items-center gap-2">
+					<BarChart3 class="size-5 text-lams-green" /> Records
+				</Card.Title>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-3">
+				<p class="text-sm text-muted-foreground">
+					See how much of each lecture everyone attended, spot anyone falling behind, and download a full list
+					for your department. Approved absences count separately so they never work against a student.
+				</p>
+				<Button variant="outline" size="sm" href="/signin">Sign in to continue</Button>
 			</Card.Content>
 		</Card.Root>
 	</section>

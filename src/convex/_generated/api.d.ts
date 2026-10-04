@@ -8,15 +8,20 @@
  * @module
  */
 
+import type * as academics from "../academics.js";
 import type * as attendance from "../attendance.js";
 import type * as auth from "../auth.js";
-import type * as courses from "../courses.js";
 import type * as crons from "../crons.js";
+import type * as enrolments from "../enrolments.js";
 import type * as helpers from "../helpers.js";
-import type * as sessions from "../sessions.js";
-import type * as settings from "../settings.js";
-import type * as students from "../students.js";
-import type * as terms from "../terms.js";
+import type * as people from "../people.js";
+import type * as proximity from "../proximity.js";
+import type * as ratelimit from "../ratelimit.js";
+import type * as reports from "../reports.js";
+import type * as reps from "../reps.js";
+import type * as scancode from "../scancode.js";
+import type * as staff from "../staff.js";
+import type * as timetable from "../timetable.js";
 
 import type {
   ApiFromModules,
@@ -25,15 +30,20 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  academics: typeof academics;
   attendance: typeof attendance;
   auth: typeof auth;
-  courses: typeof courses;
   crons: typeof crons;
+  enrolments: typeof enrolments;
   helpers: typeof helpers;
-  sessions: typeof sessions;
-  settings: typeof settings;
-  students: typeof students;
-  terms: typeof terms;
+  people: typeof people;
+  proximity: typeof proximity;
+  ratelimit: typeof ratelimit;
+  reports: typeof reports;
+  reps: typeof reps;
+  scancode: typeof scancode;
+  staff: typeof staff;
+  timetable: typeof timetable;
 }>;
 
 /**

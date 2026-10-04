@@ -1,28 +1,79 @@
 <script lang="ts">
 	import './layout.css';
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { Button } from '$lib/components/ui/button';
+	import {
+		endSession,
+		ensureSession,
+		refreshSession,
+		sessionMe,
+		sessionStatus
+	} from '$lib/lams/session.svelte';
 
 	let { children } = $props();
 
-	const nav = [
-		{ href: '/', label: 'Home' },
-		{ href: '/lecturer', label: 'Lecturer tools' },
-		{ href: '/records', label: 'Records review' }
-	];
-
+	const status = $derived(sessionStatus());
+	const me = $derived(sessionMe());
 	const path = $derived(page.url.pathname);
-	function navClass(href: string): string {
-		return path === href
-			? 'bg-lams-navy text-white'
-			: 'text-foreground hover:bg-muted';
+
+	onMount(() => {
+		void ensureSession();
+	});
+
+	/**
+	 * Navigation is built from the signed-in role rather than fixed, so a
+	 * student never sees staff tools and a lecturer never hunts for them.
+	 * While the session is still being checked the navbar holds a skeleton
+	 * instead of the signed-out links, so a signed-in user never sees the
+	 * nav flicker through "Home + Sign in" on every load.
+	 */
+	const nav = $derived.by(() => {
+		if (!me) return [{ href: '/', label: 'Home' }];
+		if (me.role === 'lecturer') {
+			return [
+				{ href: '/manage', label: 'Set up' },
+				{ href: '/scan', label: 'Take attendance' },
+				{ href: '/records', label: 'Records' },
+				{ href: '/settings', label: 'Settings' }
+			];
+		}
+		if (me.role === 'rep') {
+			return [
+				{ href: '/home', label: 'My account' },
+				{ href: '/code', label: 'My code' },
+				{ href: '/timetable', label: 'Timetable' },
+				{ href: '/scan', label: 'Take attendance' },
+				{ href: '/courses', label: 'My subjects' }
+			];
+		}
+		return [
+			{ href: '/home', label: 'My account' },
+			{ href: '/code', label: 'My code' },
+			{ href: '/timetable', label: 'Timetable' },
+			{ href: '/courses', label: 'My subjects' },
+			{ href: '/attendance', label: 'My attendance' }
+		];
+	});
+
+	const homeHref = $derived(!me ? '/' : me.kind === 'person' ? '/home' : '/manage');
+
+	function isActive(href: string): boolean {
+		return path === href || (href !== '/' && path.startsWith(`${href}/`));
+	}
+
+	function signOut() {
+		endSession();
+		void goto('/signin');
 	}
 </script>
 
 <svelte:head>
-	<title>LAMS — Lecture Attendance Monitoring System</title>
+	<title>LAMS — Lecture Attendance</title>
 	<meta
 		name="description"
-		content="QR + GPS lecture attendance. Students scan and go; the system records time, location and status automatically. Attend • Track • Succeed."
+		content="Lecture attendance made fast and simple. Students show a personal code, the class representative or lecturer scans it, and the time and location are recorded automatically. Attend • Track • Succeed."
 	/>
 	<link rel="icon" href="/lams-mark.png" />
 	<link rel="apple-touch-icon" href="/lams-logo.png" />
@@ -31,7 +82,7 @@
 <div class="flex min-h-screen flex-col bg-background text-foreground">
 	<header class="print-hide sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
 		<div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-			<a href="/" class="flex items-center gap-3" aria-label="LAMS home">
+			<a href={homeHref} class="flex items-center gap-3" aria-label="LAMS home">
 				<img src="/lams-logo.png" alt="LAMS logo" class="size-11 rounded-lg" />
 				<span class="leading-tight">
 					<span class="block text-lg font-extrabold tracking-tight text-lams-navy">LAMS</span>
@@ -40,16 +91,34 @@
 					</span>
 				</span>
 			</a>
-			<nav class="flex items-center gap-1 text-sm" aria-label="Main">
-				{#each nav as item (item.href)}
-					<a
-						href={item.href}
-						class="rounded-md px-3 py-2 font-medium transition-colors {navClass(item.href)}"
-						aria-current={path === item.href ? 'page' : undefined}
-					>
-						{item.label}
-					</a>
-				{/each}
+			<nav class="flex w-full items-center gap-1 overflow-x-auto text-sm sm:w-auto" aria-label="Main">
+				{#if status === 'checking' || status === 'unavailable'}
+					<span class="ml-auto flex items-center gap-2">
+						<span class="h-9 w-36 animate-pulse rounded-md bg-muted" aria-hidden="true"></span>
+						{#if status === 'unavailable'}
+							<Button variant="ghost" size="sm" onclick={() => void refreshSession()}>
+								Retry
+							</Button>
+						{/if}
+					</span>
+				{:else}
+					{#each nav as item (item.href)}
+						<a
+							href={item.href}
+							class="shrink-0 rounded-md px-3 py-2 font-medium transition-colors {isActive(item.href)
+								? 'bg-lams-navy text-white'
+								: 'text-foreground hover:bg-muted'}"
+							aria-current={isActive(item.href) ? 'page' : undefined}
+						>
+							{item.label}
+						</a>
+					{/each}
+					{#if me}
+						<Button variant="ghost" size="sm" class="ml-auto shrink-0" onclick={signOut}>Sign out</Button>
+					{:else}
+						<Button size="sm" class="ml-auto shrink-0" href="/signin">Sign in</Button>
+					{/if}
+				{/if}
 			</nav>
 		</div>
 	</header>
@@ -59,8 +128,7 @@
 			class="mx-auto flex max-w-6xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left"
 		>
 			<p class="font-semibold text-lams-navy">Attend • Track • Succeed</p>
-			<p>Students scan and go — time, location, distance and status are recorded automatically.</p>
+			<p>Students show a code, their class representative scans it, and the rest is recorded for them.</p>
 		</div>
 	</footer>
 </div>
-

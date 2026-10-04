@@ -1,0 +1,299 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { api } from '../../convex/_generated/api.js';
+	import { requireConvexClient } from '$lib/convexClient';
+	import { beginSession, ensureSession, sessionMe, sessionStatus } from '$lib/lams/session.svelte';
+	import { getDeviceId } from '$lib/lams/auth';
+	import * as Card from '$lib/components/ui/card';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { GraduationCap, TriangleAlert, UserRound } from '@lucide/svelte';
+
+	/**
+	 * Two audiences, two doors. Lecturers use a username and password; students
+	 * and class reps use a registration number and a PIN they chose. Keeping
+	 * them apart means a student who guesses a registration number cannot reach
+	 * a lecturer account, and vice versa.
+	 */
+	type Mode = 'choose' | 'staff' | 'person' | 'activate';
+
+	let mode = $state<Mode>('choose');
+	let regNumber = $state('');
+	let studentId = $state('');
+	let pin = $state('');
+	let confirmPin = $state('');
+	let username = $state('');
+	let password = $state('');
+	let busy = $state(false);
+	let error = $state('');
+	let loadError = $state('');
+	let checking = $state(true);
+
+	onMount(async () => {
+		// Reuse the shared session check instead of querying again: if the
+		// visitor is already signed in, send them straight to their console.
+		await ensureSession();
+		if (sessionStatus() === 'authed') {
+			const who = sessionMe();
+			await goto(who && who.role === 'lecturer' ? '/manage' : '/home');
+			return;
+		}
+		checking = false;
+		// A failed check must not sign the visitor out (the token stays), but
+		// say plainly why the form might not work until they retry.
+		if (sessionStatus() === 'unavailable') {
+			loadError = 'Could not reach the server to check your sign-in. Check your connection and try again.';
+		}
+	});
+
+	function resetMessages() {
+		error = '';
+		pin = '';
+		confirmPin = '';
+		password = '';
+	}
+
+	async function staffSignIn(e: SubmitEvent) {
+		e.preventDefault();
+		error = '';
+		busy = true;
+		try {
+			const client = requireConvexClient();
+			// Idempotent: creates the default admin account on first ever run.
+			await client.mutation(api.staff.ensureSeed, {});
+			const res = await client.mutation(api.staff.login, {
+				username: username.trim(),
+				password
+			});
+			// Record the token in the shared session so the navbar is already
+			// signed in when the target page renders.
+			await beginSession(res.token);
+			await goto('/manage');
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not sign you in.';
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function personSignIn(e: SubmitEvent) {
+		e.preventDefault();
+		error = '';
+		if (!regNumber.trim()) {
+			error = 'Enter your registration number.';
+			return;
+		}
+		if (!/^\d{4,8}$/.test(pin.trim())) {
+			error = 'Your PIN must be 4 to 8 digits.';
+			return;
+		}
+		busy = true;
+		try {
+			const client = requireConvexClient();
+			const res = await client.mutation(api.people.login, {
+				regNumber: regNumber.trim(),
+				pin: pin.trim(),
+				deviceId: getDeviceId()
+			});
+			// Record the token in the shared session so the navbar is already
+			// signed in when the target page renders.
+			await beginSession(res.token);
+			await goto('/home');
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not sign you in.';
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function activate(e: SubmitEvent) {
+		e.preventDefault();
+		error = '';
+		if (pin !== confirmPin) {
+			error = 'The two PINs do not match.';
+			return;
+		}
+		busy = true;
+		try {
+			const client = requireConvexClient();
+			await client.mutation(api.people.activate, {
+				regNumber: regNumber.trim(),
+				studentId: studentId.trim(),
+				pin: pin.trim()
+			});
+			// Straight to sign-in so the new PIN is proven to work.
+			mode = 'person';
+			const createdPin = pin.trim();
+			pin = '';
+			confirmPin = '';
+			const res = await client.mutation(api.people.login, {
+				regNumber: regNumber.trim(),
+				pin: createdPin,
+				deviceId: getDeviceId()
+			});
+			// Record the token in the shared session so the navbar is already
+			// signed in when the target page renders.
+			await beginSession(res.token);
+			await goto('/home');
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Could not set up your account.';
+		} finally {
+			busy = false;
+		}
+	}
+</script>
+
+<div class="mx-auto flex max-w-md flex-col gap-4">
+	<div class="flex flex-col items-center gap-2 pt-4 text-center">
+		<img src="/lams-logo.png" alt="LAMS" class="size-16 rounded-xl" />
+		<h1 class="text-2xl font-bold text-lams-navy">
+			{mode === 'staff' ? 'Lecturer sign in' : mode === 'activate' ? 'Set up your account' : 'Sign in to LAMS'}
+		</h1>
+		<p class="text-sm text-muted-foreground">
+			{#if mode === 'staff'}
+				For lecturers. Use the username and password you were given.
+			{:else if mode === 'activate'}
+				Your class rep or lecturer has already added you. Confirm your details and choose a PIN.
+			{:else if mode === 'person'}
+				Use your registration number and PIN.
+			{:else}
+				Choose how you are signing in.
+			{/if}
+		</p>
+	</div>
+
+	{#if loadError}
+		<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
+			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+			<span>{loadError}</span>
+		</p>
+	{/if}
+
+	{#if checking}
+		<p class="text-center text-sm text-muted-foreground">Checking…</p>
+	{:else if mode === 'choose'}
+		<div class="flex flex-col gap-3">
+			<Card.Root class="transition-shadow hover:shadow-md">
+				<Card.Content class="flex items-center gap-4 pt-6">
+					<span class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-lams-navy text-white">
+						<GraduationCap class="size-6" aria-hidden="true" />
+					</span>
+					<div class="flex-1">
+						<p class="font-semibold">I am a lecturer</p>
+						<p class="text-sm text-muted-foreground">Set up classes, subjects and timetables.</p>
+					</div>
+					<Button onclick={() => { mode = 'staff'; resetMessages(); }}>Continue</Button>
+				</Card.Content>
+			</Card.Root>
+
+			<Card.Root class="transition-shadow hover:shadow-md">
+				<Card.Content class="flex items-center gap-4 pt-6">
+					<span class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-lams-green text-white">
+						<UserRound class="size-6" aria-hidden="true" />
+					</span>
+					<div class="flex-1">
+						<p class="font-semibold">I am a student or class rep</p>
+						<p class="text-sm text-muted-foreground">Show your code and check your attendance.</p>
+					</div>
+					<Button variant="secondary" onclick={() => { mode = 'person'; resetMessages(); }}>
+						Continue
+					</Button>
+				</Card.Content>
+			</Card.Root>
+		</div>
+	{:else}
+		<Card.Root>
+			<Card.Content class="pt-6">
+				{#if mode === 'staff'}
+					<form class="flex flex-col gap-4" onsubmit={staffSignIn}>
+						<div class="flex flex-col gap-1.5">
+							<Label for="un">Username</Label>
+							<Input id="un" bind:value={username} autocomplete="username" required />
+						</div>
+						<div class="flex flex-col gap-1.5">
+							<Label for="pw">Password</Label>
+							<Input
+								id="pw"
+								type="password"
+								bind:value={password}
+								autocomplete="current-password"
+								required
+							/>
+						</div>
+						{#if error}
+							<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
+								<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+								<span>{error}</span>
+							</p>
+						{/if}
+						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
+						<p class="text-xs text-muted-foreground">
+							First time here? Sign in with the username and password you were given, then change the
+							password from your settings.
+						</p>
+					</form>
+				{:else if mode === 'person'}
+					<form class="flex flex-col gap-4" onsubmit={personSignIn}>
+						<div class="flex flex-col gap-1.5">
+							<Label for="reg">Registration number</Label>
+							<Input id="reg" bind:value={regNumber} placeholder="e.g. BIT/2024/0123" required />
+						</div>
+						<div class="flex flex-col gap-1.5">
+							<Label for="pin">PIN</Label>
+							<Input id="pin" type="password" inputmode="numeric" bind:value={pin} placeholder="4 to 8 digits" required />
+						</div>
+						{#if error}
+							<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
+								<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+								<span>{error}</span>
+							</p>
+						{/if}
+						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
+					</form>
+				{:else}
+					<form class="flex flex-col gap-4" onsubmit={activate}>
+						<div class="flex flex-col gap-1.5">
+							<Label for="areg">Registration number</Label>
+							<Input id="areg" bind:value={regNumber} placeholder="e.g. BIT/2024/0123" required />
+						</div>
+						<div class="flex flex-col gap-1.5">
+							<Label for="sid">Student ID</Label>
+							<Input id="sid" bind:value={studentId} placeholder="e.g. 2024-0123" required />
+						</div>
+						<div class="flex flex-col gap-1.5">
+							<Label for="apin">Choose a PIN</Label>
+							<Input id="apin" type="password" inputmode="numeric" bind:value={pin} placeholder="4 to 8 digits" required />
+							<p class="text-xs text-muted-foreground">
+								Use a PIN you will remember. If you forget it, your class rep or lecturer can reset it.
+							</p>
+						</div>
+						<div class="flex flex-col gap-1.5">
+							<Label for="cpin">Type it again</Label>
+							<Input id="cpin" type="password" inputmode="numeric" bind:value={confirmPin} required />
+						</div>
+						{#if error}
+							<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
+								<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+								<span>{error}</span>
+							</p>
+						{/if}
+						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Setting up…' : 'Set up and sign in'}</Button>
+					</form>
+				{/if}
+
+				<div class="mt-4 flex flex-wrap justify-center gap-3 border-t border-border pt-4 text-center">
+					{#if mode === 'person'}
+						<button type="button" class="text-sm underline" onclick={() => { mode = 'activate'; resetMessages(); }}>
+							First time here? Set up your account
+						</button>
+					{/if}
+					<button type="button" class="text-sm underline" onclick={() => { mode = 'choose'; resetMessages(); }}>
+						Back
+					</button>
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{/if}
+</div>

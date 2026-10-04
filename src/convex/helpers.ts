@@ -35,15 +35,29 @@ export async function sha256Hex(text: string): Promise<string> {
 		.join('');
 }
 
-export type AutoStatus = 'Present' | 'Late' | 'Out_of_Range';
+export type AutoStatus = 'Present' | 'Late' | 'Out_of_Range' | 'Absent';
 
+/**
+ * Turns elapsed time plus distance into a status.
+ *
+ * Three time tiers, both thresholds adjustable by the lecturer:
+ *   within `onTimeSec`   -> Present
+ *   within `lateUntilSec`-> Late
+ *   after that           -> Absent
+ *
+ * Distance overrides the time tier: someone outside the permitted radius is
+ * flagged `Out_of_Range` however early they arrived, because that is the
+ * condition a lecturer needs to look into rather than simply accept.
+ */
 export function computeAutoStatus(
 	elapsedSec: number,
-	presentSec: number,
+	onTimeSec: number,
+	lateUntilSec: number,
 	distanceM: number | null,
 	radiusM: number
 ): AutoStatus {
 	if (distanceM !== null && distanceM > radiusM) return 'Out_of_Range';
-	if (elapsedSec <= presentSec) return 'Present';
-	return 'Late';
+	if (elapsedSec <= onTimeSec) return 'Present';
+	if (elapsedSec <= lateUntilSec) return 'Late';
+	return 'Absent';
 }
