@@ -200,8 +200,9 @@ export const activate = mutation({
 			salt,
 			scheme: SCHEME,
 			iterations: ITERATIONS,
-			// The rotating attendance code is derived from this secret, so it is
-			// minted here and kept for the life of the account.
+			// Legacy field from the retired "student shows a code" flow. Nothing
+			// derives a code from it any more, but the column stays until the
+			// deployment's documents are migrated away — see SECURITY.md.
 			qrSecret: person.qrSecret ?? randomHex(20),
 			status: 'active',
 			activatedAt: Date.now()

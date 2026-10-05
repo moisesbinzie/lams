@@ -241,11 +241,18 @@ Further honest limits:
 
 ## Legacy path
 
-The earlier design — student shows a personal rotating code, the rep scans it —
-is still present in `src/convex/scancode.ts` and `src/lib/lams/totp.ts` and still
-type-checks, because past `attendance` rows with `method: 'scan'` and a
-per-student `qrSecret` are in the ledger and `confirmMyLocation` is still needed to
-read them. The `/code` route and the nav entry that pointed at it have been
-removed, so students are no longer led into it. Deleting the remaining server-side
-functions and the `people.qrSecret` field is a clean-up that should wait until the
-deployment has no live `method: 'scan'` rows worth keeping.
+The earlier design — student shows a personal rotating code, the rep scans it — has
+been removed. `attendance.recordScan`, `attendance.myScanCode`,
+`attendance.confirmMyLocation` and `attendance.myLatestScan` are gone, along with
+`src/convex/scancode.ts`, `src/lib/lams/totp.ts` and the `qr-scanner.svelte` camera
+component. Nothing derived a code from a student's own secret any more.
+
+The data those functions wrote is deliberately left in place: `attendance` rows with
+`method: 'scan'`, the optional `people.qrSecret` field, and `verification:
+'scan_only'`. Existing records must keep validating, and `method` still appears in
+reports and CSV exports, so both literals stay in the schema. Dropping them is a
+schema migration for whoever owns the deployment, not a code clean-up — clear the
+live `method: 'scan'` rows first, then narrow `schema.ts` and `types.ts`.
+
+The `/code` route and the nav entry that pointed at it were removed earlier, so
+students were never led into the old flow.

@@ -101,7 +101,7 @@ and to record honestly what it does **not** do. Every claim points at the code.
 5. Student opens `/courses` → joins the subject. `/timetable` shows it once a meeting time is set.
 6. Console → **Timetable** → add a weekly slot (and a make-up lecture).
 7. Console → **Lectures** → "Use my location" → set on-time 5 / late-until 10 → **Start lecture**.
-8. Open `/scan` → scan the student's code → name and time appear. Scan again → refused as a duplicate. Try **+5 min** and **Close lecture** (absent rows appear for no-shows).
+8. Open `/scan` → confirm the station QR is on screen and the countdown is ticking. Point a second phone at it → it opens the lecture and records attendance with the distance shown. Scan again → refused as a duplicate. Try **+5 min** and **Close lecture** (absent rows appear for no-shows).
 9. **Students** → **Make rep** for that student → they open `/scan` → **Start a lecture now** lists their class's subjects; they can undo their own scan mid-lecture but not change a status.
 10. `/records` → subject report with percentages; **History** on a student shows per-subject totals and individual records; override one and confirm the audit stamp; download list / Save as PDF.
 11. Reload any page while signed in → the navbar holds a skeleton while the session is checked and never flashes "Sign in" for a signed-in user.
@@ -112,8 +112,7 @@ and to record honestly what it does **not** do. Every claim points at the code.
 | --- | --- |
 | `tests/convex-helpers.test.ts` | **`judgeScanDevice`**: the bound phone passes; an unbound account passes; **a token on another phone is refused (`mismatch`)**; **a session outliving a device rebind is refused (`moved`)**; a dead session short-circuits; an empty device id is refused; **no prefix, trailing-space or case-fold near-miss is accepted** |
 | `src/lib/lams/station.test.ts` | **client/server agreement** on the station code (500 slots); determinism; no repeats in 200 slots; **no slot-to-slot counter structure** (what stops a code being guessed from a neighbour); six-digit width; **wrong-secret rejection** (another lecture's code); **stale-photo rejection after the roll**; **bounded replay window** (a photographed code dies, but not instantly); ±1 slot clock skew; malformed-code rejection; countdown boundaries; **pending-scan helpers degrade safely with no storage (SSR)** and refuse a stash from another lecture |
-| `src/lib/lams/totp.test.ts` | **client/server agreement** on the legacy rotating code; wire format; 30s rollover; wrong-secret rejection; stale screenshot rejection; ±1 slot clock drift; foreign-payload rejection (incl. session URLs) |
-| `tests/convex-proximity.test.ts` | **accuracy-aware proximity**: a fix coarser than the radius returns `inside: null` instead of guessing; inside/outside boundaries; widened radius; missing fix; contradiction wording incl. the modest-overshoot tolerance |
+| `tests/convex-proximity.test.ts` | **accuracy-aware proximity**: a fix coarser than the radius returns `inside: null` instead of guessing; inside/outside boundaries; widened radius; missing fix |
 | `tests/convex-helpers.test.ts` | `computeAutoStatus` across all three time tiers, **adjusted and tightened thresholds**, out-of-range precedence (including after the late window), missing-GPS handling; `normalizeReg`/`Id`; haversine; SHA-256 |
 | `src/lib/lams/session-state.test.ts` | **session policy**: no-token → anonymous; resolved session → authed; null answer → sign out; **a failed query must not clear the token** (the network-blip sign-out regression) |
 | `src/lib/lams/csv.test.ts` | roster CSV parsing, header, separators, malformed rows, 1000-row cap, quoting |

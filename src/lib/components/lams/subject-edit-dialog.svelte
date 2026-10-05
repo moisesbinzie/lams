@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import type { StaffRow, Subject } from '$lib/lams/types';
+	import { reportError } from '$lib/lams/notify.svelte';
 
 	/** Edit a catalogue subject: title, weekly hours and the lecturer of record. */
 	let {
@@ -25,14 +26,12 @@
 	let lecturerId = $state('');
 	let staff = $state<StaffRow[]>([]);
 	let busy = $state(false);
-	let error = $state('');
 
 	$effect(() => {
 		if (open && subject) {
 			title = subject.title;
 			hours = subject.hoursPerWeek ? String(subject.hoursPerWeek) : '';
 			lecturerId = subject.lecturerId ?? '';
-			error = '';
 			void loadStaff();
 		}
 	});
@@ -51,7 +50,6 @@
 		e.preventDefault();
 		if (!subject) return;
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.updateSubject, {
@@ -64,7 +62,7 @@
 			open = false;
 			await onsaved?.();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not save the subject.';
+			reportError(err, 'Could not save the subject.');
 		} finally {
 			busy = false;
 		}
@@ -97,9 +95,6 @@
 					</select>
 				</div>
 			</div>
-			{#if error}
-				<p class="text-sm text-red-700" role="alert">{error}</p>
-			{/if}
 			<div class="flex justify-end gap-2">
 				<Button type="button" variant="outline" onclick={() => (open = false)}>Cancel</Button>
 				<Button type="submit" disabled={busy}>Save changes</Button>

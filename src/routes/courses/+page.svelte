@@ -6,8 +6,8 @@
 	import { getToken } from '$lib/lams/auth';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
-	import { TriangleAlert } from '@lucide/svelte';
 	import type { MyEnrolment } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	interface OpenSubject {
 		_id: string;
@@ -25,8 +25,6 @@
 	let open = $state<OpenSubject[]>([]);
 	let loading = $state(true);
 	let busy = $state('');
-	let error = $state('');
-	let message = $state('');
 
 	onMount(() => {
 		token = getToken();
@@ -44,10 +42,9 @@
 				client.query(api.enrolments.listMine, { token }) as Promise<MyEnrolment[]>,
 				client.query(api.enrolments.listOpenForStudent, { token }) as Promise<OpenSubject[]>
 			]);
-			error = '';
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
-			error = err instanceof Error ? err.message : 'Could not load your subjects.';
+			reportError(err, 'Could not load your subjects.');
 		} finally {
 			loading = false;
 		}
@@ -55,15 +52,13 @@
 
 	async function join(offeringId: string) {
 		busy = offeringId;
-		error = '';
-		message = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.enrolments.enrolSelf, { token, offeringId: offeringId as never });
-			message = 'You have joined that subject.';
+			reportSuccess('You have joined that subject.');
 			await load();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not join that subject.';
+			reportError(err, 'Could not join that subject.');
 		} finally {
 			busy = '';
 		}
@@ -72,15 +67,13 @@
 	async function leave(offeringId: string) {
 		if (!confirm('Leave this subject? You can join again later while enrolment is open.')) return;
 		busy = offeringId;
-		error = '';
-		message = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.enrolments.dropSelf, { token, offeringId: offeringId as never });
-			message = 'You have left that subject.';
+			reportSuccess('You have left that subject.');
 			await load();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not leave that subject.';
+			reportError(err, 'Could not leave that subject.');
 		} finally {
 			busy = '';
 		}
@@ -94,21 +87,6 @@
 			Join the subjects you are taking. Your class rep or lecturer can also add you.
 		</p>
 	</div>
-
-	{#if error}
-		<p
-			class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800"
-			role="alert"
-		>
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if message}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">
-			{message}
-		</p>
-	{/if}
 
 	{#if loading}
 		<Card.Root aria-busy="true">

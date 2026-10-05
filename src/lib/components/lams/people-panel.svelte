@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { api } from '../../../convex/_generated/api.js';
 	import { requireConvexClient } from '$lib/convexClient';
@@ -12,10 +13,11 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Table from '$lib/components/ui/table';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { TriangleAlert, UserRoundCheck } from '@lucide/svelte';
+	import { UserRoundCheck } from '@lucide/svelte';
 	import ClassPicker from './class-picker.svelte';
 	import PersonEditDialog from './person-edit-dialog.svelte';
 	import type { ClassRow, PersonRow } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = getToken();
 	let classes = $state<ClassRow[]>([]);
@@ -25,8 +27,6 @@
 	let search = $state('');
 	let showAdd = $state(false);
 	let loading = $state(true);
-	let error = $state('');
-	let notice = $state('');
 	let busy = $state(false);
 
 	// Add-student form.
@@ -61,7 +61,7 @@
 			classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
 			if (!classId && classes.length > 0) classId = classes[0]._id;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load classes.';
+			reportError(err, 'Could not load classes.');
 		} finally {
 			loading = false;
 		}
@@ -81,7 +81,7 @@
 			people = rows;
 			repIds = new Set(reps.map((r) => r.personId));
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load students.';
+			reportError(err, 'Could not load students.');
 		}
 	}
 
@@ -92,7 +92,6 @@
 	async function addPerson(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.people.createPerson, {
@@ -107,9 +106,9 @@
 			newReg = '';
 			newSid = '';
 			await loadPeople();
-			notice = 'Student added. They can set their PIN the first time they sign in.';
+			reportSuccess('Student added. They can set their PIN the first time they sign in.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not add the student.';
+			reportError(err, 'Could not add the student.');
 		} finally {
 			busy = false;
 		}
@@ -118,11 +117,10 @@
 	async function addMany() {
 		const rows = parseRosterCsv(pasteText);
 		if (rows.length === 0) {
-			error = 'No usable lines found. Use: Full Name, Registration Number, Student ID.';
+			toast.error('No usable lines found. Use: Full Name, Registration Number, Student ID.');
 			return;
 		}
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			const res = await client.mutation(api.people.importPeople, {
@@ -132,9 +130,9 @@
 			});
 			pasteText = '';
 			await loadPeople();
-			notice = `Added ${res.added} student(s). ${res.skipped} were skipped as duplicates or incomplete.`;
+			reportSuccess(`Added ${res.added} student(s). ${res.skipped} were skipped as duplicates or incomplete.`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not add those students.';
+			reportError(err, 'Could not add those students.');
 		} finally {
 			busy = false;
 		}
@@ -142,7 +140,6 @@
 
 	async function toggleRep(p: PersonRow) {
 		const isRep = repIds.has(p._id);
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.reps.setRep, {
@@ -152,11 +149,13 @@
 				isRep: !isRep
 			});
 			await loadPeople();
-			notice = isRep
-				? `${p.fullName} is no longer a class rep.`
-				: `${p.fullName} can now take attendance for everything this class takes.`;
+			reportSuccess(
+				isRep
+					? `${p.fullName} is no longer a class rep.`
+					: `${p.fullName} can now take attendance for everything this class takes.`
+			);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change that.';
+			reportError(err, 'Could not change that.');
 		}
 	}
 
@@ -166,9 +165,9 @@
 			const client = requireConvexClient();
 			await client.mutation(api.people.resetPin, { token, personId: id as never });
 			await loadPeople();
-			notice = 'PIN reset.';
+			reportSuccess('PIN reset.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not reset the PIN.';
+			reportError(err, 'Could not reset the PIN.');
 		}
 	}
 
@@ -178,15 +177,14 @@
 			const client = requireConvexClient();
 			await client.mutation(api.people.clearDevice, { token, personId: id as never });
 			await loadPeople();
-			notice = 'They can now sign in on a different phone.';
+			reportSuccess('They can now sign in on a different phone.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not move the account.';
+			reportError(err, 'Could not move the account.');
 		}
 	}
 
 	async function setSuspended(suspend: boolean) {
 		if (!suspendTarget) return;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.people.setBlocked, {
@@ -195,11 +193,13 @@
 				blocked: suspend
 			});
 			await loadPeople();
-			notice = suspend
-				? `${suspendTarget.fullName} can no longer sign in.`
-				: `${suspendTarget.fullName} can sign in again.`;
+			reportSuccess(
+				suspend
+					? `${suspendTarget.fullName} can no longer sign in.`
+					: `${suspendTarget.fullName} can sign in again.`
+			);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change that.';
+			reportError(err, 'Could not change that.');
 		} finally {
 			suspendOpen = false;
 		}
@@ -207,16 +207,6 @@
 </script>
 
 <div class="flex flex-col gap-4">
-	{#if error}
-		<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
-	{/if}
-
 	{#if loading}
 		<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 	{:else}

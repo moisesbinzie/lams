@@ -10,8 +10,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { TriangleAlert } from '@lucide/svelte';
 	import type { ClassRow, LectureSession, Offering } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import { toast } from 'svelte-sonner';
 
 	let token = getToken();
 	let classes = $state<ClassRow[]>([]);
@@ -19,8 +20,6 @@
 	let sessions = $state<LectureSession[]>([]);
 	let classId = $state('');
 	let offeringId = $state('');
-	let error = $state('');
-	let notice = $state('');
 	let busy = $state(false);
 	let now = $state(Date.now());
 
@@ -56,7 +55,7 @@
 				return;
 			}
 			if (me.role !== 'lecturer') {
-				error = 'Only lecturers start lectures here. Class reps use “Take attendance”.';
+				toast.error('Only lecturers start lectures here. Class reps use “Take attendance”.');
 				return;
 			}
 			classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
@@ -65,7 +64,7 @@
 			await loadSessions();
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
-			error = err instanceof Error ? err.message : 'Could not load.';
+			reportError(err, 'Could not load.');
 		}
 	}
 
@@ -81,7 +80,7 @@
 				offeringId = offerings[0]?._id ?? '';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load subjects.';
+			reportError(err, 'Could not load subjects.');
 		}
 	}
 
@@ -99,9 +98,12 @@
 			const pos = await getCurrentPosition();
 			lat = String(pos.lat);
 			lng = String(pos.lng);
-			notice = `Lecture location captured to within ${Math.round(pos.accuracyM ?? 0)} metres.`;
+			reportSuccess(
+							`Lecture location captured to within ${Math.round(pos.accuracyM ?? 0)} metres.`,
+							6000
+						);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not get your location.';
+			reportError(err, 'Could not get your location.');
 		}
 	}
 
@@ -110,16 +112,15 @@
 			const pos = await getCurrentPosition();
 			stationLat = pos.lat.toFixed(6);
 			stationLng = pos.lng.toFixed(6);
-			notice = 'Station pinned to where you are standing.';
+			reportSuccess('Station pinned to where you are standing.', 6000);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not get your location.';
+			reportError(err, 'Could not get your location.');
 		}
 	}
 
 	async function start(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			const res = await client.mutation(api.attendance.startSession, {
@@ -138,13 +139,17 @@
 				onTimeSec: Math.round(Number(onTimeMin) * 60),
 				lateUntilSec: Math.round(Number(lateUntilMin) * 60)
 			});
-			notice =
+			// Both variants are a receipt plus a next step ("now go and scan students
+			// in"), so they are held long enough to be read and acted on.
+			reportSuccess(
 				res.closedOthers > 0
 					? 'Lecture started. An earlier open lecture was closed automatically.'
-					: 'Lecture started. Open “Take attendance” to start scanning students in.';
+					: 'Lecture started. Open “Take attendance” to start scanning students in.',
+				7000
+			);
 			await loadSessions();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not start the lecture.';
+			reportError(err, 'Could not start the lecture.');
 		} finally {
 			busy = false;
 		}
@@ -156,16 +161,6 @@
 </script>
 
 <div class="flex flex-col gap-4">
-	{#if error}
-		<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
-	{/if}
-
 	<Card.Root>
 		<Card.Header>
 			<Card.Title>Start a lecture</Card.Title>

@@ -8,6 +8,7 @@
 	import StatusBadge from '$lib/lams/status-badge.svelte';
 	import { Flag, TriangleAlert } from '@lucide/svelte';
 	import type { AttendanceStatus } from '$lib/lams/types';
+	import { reportError } from '$lib/lams/notify.svelte';
 
 	interface SubjectBucket {
 		subjectId: string;
@@ -62,7 +63,6 @@
 	let buckets = $state<SubjectBucket[]>([]);
 	let records = $state<RecordRow[]>([]);
 	let loading = $state(false);
-	let error = $state('');
 	let busyId = $state('');
 	let draft = $state<Record<string, AttendanceStatus | undefined>>({});
 
@@ -73,7 +73,6 @@
 	async function load() {
 		if (!personId) return;
 		loading = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			const [report, recs] = (await Promise.all([
@@ -84,7 +83,7 @@
 			records = recs;
 			draft = {};
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load the records.';
+			reportError(err, 'Could not load the records.');
 		} finally {
 			loading = false;
 		}
@@ -92,7 +91,6 @@
 
 	async function override(r: RecordRow, status: AttendanceStatus) {
 		busyId = r._id;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.attendance.override, {
@@ -103,7 +101,7 @@
 			await load();
 			await onchanged?.();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change the record.';
+			reportError(err, 'Could not change the record.');
 		} finally {
 			busyId = '';
 		}
@@ -112,14 +110,13 @@
 	async function removeRecord(r: RecordRow) {
 		if (!confirm(`Delete the ${r.subjectCode} record for ${fullName}? This cannot be undone.`)) return;
 		busyId = r._id;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.attendance.removeRecord, { token, attendanceId: r._id as never });
 			await load();
 			await onchanged?.();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not remove the record.';
+			reportError(err, 'Could not remove the record.');
 		} finally {
 			busyId = '';
 		}
@@ -134,10 +131,6 @@
 				Totals across every subject, then each individual record. Override only what you have checked.
 			</Dialog.Description>
 		</Dialog.Header>
-
-		{#if error}
-			<p class="text-sm text-red-700" role="alert">{error}</p>
-		{/if}
 
 		{#if loading}
 			<div class="h-32 animate-pulse rounded-md bg-muted"></div>

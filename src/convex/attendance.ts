@@ -19,9 +19,8 @@ import {
 	randomHex,
 	toleranceFor
 } from './helpers';
-import { describeContradiction, judgeProximity, STUDENT_ACCURACY_TOLERANCE } from './proximity';
+import { judgeProximity, STUDENT_ACCURACY_TOLERANCE } from './proximity';
 import { isBlocked, noteFailure, noteSuccess, STATION_LIMITS } from './ratelimit';
-import { parseScanCode, verifyScanCode } from './scancode';
 import { verifyStationCode } from './station';
 
 const DEFAULT_ON_TIME_SEC = 300;
@@ -200,131 +199,6 @@ export const getSession = query({
 		};
 	}
 });
-
-/** Records one student's attendance by scanning their code. */
-export const recordScan = mutation({
-	args: {
-		token: v.string(),
-		sessionId: v.id('sessions'),
-		qr: v.string(),
-		latitude: v.optional(v.number()),
-		longitude: v.optional(v.number()),
-		accuracyM: v.optional(v.number())
-	},
-	handler: async (ctx, args) => {
-		const actor = await requireRecorder(ctx, args.token);
-		const session = await ctx.db.get('sessions', args.sessionId);
-		if (!session) throw new Error('This lecture could not be found.');
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
-			throw new Error('You are not a class rep for this class.');
-		}
-		if (session.status !== 'open') throw new Error('This lecture is closed.');
-		if (Date.now() > session.closesAt) throw new Error('The attendance window for this lecture has closed.');
-
-		// The payload carries the registration number plus a code derived from
-		// the student's own secret. Reject a malformed payload before any lookup.
-		const parsed = parseScanCode(args.qr);
-		if (!parsed) throw new Error('That is not a student attendance code.');
-
-		const person = await ctx.db
-			.query('people')
-			.withIndex('by_reg', (q) => q.eq('regNorm', normalizeReg(parsed.regNumber)))
-			.unique();
-		if (!person) throw new Error('That student is not registered.');
-		if (!person.qrSecret) {
-			throw new Error(
-				`${person.fullName} has not finished setting up their account yet, so they have no code to show.`
-			);
-		}
-		// Rejects a forged code (no secret) and a stale screenshot (old slot).
-		if (!verifyScanCode(parsed.code, person.qrSecret)) {
-			throw new Error('That code has expired or is not valid. Ask the student to show a fresh one.');
-		}
-
-		const enrolments = await ctx.db
-			.query('enrolments')
-			.withIndex('by_person', (q) => q.eq('personId', person._id))
-			.take(300);
-		const enrolled = enrolments.find(
-			(e: any) => e.offeringId === session.offeringId && e.status === 'active'
-		);
-		if (!enrolled) {
-			throw new Error(`${person.fullName} is not enrolled in this subject. Ask your lecturer to add them.`);
-		}
-		if (person.status === 'blocked') throw new Error('That student account is suspended.');
-
-		const dup = await ctx.db
-			.query('attendance')
-			.withIndex('by_session_and_reg', (q) =>
-				q.eq('sessionId', args.sessionId).eq('regNorm', person.regNorm)
-			)
-			.unique();
-		if (dup) {
-			throw new Error(
-				`${person.fullName} is already recorded as ${String(dup.status).replace('_', ' ')} for this lecture.`
-			);
-		}
-
-		// A coarse reading must not produce a confident verdict, so `weak` keeps the
-				// record but stops it being marked Out of Range on a ±200 m fix.
-				const proximity = judgeProximity(
-					session.lectureLat,
-					session.lectureLng,
-					args.latitude,
-					args.longitude,
-					args.accuracyM,
-					session.radiusM
-				);
-				const distanceM = proximity.distanceM ?? undefined;
-				const elapsedSec = Math.floor((Date.now() - session.startedAt) / 1000);
-				const status = computeAutoStatus(
-					elapsedSec,
-					session.onTimeSec,
-					session.lateUntilSec,
-					distanceM ?? null,
-					session.radiusM
-				);
-
-				const anomaly = await scanAnomalyNote(ctx, session._id, actor.kind === 'person' ? actor.id : undefined);
-				const flagReason =
-					anomaly ??
-					(proximity.weak && distanceM !== undefined
-						? `Rep’s phone location was imprecise (±${Math.round(args.accuracyM ?? 0)} m) for a ${session.radiusM} m radius — presence not verified.`
-						: undefined);
-
-				await ctx.db.insert('attendance', {
-					sessionId: session._id,
-					personId: person._id,
-					offeringId: session.offeringId,
-					subjectId: session.subjectId,
-					semesterId: session.semesterId,
-					fullName: person.fullName,
-					regNumber: person.regNumber,
-					regNorm: person.regNorm,
-					method: 'scan',
-					...recorderFields(actor),
-					...(args.latitude !== undefined ? { latitude: args.latitude } : {}),
-					...(args.longitude !== undefined ? { longitude: args.longitude } : {}),
-					...(args.accuracyM !== undefined ? { accuracyM: args.accuracyM } : {}),
-					...(distanceM !== undefined ? { distanceM } : {}),
-					verification: proximity.weak ? 'weak' : 'scan_only',
-					...(flagReason ? { flagged: true, flagReason } : {}),
-					status,
-					submittedAt: Date.now()
-				});
-				// Say plainly why a late arrival was refused attendance, otherwise the
-				// student just sees "Absent" with no explanation on their phone.
-				if (status === 'Absent') {
-					return {
-						ok: true,
-						fullName: person.fullName,
-						status,
-						lateByMinutes: Math.max(1, Math.ceil((elapsedSec - session.lateUntilSec) / 60))
-					};
-				}
-				return { ok: true, fullName: person.fullName, status };
-			}
-		});
 
 /**
  * What the station screen needs to render itself: the rotating code's secret
@@ -548,9 +422,8 @@ export const submitStationScan = mutation({
 			scannerDeviceId: args.deviceId,
 			// The generic position fields are this student's own — there is no
 			// rep proxy in this flow — so every existing report and listing keeps
-			// working without special-casing. The `student*` fields say the same
-			// thing in words, and their presence also stops the legacy
-			// `confirmMyLocation` pass from picking this record up a second time.
+			// working without special-casing. The `student*` fields are the
+			// student's own position and are what the record is judged on.
 			...(args.latitude !== undefined ? { latitude: args.latitude } : {}),
 			...(args.longitude !== undefined ? { longitude: args.longitude } : {}),
 			...(args.accuracyM !== undefined ? { accuracyM: args.accuracyM } : {}),
@@ -955,106 +828,6 @@ export const myAttendance = query({
 	}
 });
 
-/**
- * The student's own phone reports where it is, once it notices it has been
- * scanned. This is what closes the biggest gap: until now only the rep's device
- * was located, so a record proved the *rep* was in the hall and said nothing
- * about the student.
- *
- * A record whose student location lands well outside the radius is flagged for
- * lecturer review rather than being rewritten — the student may genuinely have
- * stepped out, and the rep may be wrong. That judgement belongs to a person.
- */
-export const confirmMyLocation = mutation({
-	args: {
-		token: v.string(),
-		latitude: v.number(),
-		longitude: v.number(),
-		accuracyM: v.optional(v.number())
-	},
-	handler: async (ctx, args) => {
-		const person = await requirePerson(ctx, args.token);
-		if (!person.qrSecret) return { ok: false, reason: 'not_ready' };
-
-		// Only recent, still-unconfirmed scans are eligible.
-		const cutoff = Date.now() - 10 * 60 * 1000;
-		const records = await ctx.db
-			.query('attendance')
-			.withIndex('by_person', (q) => q.eq('personId', person._id))
-			.take(200);
-		const pending = records
-			.filter((r: any) => r.studentLat === undefined && r.submittedAt >= cutoff && r.method !== 'absent')
-			.sort((a: any, b: any) => b.submittedAt - a.submittedAt);
-
-		if (pending.length === 0) {
-			return { ok: false, reason: 'nothing_to_confirm' };
-		}
-
-		const record = pending[0];
-		const session = await ctx.db.get('sessions', record.sessionId);
-		if (!session) return { ok: false, reason: 'no_session' };
-
-		const proximity = judgeProximity(
-			session.lectureLat,
-			session.lectureLng,
-			args.latitude,
-			args.longitude,
-			args.accuracyM,
-			session.radiusM
-		);
-
-		// A fix coarser than twice the radius cannot place the student at all.
-		const studentWeak =
-			proximity.weak || (args.accuracyM !== undefined && args.accuracyM > session.radiusM * 2);
-
-		const flagReason = describeContradiction(
-			record.distanceM ?? null,
-			proximity.distanceM,
-			session.radiusM,
-			studentWeak
-		);
-
-		await ctx.db.patch(record._id, {
-			studentLat: args.latitude,
-			studentLng: args.longitude,
-			...(args.accuracyM !== undefined ? { studentAccuracyM: args.accuracyM } : {}),
-			...(proximity.distanceM !== null ? { studentDistanceM: proximity.distanceM } : {}),
-			verification: studentWeak ? 'weak' : 'confirmed',
-			...(flagReason ? { flagged: true, flagReason } : {})
-		});
-
-		return { ok: true, subjectCode: (await ctx.db.get('subjects', record.subjectId))?.code ?? '' };
-	}
-});
-
-/**
- * Whether the signed-in student has a freshly-scanned record awaiting their
- * location, so their phone can show "you were marked present" immediately.
- */
-export const myLatestScan = query({
-	args: { token: v.string() },
-	handler: async (ctx, args) => {
-		const person = await requirePerson(ctx, args.token);
-		const records = await ctx.db
-			.query('attendance')
-			.withIndex('by_person', (q) => q.eq('personId', person._id))
-			.take(50);
-		const latest = records
-			.filter((r: any) => r.method !== 'absent')
-			.sort((a: any, b: any) => b.submittedAt - a.submittedAt)[0];
-		if (!latest) return null;
-		const session = await ctx.db.get('sessions', latest.sessionId);
-		const subject = await ctx.db.get('subjects', latest.subjectId);
-		return {
-			status: latest.status,
-			at: latest.submittedAt,
-			subjectCode: subject?.code ?? '',
-			// null until the student has reported their own location.
-			locationConfirmed: latest.studentLat !== undefined
-		};
-	}
-});
-
 /** A student reports a record they believe is wrong. */
 export const dispute = mutation({
 	args: { token: v.string(), attendanceId: v.id('attendance'), note: v.string() },
@@ -1072,37 +845,7 @@ export const dispute = mutation({
 	}
 });
 
-// A rep scanning an implausible number of students in a short window is the
-	// clearest signal of a rep marking a room they are not standing in. Counted
-	// per session rather than globally so one busy lecture never trips it.
-	const RECENT_WINDOW_SEC = 120;
-	const SCANS_PER_WINDOW_MAX = 40;
-
-	/**
-	 * Returns a reason to flag this scan, or null. A flagged record is still
-	 * created — the point is to surface it for review, never to silently drop or
-	 * rewrite a student's attendance.
-	 */
-	async function scanAnomalyNote(
-		ctx: any,
-		sessionId: unknown,
-		recordedById: unknown
-	): Promise<string | null> {
-		const rows = await ctx.db
-			.query('attendance')
-			.withIndex('by_session', (q: any) => q.eq('sessionId', sessionId))
-			.take(2000);
-		const cutoff = Date.now() - RECENT_WINDOW_SEC * 1000;
-		const recent = rows.filter(
-			(r: any) => r.submittedAt >= cutoff && r.recordedById === recordedById && r.method === 'scan'
-		);
-		if (recent.length === SCANS_PER_WINDOW_MAX) {
-			return `Unusual pace — ${SCANS_PER_WINDOW_MAX}+ students scanned in ${RECENT_WINDOW_SEC} seconds. Worth checking this was a live roll call.`;
-		}
-		return null;
-			}
-
-		/** Cron target: retire lapsed sessions and write their Absent rows. */
+/** Cron target: retire lapsed sessions and write their Absent rows. */
 		export const autoCloseExpired = internalMutation({
 	args: {},
 	handler: async (ctx) => {
@@ -1115,23 +858,6 @@ export const dispute = mutation({
 			closed += 1;
 		}
 		return { closed };
-	}
-});
-
-/**
- * The rotating code for a signed-in person to display. The secret stays
- * server-side; only this derived code leaves.
- */
-export const myScanCode = query({
-	args: { token: v.string() },
-	handler: async (ctx, args) => {
-		const person = await requirePerson(ctx, args.token);
-		if (!person) return null;
-		const doc = await ctx.db.get('people', person._id as never);
-		if (!doc?.qrSecret) return null;
-		// The owner receives their own secret so the phone can roll the code
-		// locally; it is useless to anyone who is not already signed in here.
-		return { regNumber: doc.regNumber, qrSecret: doc.qrSecret };
 	}
 });
 

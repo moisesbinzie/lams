@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import {
 	judgeProximity,
 	judgeStationPlacement,
-	describeContradiction,
 	haversineM,
 	STUDENT_ACCURACY_TOLERANCE
 } from '../src/convex/proximity.ts';
@@ -67,32 +66,6 @@ describe('judgeProximity', () => {
 		const result = judgeProximity(LAT, LNG, LAT, LNG, RADIUS, RADIUS);
 		assert.equal(result.weak, false);
 		assert.equal(result.inside, true);
-	});
-});
-
-describe('describeContradiction', () => {
-	it('says nothing when the student is plausibly present', () => {
-		assert.equal(describeContradiction(10, 12, RADIUS, false), null);
-	});
-
-	it('flags a student phone far from the hall', () => {
-		const note = describeContradiction(10, 900, RADIUS, false);
-		assert.ok(note && note.includes('900'));
-	});
-
-	it('flags a student fix too coarse to check', () => {
-		const note = describeContradiction(10, 20, RADIUS, true);
-		assert.ok(note && note.includes('imprecise'));
-	});
-
-	it('flags a missing rep location', () => {
-		const note = describeContradiction(null, 10, RADIUS, false);
-		assert.ok(note && note.includes('could not be confirmed'));
-	});
-
-	it('tolerates a modest overshoot before complaining', () => {
-		// Just over the radius but under twice it — walking to the back row.
-		assert.equal(describeContradiction(10, RADIUS * 1.5, RADIUS, false), null);
 	});
 });
 

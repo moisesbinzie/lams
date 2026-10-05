@@ -11,17 +11,16 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { TriangleAlert, Pencil } from '@lucide/svelte';
+	import { Pencil } from '@lucide/svelte';
 	import ClassPicker from './class-picker.svelte';
 	import type { ClassRow, Semester } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = getToken();
 	let semesters = $state<Semester[]>([]);
 	let classes = $state<ClassRow[]>([]);
 	let classId = $state('');
 	let loading = $state(true);
-	let error = $state('');
-	let notice = $state('');
 	let busy = $state(false);
 
 	// New semester form.
@@ -63,7 +62,7 @@
 		try {
 			await Promise.all([loadSemesters(), loadClasses()]);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load the setup data.';
+			reportError(err, 'Could not load the setup data.');
 		} finally {
 			loading = false;
 		}
@@ -72,7 +71,6 @@
 	async function createSemester(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.createSemester, {
@@ -87,31 +85,31 @@
 			semStart = '';
 			semEnd = '';
 			await loadSemesters();
-			notice = 'Semester created. Now add a class to it.';
+			// The "now add X" half of these messages is a next step, not a receipt, so
+					// they are given long enough to actually read before they disappear.
+				reportSuccess('Semester created. Now add a class to it.', 7000);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not create the semester.';
+			reportError(err, 'Could not create the semester.');
 		} finally {
 			busy = false;
 		}
 	}
 
 	async function removeSemester(id: string) {
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.removeSemester, { token, id: id as never });
 			await Promise.all([loadSemesters(), loadClasses()]);
-			notice = 'Semester removed.';
+			reportSuccess('Semester removed.');
 		} catch (err) {
 			// The server refuses while offerings or classes still use it.
-			error = err instanceof Error ? err.message : 'Could not remove the semester.';
+			reportError(err, 'Could not remove the semester.');
 		}
 	}
 
 	async function createClass(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.createClass, {
@@ -122,9 +120,9 @@
 			});
 			newClassName = '';
 			await loadClasses();
-			notice = 'Class created. Add its students next.';
+			reportSuccess('Class created. Add its students next.', 7000);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not create the class.';
+			reportError(err, 'Could not create the class.');
 		} finally {
 			busy = false;
 		}
@@ -141,7 +139,6 @@
 	async function saveEdit(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.updateClass, {
@@ -153,40 +150,29 @@
 			});
 			editOpen = false;
 			await loadClasses();
-			notice = 'Class updated.';
+			reportSuccess('Class updated.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not update the class.';
+			reportError(err, 'Could not update the class.');
 		} finally {
 			busy = false;
 		}
 	}
 
 	async function removeClass() {
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.removeClass, { token, id: editId as never });
 			editOpen = false;
 			classId = '';
 			await loadClasses();
-			notice = 'Class removed.';
+			reportSuccess('Class removed.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not remove the class.';
+			reportError(err, 'Could not remove the class.');
 		}
 	}
 </script>
 
 <div class="flex flex-col gap-4">
-	{#if error}
-		<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
-	{/if}
-
 	{#if loading}
 		<div class="flex flex-col gap-2">
 			<div class="h-6 w-52 animate-pulse rounded-md bg-muted"></div>

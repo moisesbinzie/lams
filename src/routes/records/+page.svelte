@@ -13,10 +13,12 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
 	import * as Table from '$lib/components/ui/table';
-	import { Download, Printer, TriangleAlert } from '@lucide/svelte';
+	import { Download, Printer } from '@lucide/svelte';
 	import { printElement } from '$lib/lams/print';
 	import StudentRecordsDialog from '$lib/components/lams/student-records-dialog.svelte';
 	import type { ClassRow, Offering, ReportRow, Semester } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import { toast } from 'svelte-sonner';
 
 	let token = getToken();
 	let classes = $state<ClassRow[]>([]);
@@ -29,8 +31,6 @@
 	let offeringId = $state('');
 	let search = $state('');
 	let loading = $state(true);
-	let error = $state('');
-	let notice = $state('');
 
 	let belowPct = $derived(rows.filter((r) => r.attendPct < 75).length);
 	const average = $derived(
@@ -58,7 +58,9 @@
 				return;
 			}
 			if (me.role !== 'lecturer') {
-				error = 'Only lecturers can review records here. Your own attendance is on your account page.';
+				toast.error(
+					'Only lecturers can review records here. Your own attendance is on your account page.'
+				);
 				loading = false;
 				return;
 			}
@@ -70,7 +72,7 @@
 			await loadOfferings();
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
-			error = err instanceof Error ? err.message : 'Could not load.';
+			reportError(err, 'Could not load.');
 		} finally {
 			loading = false;
 		}
@@ -89,7 +91,7 @@
 			}
 			await loadReport();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load subjects.';
+			reportError(err, 'Could not load subjects.');
 		}
 	}
 
@@ -106,9 +108,8 @@
 			})) as { totalLectures: number; rows: ReportRow[] };
 			totalLectures = res.totalLectures;
 			rows = res.rows;
-			error = '';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load the report.';
+			reportError(err, 'Could not load the report.');
 		}
 	}
 
@@ -119,7 +120,7 @@
 			const client = requireConvexClient();
 			const targets = rows.filter((r) => r.attendPct < 75).map((r) => r.personId as never);
 			if (targets.length === 0) {
-				notice = 'Nobody is below 75%.';
+				reportSuccess('Nobody is below 75%.');
 				return;
 			}
 			const res = await client.mutation(api.reports.excuseRange, {
@@ -128,10 +129,10 @@
 				personIds: targets,
 				status
 			});
-			notice = `${res.changed} record(s) changed.`;
+			reportSuccess(`${res.changed} record(s) changed.`);
 			await loadReport();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change those records.';
+			reportError(err, 'Could not change those records.');
 		}
 	}
 
@@ -175,20 +176,8 @@
 		</div>
 	</div>
 
-	{#if error}
-		<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
-	{/if}
-
 	{#if loading}
 		<p class="text-sm text-muted-foreground">Loading…</p>
-	{:else if error && offerings.length === 0}
-		<p class="text-sm text-muted-foreground">{error}</p>
 	{:else}
 		<div class="grid gap-3 sm:grid-cols-2">
 			<div class="flex flex-col gap-1.5">

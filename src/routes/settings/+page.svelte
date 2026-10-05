@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { api } from '../../convex/_generated/api.js';
 	import { requireConvexClient } from '$lib/convexClient';
@@ -11,8 +12,8 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
-	import { TriangleAlert } from '@lucide/svelte';
 	import type { StaffRow } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = getToken();
 	let me = $state<{ role: string; username?: string; fullName?: string } | null>(null);
@@ -21,8 +22,6 @@
 	let newPassword = $state('');
 	let confirmPassword = $state('');
 	let busy = $state(false);
-	let error = $state('');
-	let notice = $state('');
 	let loading = $state(true);
 
 	// Fields for adding another lecturer.
@@ -55,7 +54,7 @@
 			me = profile;
 			staff = (await client.query(api.staff.listStaff, { token })) as unknown as StaffRow[];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load your settings.';
+			reportError(err, 'Could not load your settings.');
 		} finally {
 			loading = false;
 		}
@@ -63,10 +62,8 @@
 
 	async function savePassword(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
-		notice = '';
 		if (newPassword !== confirmPassword) {
-			error = 'The two passwords do not match.';
+			toast.error('The two passwords do not match.');
 			return;
 		}
 		busy = true;
@@ -80,9 +77,9 @@
 			currentPassword = '';
 			newPassword = '';
 			confirmPassword = '';
-			notice = 'Password changed. Use the new one next time you sign in.';
+			reportSuccess('Password changed. Use the new one next time you sign in.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change the password.';
+			reportError(err, 'Could not change the password.');
 		} finally {
 			busy = false;
 		}
@@ -90,8 +87,6 @@
 
 	async function addStaff(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
-		notice = '';
 		busy = true;
 		try {
 			const client = requireConvexClient();
@@ -106,9 +101,9 @@
 			newStaffName = '';
 			showAdd = false;
 			staff = (await client.query(api.staff.listStaff, { token })) as unknown as StaffRow[];
-			notice = 'Lecturer account created.';
+			reportSuccess('Lecturer account created.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not create that account.';
+			reportError(err, 'Could not create that account.');
 		} finally {
 			busy = false;
 		}
@@ -119,9 +114,9 @@
 			const client = requireConvexClient();
 			await client.mutation(api.staff.setActive, { token, staffId: id as never, active });
 			staff = (await client.query(api.staff.listStaff, { token })) as unknown as StaffRow[];
-			notice = active ? 'Account re-enabled.' : 'Account switched off.';
+			reportSuccess(active ? 'Account re-enabled.' : 'Account switched off.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change that account.';
+			reportError(err, 'Could not change that account.');
 		}
 	}
 </script>
@@ -131,21 +126,6 @@
 		<h1 class="text-2xl font-bold text-lams-navy">Lecturer settings</h1>
 		<p class="text-sm text-muted-foreground">Your sign-in details and other lecturer accounts.</p>
 	</div>
-
-	{#if error}
-		<p
-			class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800"
-			role="alert"
-		>
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">
-			{notice}
-		</p>
-	{/if}
 
 	{#if loading}
 		<p class="text-sm text-muted-foreground">Loading…</p>

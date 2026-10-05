@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { api } from '../../convex/_generated/api.js';
 	import { requireConvexClient } from '$lib/convexClient';
@@ -25,13 +26,12 @@
 		Users
 	} from '@lucide/svelte';
 	import type { AttendanceRecord, LectureSession, StationFeed } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = $state('');
 	let sessions = $state<LectureSession[]>([]);
 	let live = $state<StationFeed | null>(null);
 	let records = $state<AttendanceRecord[]>([]);
-	let error = $state('');
-	let notice = $state('');
 	let busy = $state(false);
 	let now = $state(Date.now());
 	let origin = $state('');
@@ -151,13 +151,11 @@
 				token
 			})) as unknown as LectureSession[];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load your lectures.';
+			reportError(err, 'Could not load your lectures.');
 		}
 	}
 
 	async function openSession(id: string) {
-		error = '';
-		notice = '';
 		try {
 			const client = requireConvexClient();
 			const feed = await client.query(api.attendance.stationFeed, {
@@ -182,7 +180,7 @@
 			}
 		} catch (err) {
 			live = null;
-			error = err instanceof Error ? err.message : 'Could not open that lecture.';
+			reportError(err, 'Could not open that lecture.');
 		}
 	}
 
@@ -217,7 +215,6 @@
 
 	async function extend(extraMin: number) {
 		if (!live) return;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			const res = await client.mutation(api.attendance.extendSession, {
@@ -226,9 +223,9 @@
 				extraSec: extraMin * 60
 			});
 			live = { ...live, closesAt: res.closesAt, status: 'open' };
-			notice = `Window extended by ${extraMin} minute(s).`;
+			reportSuccess(`Window extended by ${extraMin} minute(s).`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not extend the window.';
+			reportError(err, 'Could not extend the window.');
 		}
 	}
 
@@ -238,9 +235,8 @@
 			const pos = await getCurrentPosition();
 			repinLat = String(pos.lat);
 			repinLng = String(pos.lng);
-			error = '';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not read your location.';
+			reportError(err, 'Could not read your location.');
 		}
 	}
 
@@ -281,7 +277,6 @@
 		e.preventDefault();
 		if (!live) return;
 		repinning = true;
-		error = '';
 		try {
 			await requireConvexClient().mutation(api.stationplace.pinStation, {
 				token,
@@ -292,10 +287,10 @@
 			});
 			placement = { ...placement, moved: false, unverified: false, distanceM: 0 };
 			repinReason = '';
-			notice = 'Station pinned to this room. Scans are working again.';
+			reportSuccess('Station pinned to this room. Scans are working again.');
 			await openSession(live._id);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not move the station.';
+			reportError(err, 'Could not move the station.');
 		} finally {
 			repinning = false;
 		}
@@ -306,7 +301,7 @@
 			if (document.fullscreenElement) await document.exitFullscreen();
 			else await panel?.requestFullscreen();
 		} catch {
-			error = 'Full screen is not available in this browser.';
+			toast.error('Full screen is not available in this browser.');
 		}
 	}
 
@@ -319,11 +314,10 @@
 		e.preventDefault();
 		if (!live) return;
 		if (!manualReason.trim()) {
-			error = 'Say why this student was added by hand — it is kept on the record.';
+			toast.error('Say why this student was added by hand — it is kept on the record.');
 			return;
 		}
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			let lat: number | undefined;
@@ -347,10 +341,10 @@
 			});
 			manualReg = '';
 			manualReason = '';
-			notice = 'Student added by hand.';
+			reportSuccess('Student added by hand.');
 			await loadRecords();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not add that student.';
+			reportError(err, 'Could not add that student.');
 		} finally {
 			busy = false;
 		}
@@ -359,11 +353,10 @@
 	async function saveOverride() {
 		if (!editingId) return;
 		if (!manualReason.trim()) {
-			error = 'Say why this record is being changed — it is kept on the record.';
+			toast.error('Say why this record is being changed — it is kept on the record.');
 			return;
 		}
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.attendance.overrideDuringSession, {
@@ -374,10 +367,10 @@
 			});
 			editingId = null;
 			manualReason = '';
-			notice = 'Record updated.';
+			reportSuccess('Record updated.');
 			await loadRecords();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change that record.';
+			reportError(err, 'Could not change that record.');
 		} finally {
 			busy = false;
 		}
@@ -392,11 +385,11 @@
 				token,
 				sessionId: live._id as never
 			});
-			notice = `Lecture closed. ${res.absentAdded} student(s) marked absent.`;
+			reportSuccess(`Lecture closed. ${res.absentAdded} student(s) marked absent.`);
 			await loadSessions();
 			await loadRecords();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not close the lecture.';
+			reportError(err, 'Could not close the lecture.');
 		}
 	}
 </script>
@@ -408,19 +401,6 @@
 			Put this screen at the front of the hall. Students scan it with their own phones.
 		</p>
 	</div>
-
-	{#if error}
-		<p
-			class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800"
-			role="alert"
-		>
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900" role="status">{notice}</p>
-	{/if}
 
 	{#if !live}
 		<Card.Root>

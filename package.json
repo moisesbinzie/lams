@@ -12,7 +12,7 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "node --test src/lib/lams/csv.test.ts src/lib/lams/time.test.ts src/lib/lams/geo.test.ts src/lib/lams/totp.test.ts src/lib/lams/station.test.ts src/lib/lams/session-state.test.ts tests/convex-helpers.test.ts tests/convex-proximity.test.ts",
+		"test": "node --test src/lib/lams/csv.test.ts src/lib/lams/time.test.ts src/lib/lams/geo.test.ts src/lib/lams/station.test.ts src/lib/lams/session-state.test.ts tests/errors.test.ts tests/convex-helpers.test.ts tests/convex-proximity.test.ts",
 		"gen": "wrangler types"
 	},
 	"devDependencies": {
@@ -27,6 +27,7 @@
 		"@types/qrcode": "^1.5.6",
 		"bits-ui": "^2.19.3",
 		"cn": "^0.4.0",
+		"mode-watcher": "^1.1.0",
 		"shadcn-svelte": "^1.7.0",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
@@ -40,7 +41,7 @@
 	"dependencies": {
 		"convex": "^1.46.0",
 		"convex-svelte": "^0.14.0",
-		"jsqr": "^1.4.0",
-		"qrcode": "^1.5.4"
+		"qrcode": "^1.5.4",
+		"svelte-sonner": "^1.2.1"
 	}
 }

@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import type { ClassRow, PersonRow } from '$lib/lams/types';
+	import { reportError } from '$lib/lams/notify.svelte';
 
 	/**
 	 * Edit a person's editable details: name, identifiers and their classes.
@@ -32,7 +33,6 @@
 	let studentId = $state('');
 	let pickedClassIds = $state<string[]>([]);
 	let busy = $state(false);
-	let error = $state('');
 
 	$effect(() => {
 		if (open && person) {
@@ -40,7 +40,6 @@
 			regNumber = person.regNumber;
 			studentId = person.studentId;
 			pickedClassIds = [...person.classIds];
-			error = '';
 		}
 	});
 
@@ -54,7 +53,6 @@
 		e.preventDefault();
 		if (!person) return;
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.people.updatePerson, {
@@ -68,7 +66,7 @@
 			open = false;
 			await onsaved?.();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not save the changes.';
+			reportError(err, 'Could not save the changes.');
 		} finally {
 			busy = false;
 		}
@@ -119,9 +117,6 @@
 					</div>
 				{/if}
 			</fieldset>
-			{#if error}
-				<p class="text-sm text-red-700" role="alert">{error}</p>
-			{/if}
 			<div class="flex justify-end gap-2">
 				<Button type="button" variant="outline" onclick={() => (open = false)}>Cancel</Button>
 				<Button type="submit" disabled={busy}>Save changes</Button>

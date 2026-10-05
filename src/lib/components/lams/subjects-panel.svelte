@@ -15,6 +15,8 @@
 	import SubjectEditDialog from './subject-edit-dialog.svelte';
 	import OfferingRosterDialog from './offering-roster-dialog.svelte';
 	import type { ClassRow, Offering, Subject } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import { toast } from 'svelte-sonner';
 
 	let token = getToken();
 	let classes = $state<ClassRow[]>([]);
@@ -22,8 +24,6 @@
 	let subjects = $state<Subject[]>([]);
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
-	let error = $state('');
-	let notice = $state('');
 	let busy = $state(false);
 
 	// New subject form.
@@ -57,7 +57,7 @@
 			subjects = subs;
 			if (!classId && classes.length > 0) classId = classes[0]._id;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load subjects.';
+			reportError(err, 'Could not load subjects.');
 		} finally {
 			loading = false;
 		}
@@ -75,7 +75,7 @@
 				classId: classId as never
 			})) as unknown as Offering[];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load the offerings.';
+			reportError(err, 'Could not load the offerings.');
 		}
 	}
 
@@ -86,7 +86,6 @@
 	async function createSubject(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.createSubject, {
@@ -98,9 +97,9 @@
 			code = '';
 			title = '';
 			subjects = (await client.query(api.academics.listSubjects, { token })) as unknown as Subject[];
-			notice = 'Subject saved to the catalogue. Offer it to a class below.';
+			reportSuccess('Subject saved to the catalogue. Offer it to a class below.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not save the subject.';
+			reportError(err, 'Could not save the subject.');
 		} finally {
 			busy = false;
 		}
@@ -108,11 +107,10 @@
 
 	async function offer() {
 		if (!selectedClass?.semesterId) {
-			error = 'Assign a semester to this class first (Classes & semesters tab).';
+			toast.error('Assign a semester to this class first (Classes & semesters tab).');
 			return;
 		}
 		busy = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.createOffering, {
@@ -123,9 +121,9 @@
 			});
 			pickSubjectId = '';
 			await load();
-			notice = 'Subject added. Set its timetable, then open enrolment or assign students.';
+			reportSuccess('Subject added. Set its timetable, then open enrolment or assign students.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not add that subject.';
+			reportError(err, 'Could not add that subject.');
 		} finally {
 			busy = false;
 		}
@@ -136,25 +134,26 @@
 			const client = requireConvexClient();
 			await client.mutation(api.academics.setOfferingOpen, { token, id: offeringId as never, open });
 			await load();
-			notice = open
-				? 'Students in this class can now join this subject themselves.'
-				: 'Self-enrolment closed for this subject.';
+			reportSuccess(
+				open
+					? 'Students in this class can now join this subject themselves.'
+					: 'Self-enrolment closed for this subject.'
+			);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change enrolment.';
+			reportError(err, 'Could not change enrolment.');
 		}
 	}
 
 	async function removeSubjectConfirmed() {
 		if (!removing) return;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.removeSubject, { token, id: removing._id as never });
 			subjects = (await client.query(api.academics.listSubjects, { token })) as unknown as Subject[];
 			await load();
-			notice = `${removing.code} removed from the catalogue.`;
+			reportSuccess(`${removing.code} removed from the catalogue.`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not remove the subject.';
+			reportError(err, 'Could not remove the subject.');
 		} finally {
 			removeOpen = false;
 		}
@@ -162,29 +161,18 @@
 
 	async function removeOffering(id: string) {
 		if (!confirm('Remove this subject from the class? Enrolled students must be withdrawn first.')) return;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.removeOffering, { token, id: id as never });
 			await load();
 		} catch (err) {
 			// The server refuses while students are still enrolled.
-			error = err instanceof Error ? err.message : 'Could not remove it.';
+			reportError(err, 'Could not remove it.');
 		}
 	}
 </script>
 
 <div class="flex flex-col gap-4">
-	{#if error}
-		<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
-	{/if}
-
 	{#if loading}
 		<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 	{:else}

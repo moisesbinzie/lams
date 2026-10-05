@@ -11,6 +11,8 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { GraduationCap, TriangleAlert, UserRound } from '@lucide/svelte';
+	import { reportError } from '$lib/lams/notify.svelte';
+		import { toast } from 'svelte-sonner';
 
 	/**
 	 * Two audiences, two doors. Lecturers use a username and password; students
@@ -28,7 +30,6 @@
 	let username = $state('');
 	let password = $state('');
 	let busy = $state(false);
-	let error = $state('');
 	let loadError = $state('');
 	let checking = $state(true);
 
@@ -59,7 +60,6 @@
 	});
 
 	function resetMessages() {
-		error = '';
 		pin = '';
 		confirmPin = '';
 		password = '';
@@ -67,7 +67,6 @@
 
 	async function staffSignIn(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
 		busy = true;
 		try {
 			const client = requireConvexClient();
@@ -82,7 +81,7 @@
 			await beginSession(res.token);
 			await goto('/manage');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not sign you in.';
+			reportError(err, 'Could not sign you in.');
 		} finally {
 			busy = false;
 		}
@@ -90,13 +89,12 @@
 
 	async function personSignIn(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
 		if (!regNumber.trim()) {
-			error = 'Enter your registration number.';
+			toast.error('Enter your registration number.');
 			return;
 		}
 		if (!/^\d{4,8}$/.test(pin.trim())) {
-			error = 'Your PIN must be 4 to 8 digits.';
+			toast.error('Your PIN must be 4 to 8 digits.');
 			return;
 		}
 		busy = true;
@@ -112,7 +110,7 @@
 			await beginSession(res.token);
 			await goto(afterSignIn());
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not sign you in.';
+			reportError(err, 'Could not sign you in.');
 		} finally {
 			busy = false;
 		}
@@ -120,9 +118,8 @@
 
 	async function activate(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
 		if (pin !== confirmPin) {
-			error = 'The two PINs do not match.';
+			toast.error('The two PINs do not match.');
 			return;
 		}
 		busy = true;
@@ -148,7 +145,7 @@
 			await beginSession(res.token);
 			await goto(afterSignIn());
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not set up your account.';
+			reportError(err, 'Could not set up your account.');
 		} finally {
 			busy = false;
 		}
@@ -175,6 +172,13 @@
 	</div>
 
 	{#if loadError}
+		<!--
+			Kept inline rather than toasted, deliberately. This is not a failure of
+			one action: it means the server could not be reached at all, so every
+			sign-in attempt below is about to fail too. A toast would dismiss itself
+			while the visitor is still reading the form and wondering why it does
+			nothing. It needs to sit on the page until they retry.
+		-->
 		<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
 			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
 			<span>{loadError}</span>
@@ -232,12 +236,6 @@
 								required
 							/>
 						</div>
-						{#if error}
-							<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
-								<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-								<span>{error}</span>
-							</p>
-						{/if}
 						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
 						<p class="text-xs text-muted-foreground">
 							First time here? Sign in with the username and password you were given, then change the
@@ -254,12 +252,6 @@
 							<Label for="pin">PIN</Label>
 							<Input id="pin" type="password" inputmode="numeric" bind:value={pin} placeholder="4 to 8 digits" required />
 						</div>
-						{#if error}
-							<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
-								<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-								<span>{error}</span>
-							</p>
-						{/if}
 						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
 					</form>
 				{:else}
@@ -283,12 +275,6 @@
 							<Label for="cpin">Type it again</Label>
 							<Input id="cpin" type="password" inputmode="numeric" bind:value={confirmPin} required />
 						</div>
-						{#if error}
-							<p class="flex items-start gap-2 text-sm text-red-700" role="alert">
-								<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-								<span>{error}</span>
-							</p>
-						{/if}
 						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Setting up…' : 'Set up and sign in'}</Button>
 					</form>
 				{/if}

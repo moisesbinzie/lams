@@ -6,6 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import type { ClassRow, Offering, PersonRow } from '$lib/lams/types';
+	import { reportError } from '$lib/lams/notify.svelte';
 
 	interface RosterRow {
 		personId: string;
@@ -41,7 +42,6 @@
 	let otherCandidates = $state<PersonRow[]>([]);
 	let search = $state('');
 	let loading = $state(false);
-	let error = $state('');
 	let busyId = $state('');
 
 	const className = $derived(
@@ -77,7 +77,6 @@
 	async function load() {
 		if (!offering) return;
 		loading = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			const [enrolled, everyone] = (await Promise.all([
@@ -94,7 +93,7 @@
 				.filter((m) => !m.classIds.includes(offering.classId))
 				.sort((a, b) => a.fullName.localeCompare(b.fullName));
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load the roster.';
+			reportError(err, 'Could not load the roster.');
 		} finally {
 			loading = false;
 		}
@@ -103,7 +102,6 @@
 	async function assign(personId: string, enroll: boolean) {
 		if (!offering) return;
 		busyId = personId;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.enrolments.assignForPerson, {
@@ -115,7 +113,7 @@
 			await load();
 			await onchanged?.();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not change the enrolment.';
+			reportError(err, 'Could not change the enrolment.');
 		} finally {
 			busyId = '';
 		}
@@ -133,9 +131,6 @@
 		</Dialog.Header>
 		<div class="flex flex-col gap-3">
 			<Input bind:value={search} placeholder="Search by name or reg number" aria-label="Search roster" />
-			{#if error}
-				<p class="text-sm text-red-700" role="alert">{error}</p>
-			{/if}
 			{#if loading}
 				<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 			{:else}

@@ -9,7 +9,8 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
-	import { TriangleAlert } from '@lucide/svelte';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import { toast } from 'svelte-sonner';
 	import type { ClassRow, Meeting, Offering } from '$lib/lams/types';
 
 	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -20,8 +21,6 @@
 	let classId = $state('');
 	let offeringId = $state('');
 	let meetings = $state<Meeting[]>([]);
-	let error = $state('');
-	let notice = $state('');
 	let clashes = $state<string[]>([]);
 
 	let dayOfWeek = $state('1');
@@ -46,7 +45,7 @@
 				return;
 			}
 			if (me.role !== 'lecturer') {
-				error = 'Only lecturers can edit timetables.';
+				toast.error('Only lecturers can edit timetables.');
 				return;
 			}
 			classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
@@ -54,7 +53,7 @@
 			await loadOfferings();
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
-			error = err instanceof Error ? err.message : 'Could not load.';
+			reportError(err, 'Could not load.');
 		}
 	});
 
@@ -71,7 +70,7 @@
 			}
 			await loadMeetings();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load subjects.';
+			reportError(err, 'Could not load subjects.');
 		}
 	}
 
@@ -87,7 +86,7 @@
 				offeringId: offeringId as never
 			})) as unknown as Meeting[];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load the timetable.';
+			reportError(err, 'Could not load the timetable.');
 		}
 	}
 
@@ -110,7 +109,6 @@
 
 	async function addWeekly(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.timetable.createWeekly, {
@@ -124,15 +122,14 @@
 			room = '';
 			clashes = [];
 			await loadMeetings();
-			notice = 'Weekly slot added.';
+			reportSuccess('Weekly slot added.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not add that slot.';
+			reportError(err, 'Could not add that slot.');
 		}
 	}
 
 	async function addMakeup(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.timetable.createMakeup, {
@@ -149,9 +146,9 @@
 			room = '';
 			showMakeup = false;
 			await loadMeetings();
-			notice = 'Extra lecture added. It appears on students’ timetables as a make-up.';
+			reportSuccess('Extra lecture added. It appears on students’ timetables as a make-up.');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not add that lecture.';
+			reportError(err, 'Could not add that lecture.');
 		}
 	}
 
@@ -162,7 +159,7 @@
 			await client.mutation(api.timetable.removeMeeting, { token, id: id as never });
 			await loadMeetings();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not remove it.';
+			reportError(err, 'Could not remove it.');
 		}
 	}
 
@@ -175,16 +172,6 @@
 </script>
 
 <div class="flex flex-col gap-4">
-	{#if error}
-		<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if notice}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
-	{/if}
-
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="flex flex-col gap-1.5">
 			<Label for="cls">Class</Label>

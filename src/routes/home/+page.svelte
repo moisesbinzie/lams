@@ -11,6 +11,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { LogOut, CalendarDays, BarChart3, ScanLine, Settings, Pencil } from '@lucide/svelte';
 	import type { Me, MyEnrolment, MyAttendanceRow, RepClass } from '$lib/lams/types';
+	import { reportError } from '$lib/lams/notify.svelte';
 
 	let me = $state<Me | null>(null);
 		// The template only ever renders the person branch, so narrow once here
@@ -18,7 +19,6 @@
 		const person = $derived(me && me.kind === 'person' ? me : null);
 	let token = $state('');
 	let loading = $state(true);
-	let error = $state('');
 	let editing = $state(false);
 	let email = $state('');
 	let phone = $state('');
@@ -71,7 +71,7 @@
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip, and
 			// wiping the session here used to sign people out mid-use.
-			error = err instanceof Error ? err.message : 'Could not load your account.';
+			reportError(err, 'Could not load your account.');
 		} finally {
 			loading = false;
 		}
@@ -80,7 +80,6 @@
 	async function saveDetails(e: SubmitEvent) {
 		e.preventDefault();
 		saving = true;
-		error = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.people.updateMyName, { token, fullName: fullName.trim() });
@@ -88,7 +87,7 @@
 			editing = false;
 			await load();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not save your details.';
+			reportError(err, 'Could not save your details.');
 		} finally {
 			saving = false;
 		}
@@ -137,10 +136,6 @@
 				</div>
 			</Card.Content>
 		</Card.Root>
-
-		{#if error}
-			<p class="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">{error}</p>
-		{/if}
 
 		{#if editing}
 			<Card.Root>

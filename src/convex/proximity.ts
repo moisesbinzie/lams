@@ -91,28 +91,6 @@ export function judgeStationPlacement(
  */
 export const STUDENT_ACCURACY_TOLERANCE = 2;
 
-/**
- * Explains a contradiction between the two devices so the lecturer sees a
- * reason, not just a red row.
- */
-export function describeContradiction(
-	scannerDistanceM: number | null,
-	studentDistanceM: number | null,
-	radiusM: number,
-	studentWeak: boolean
-): string | null {
-	if (studentWeak) {
-		return 'The student’s phone location was too imprecise to check — treat this record with care.';
-	}
-	if (studentDistanceM !== null && studentDistanceM > radiusM * 2) {
-		return `The student’s own phone was ${studentDistanceM} m from the lecture hall (allowed: ${radiusM} m).`;
-	}
-	if (scannerDistanceM === null) {
-		return 'The rep’s phone location could not be confirmed.';
-	}
-	return null;
-}
-
 export function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
 	const R = 6371000;
 	const toRad = (d: number) => (d * Math.PI) / 180;

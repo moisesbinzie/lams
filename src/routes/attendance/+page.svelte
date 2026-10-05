@@ -12,8 +12,9 @@
 	import * as Select from '$lib/components/ui/select';
 	import * as Table from '$lib/components/ui/table';
 	import StatusBadge from '$lib/lams/status-badge.svelte';
-	import { Download, TriangleAlert } from '@lucide/svelte';
+	import { Download } from '@lucide/svelte';
 	import type { MyAttendanceRow, Semester } from '$lib/lams/types';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	type Summary = {
 		totalLectures: number;
@@ -35,8 +36,6 @@
 	let statusFilter = $state('');
 	let search = $state('');
 	let loading = $state(true);
-	let error = $state('');
-	let message = $state('');
 	let disputing = $state<string | null>(null);
 	let disputeNote = $state('');
 
@@ -72,10 +71,9 @@
 				client.query(api.attendance.myAttendance, scope) as Promise<MyAttendanceRow[]>,
 				client.query(api.reports.mySummary, scope) as Promise<Summary>
 			]);
-			error = '';
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
-			error = err instanceof Error ? err.message : 'Could not load your attendance.';
+			reportError(err, 'Could not load your attendance.');
 		} finally {
 			loading = false;
 		}
@@ -105,7 +103,6 @@
 	}
 
 	async function sendDispute(row: MyAttendanceRow) {
-		message = '';
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.attendance.dispute, {
@@ -117,9 +114,9 @@
 			row.disputeNote = disputeNote;
 			disputing = null;
 			disputeNote = '';
-			message = 'Thanks — your lecturer will check this and correct it if it is wrong.';
+			reportSuccess('Thanks — your lecturer will check this and correct it if it is wrong.');
 		} catch (err) {
-			message = err instanceof Error ? err.message : 'Could not send your report.';
+			reportError(err, 'Could not send your report.');
 		}
 	}
 </script>
@@ -131,21 +128,6 @@
 			Everything recorded in your name, and who recorded it. Check it any time.
 		</p>
 	</div>
-
-	{#if error}
-		<p
-			class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800"
-			role="alert"
-		>
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
-	{#if message}
-		<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">
-			{message}
-		</p>
-	{/if}
 
 	{#if loading}
 		<Card.Root aria-busy="true">

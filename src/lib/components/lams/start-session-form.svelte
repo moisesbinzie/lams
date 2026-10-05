@@ -10,6 +10,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { TriangleAlert } from '@lucide/svelte';
+	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	interface RecordableOffering {
 		_id: string;
@@ -42,8 +43,6 @@
 	let lateUntilMin = $state('10');
 	let locating = $state(false);
 	let busy = $state(false);
-	let error = $state('');
-	let notice = $state('');
 
 	/** Blank station fields mean "same as the lecture", so the API omits them. */
 	const usesLectureSpot = $derived(stationLat.trim() === '' && stationLng.trim() === '');
@@ -55,7 +54,7 @@
 				token
 			})) as unknown as RecordableOffering[];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load your subjects.';
+			reportError(err, 'Could not load your subjects.');
 		} finally {
 			loading = false;
 		}
@@ -63,14 +62,13 @@
 
 	async function useGps() {
 		locating = true;
-		error = '';
 		try {
 			const pos = await getCurrentPosition();
 			lat = pos.lat.toFixed(6);
 			lng = pos.lng.toFixed(6);
-			notice = 'Using your current location as the lecture position.';
+			reportSuccess('Using your current location as the lecture position.', 6000);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not read your location.';
+			reportError(err, 'Could not read your location.');
 		} finally {
 			locating = false;
 		}
@@ -79,14 +77,13 @@
 	/** Pin the station to wherever this device currently is. */
 	async function fillStationWithGps() {
 		locating = true;
-		error = '';
 		try {
 			const pos = await getCurrentPosition();
 			stationLat = pos.lat.toFixed(6);
 			stationLng = pos.lng.toFixed(6);
-			notice = 'Station pinned to where you are standing.';
+			reportSuccess('Station pinned to where you are standing.', 6000);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not read your location.';
+			reportError(err, 'Could not read your location.');
 		} finally {
 			locating = false;
 		}
@@ -95,8 +92,6 @@
 	async function start(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
-		error = '';
-		notice = '';
 		try {
 			const client = requireConvexClient();
 			const res = (await client.mutation(api.attendance.startSession, {
@@ -115,7 +110,7 @@
 			})) as { sessionId: string };
 			await onstarted(res.sessionId);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not start the lecture.';
+			reportError(err, 'Could not start the lecture.');
 		} finally {
 			busy = false;
 		}
@@ -132,16 +127,6 @@
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="flex flex-col gap-4">
-		{#if error}
-			<p class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-				<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-				<span>{error}</span>
-			</p>
-		{/if}
-		{#if notice}
-			<p class="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900" role="status">{notice}</p>
-		{/if}
-
 		{#if loading}
 			<div class="h-16 animate-pulse rounded-md bg-muted"></div>
 		{:else if offerings.length === 0}

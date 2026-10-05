@@ -12,6 +12,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { CircleCheck, CircleSlash, CircleX, MapPin, MapPinCheck, TriangleAlert } from '@lucide/svelte';
 	import type { StationPreview, StationScanResult } from '$lib/lams/types';
+	import { explainError } from '$lib/lams/errors';
 
 	let sessionId = $derived(page.params.sessionId ?? '');
 	/**
@@ -82,7 +83,9 @@
 				void submit();
 			} catch (err) {
 				if (!alive) return;
-				error = err instanceof Error ? err.message : 'Could not open that lecture.';
+				// Inline for the same reason as the scan failure below: this drives
+				// the failed card the student is left looking at.
+				error = explainError(err) || 'Could not open that lecture.';
 				stage = 'failed';
 			}
 		})();
@@ -107,8 +110,11 @@
 		} catch (err) {
 			// The scan still goes through without a position. It is recorded as
 			// unconfirmed and flagged rather than silently counted as present.
-			locationNote =
-				err instanceof Error ? err.message : 'Your location could not be read on this device.';
+			//
+			// This stays inline rather than becoming a toast: it is quoted back to the
+			// student on the result card, telling them what their phone actually said,
+			// so it has to survive until they read it.
+			locationNote = explainError(err) || 'Your location could not be read on this device.';
 		}
 
 		try {
@@ -126,7 +132,12 @@
 			result = res as unknown as StationScanResult;
 			stage = 'done';
 		} catch (err) {
-			const message = err instanceof Error ? err.message : 'That scan could not be recorded.';
+			// Kept inline, not toasted. Every failure below is terminal for this
+			// page: the student is either sent to sign in or shown a card with a
+			// retry, and a toast would vanish before they had read which one
+			// happened. The regexes below also have to match the server's wording,
+			// so the raw message is what gets tested here rather than a rewrite.
+			const message = explainError(err) || 'That scan could not be recorded.';
 			// An expired or moved token is not the student's problem to solve here —
 			// send them through sign-in and the scan will finish itself afterwards.
 			if (/sign in again|different phone|moved to another phone/i.test(message)) {

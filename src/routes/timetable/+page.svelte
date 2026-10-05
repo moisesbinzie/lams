@@ -7,15 +7,15 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import * as Table from '$lib/components/ui/table';
-	import { CalendarDays, TriangleAlert } from '@lucide/svelte';
+	import { CalendarDays } from '@lucide/svelte';
 	import type { TimetableWeekly, TimetableMakeup } from '$lib/lams/types';
+	import { reportError } from '$lib/lams/notify.svelte';
 
 	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 	let weekly = $state<TimetableWeekly[]>([]);
 	let makeups = $state<TimetableMakeup[]>([]);
 	let loading = $state(true);
-	let error = $state('');
 
 	onMount(async () => {
 		const token = getToken();
@@ -33,7 +33,7 @@
 			makeups = res.makeups;
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
-			error = err instanceof Error ? err.message : 'Could not load your timetable.';
+			reportError(err, 'Could not load your timetable.');
 		} finally {
 			loading = false;
 		}
@@ -51,16 +51,6 @@
 		<h1 class="text-2xl font-bold text-lams-navy">My timetable</h1>
 		<p class="text-sm text-muted-foreground">The classes you are enrolled in, and when they meet.</p>
 	</div>
-
-	{#if error}
-		<p
-			class="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800"
-			role="alert"
-		>
-			<TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			<span>{error}</span>
-		</p>
-	{/if}
 
 	{#if loading}
 		<Card.Root aria-busy="true">
