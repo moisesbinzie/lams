@@ -12,6 +12,7 @@
 	import { LogOut, CalendarDays, BarChart3, ScanLine, BookOpen, Pencil } from '@lucide/svelte';
 	import type { Me, MyEnrolment, MyAttendanceRow, RepClass } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
+	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
 	let me = $state<Me | null>(null);
 		// The template only ever renders the person branch, so narrow once here
@@ -100,6 +101,7 @@
 </script>
 
 <div class="mx-auto flex max-w-3xl flex-col gap-4">
+	<StudentNav />
 	{#if loading}
 		<Card.Root aria-busy="true">
 			<Card.Content class="flex flex-col gap-3 pt-6">

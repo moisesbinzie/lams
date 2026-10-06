@@ -6,6 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import QrCameraScanner from '$lib/components/lams/qr-camera-scanner.svelte';
 	import type { ScannedStation } from '$lib/lams/station';
+	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
 	/**
 	 * The student's way into a lecture when the phone's own camera app will not
@@ -25,6 +26,7 @@
 </script>
 
 <div class="mx-auto flex max-w-md flex-col gap-4">
+	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">Scan attendance</h1>
 		<p class="text-sm text-muted-foreground">

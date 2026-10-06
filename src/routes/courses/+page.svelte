@@ -8,6 +8,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import type { MyEnrolment } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
 	interface OpenSubject {
 		_id: string;
@@ -81,6 +82,7 @@
 </script>
 
 <div class="mx-auto flex max-w-3xl flex-col gap-4">
+	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My subjects</h1>
 		<p class="text-sm text-muted-foreground">

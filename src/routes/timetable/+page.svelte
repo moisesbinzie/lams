@@ -10,6 +10,7 @@
 	import { CalendarDays } from '@lucide/svelte';
 	import type { TimetableWeekly, TimetableMakeup } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
+	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
 	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -47,6 +48,7 @@
 </script>
 
 <div class="mx-auto flex max-w-4xl flex-col gap-4">
+	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My timetable</h1>
 		<p class="text-sm text-muted-foreground">The classes you are enrolled in, and when they meet.</p>

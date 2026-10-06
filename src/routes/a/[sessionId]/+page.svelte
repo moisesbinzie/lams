@@ -14,6 +14,7 @@
 	import type { StationPreview, StationScanResult } from '$lib/lams/types';
 	import { explainError, isNotEnrolled } from '$lib/lams/errors';
 	import { reportSerious } from '$lib/lams/notify.svelte';
+	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
 	/**
 	 * A refusal that a fresh code can fix: the station code rolled before the scan
@@ -261,6 +262,7 @@
 </script>
 
 <div class="mx-auto flex max-w-md flex-col gap-4">
+	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">
 			{#if preview}

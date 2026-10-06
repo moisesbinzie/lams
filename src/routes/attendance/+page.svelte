@@ -16,6 +16,7 @@
 	import { Download } from '@lucide/svelte';
 	import type { MyAttendanceRow, Semester } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
 	type Summary = {
 		totalLectures: number;
@@ -130,6 +131,7 @@
 </script>
 
 <div class="mx-auto flex max-w-4xl flex-col gap-4">
+	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My attendance</h1>
 		<p class="text-sm text-muted-foreground">

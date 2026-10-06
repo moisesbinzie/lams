@@ -7,13 +7,10 @@
 	import { Toaster } from '$lib/components/ui/sonner';
 	import {
 		BarChart3,
-		BookOpen,
-		CalendarDays,
 		Info,
 		ScanLine,
 		Settings,
-		Settings2,
-		UserRound
+		Settings2
 	} from '@lucide/svelte';
 	import {
 		endSession,
@@ -39,6 +36,13 @@
 	 * Explaining the system is useful before anyone has an account, so
 	 * "How it works" is the one link every visitor gets.
 	 *
+	 * A student's own pages are deliberately **not** here. They used to be a
+	 * six-pill row in this bar, which made the top of every page read as a tab
+	 * strip and buried the one control a student actually opens in a lecture.
+	 * They now live in an in-page strip (`StudentNav`, from `$lib/lams/nav`) at
+	 * the top of the student pages, and this bar keeps only what belongs to the
+	 * chrome: where you are, how it works, and how to leave.
+	 *
 	 * Icons are for scanning the row at a glance and are dropped below `sm`,
 	 * where the labels alone are tight enough on width.
 	 */
@@ -54,24 +58,12 @@
 				{ href: '/settings', label: 'Settings', icon: Settings }
 			];
 		}
-		if (me.role === 'rep') {
-			return [
-				{ href: '/home', label: 'My account', icon: UserRound },
-				{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
-				{ href: '/scanner', label: 'Scan attendance', icon: ScanLine },
-				{ href: '/scan', label: 'Take attendance', icon: ScanLine },
-				how,
-				{ href: '/courses', label: 'My subjects', icon: BookOpen }
-			];
-		}
-			return [
-				{ href: '/home', label: 'My account', icon: UserRound },
-				{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
-				{ href: '/scanner', label: 'Scan attendance', icon: ScanLine },
-				how,
-				{ href: '/courses', label: 'My subjects', icon: BookOpen },
-				{ href: '/attendance', label: 'My attendance', icon: BarChart3 }
-			];
+		// A student or a class rep. A rep keeps the station tool here because it
+		// is a different job from their own attendance and has nowhere else to
+		// live; everything that is *their* record moved into the page.
+		return me.role === 'rep'
+			? [{ href: '/scan', label: 'Take attendance', icon: ScanLine }, how]
+			: [how];
 	});
 
 	const homeHref = $derived(!me ? '/' : me.kind === 'person' ? '/home' : '/manage');
