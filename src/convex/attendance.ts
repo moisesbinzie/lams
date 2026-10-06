@@ -8,7 +8,8 @@ import {
 	requirePerson,
 	requirePersonOnDevice,
 	requireRecorder,
-	requireStaff
+	requireStaff,
+	resolveActor
 } from './auth';
 import {
 	computeAutoStatus,
@@ -940,11 +941,25 @@ export const dispute = mutation({
  * Offerings the signed-in rep or lecturer may start a lecture for: everything
  * for staff, only their classes' offerings for a rep. Powers the "start a
  * lecture" form on the scanning screen.
+ *
+ * A token that is no longer accepted answers `null` instead of throwing. The
+ * station screen stays open through a whole lecture, so its session lapsing
+ * mid-use is an ordinary event, not a fault — throwing logged an uncaught query
+ * error for every lapsed screen (2026-10-06) and told the rep nothing they could
+ * act on. On `null` the form ends the session and asks them to sign in again,
+ * which is the same shape `staff.me` already uses for the rest of the app.
+ *
+ * A signed-in caller who may simply not record still gets an error: that is a
+ * real refusal, and it should be visible in the logs.
  */
 export const listRecordableOfferings = query({
 	args: { token: v.string() },
 	handler: async (ctx, args) => {
-		const actor = await requireRecorder(ctx, args.token);
+		const actor = await resolveActor(ctx, args.token);
+		if (!actor) return null;
+		if (actor.kind !== 'staff' && actor.role !== 'rep') {
+			throw new Error('Only class representatives and lecturers can do this.');
+		}
 		let offerings: any[];
 		if (actor.kind === 'staff') {
 			offerings = await ctx.db.query('offerings').take(500);

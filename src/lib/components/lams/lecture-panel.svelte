@@ -10,6 +10,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Select from '$lib/components/ui/select';
 	import type { ClassRow, LectureSession, Offering } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
@@ -173,27 +174,33 @@
 			<div class="grid gap-3 sm:grid-cols-2">
 				<div class="flex flex-col gap-1.5">
 					<Label for="cls">Class</Label>
-					<select
-						id="cls"
-						class="w-full rounded-md border border-input bg-background p-2 text-sm"
-						bind:value={classId}
-					>
-						{#each classes as c (c._id)}
-							<option value={c._id}>{c.name}</option>
-						{/each}
-					</select>
+					<Select.Root type="single" value={classId} onValueChange={(v) => (classId = v ?? '')}>
+						<Select.Trigger id="cls" class="w-full">
+							<Select.Value placeholder="Choose a class" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each classes as c (c._id)}
+									<Select.Item value={c._id}>{c.name}</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 				</div>
 				<div class="flex flex-col gap-1.5">
 					<Label for="off">Subject</Label>
-					<select
-						id="off"
-						class="w-full rounded-md border border-input bg-background p-2 text-sm"
-						bind:value={offeringId}
-					>
-						{#each offerings as o (o._id)}
-							<option value={o._id}>{o.subjectCode} — {o.subjectTitle}</option>
-						{/each}
-					</select>
+					<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
+						<Select.Trigger id="off" class="w-full">
+							<Select.Value placeholder="Choose a subject" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each offerings as o (o._id)}
+									<Select.Item value={o._id}>{o.subjectCode} — {o.subjectTitle}</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 				</div>
 			</div>
 

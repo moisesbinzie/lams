@@ -76,6 +76,14 @@
 				username: username.trim(),
 				password
 			});
+			// A refused sign-in arrives as a message rather than a thrown error:
+			// wrong details are an ordinary event, and logging them as server
+			// faults buried the failures that are real. The wording is the
+			// server's, so it still says exactly what is wrong.
+			if (!res.ok) {
+				toast.error(res.message);
+				return;
+			}
 			// Record the token in the shared session so the navbar is already
 			// signed in when the target page renders.
 			await beginSession(res.token);
@@ -105,6 +113,12 @@
 				pin: pin.trim(),
 				deviceId: getDeviceId()
 			});
+			// Same contract as the lecturer door: a refusal is a message, not a
+			// thrown error, because a mistyped PIN is not a fault.
+			if (!res.ok) {
+				toast.error(res.message);
+				return;
+			}
 			// Record the token in the shared session so the navbar is already
 			// signed in when the target page renders.
 			await beginSession(res.token);
@@ -140,6 +154,9 @@
 				pin: createdPin,
 				deviceId: getDeviceId()
 			});
+			// A refusal here is not a mistyped PIN — the PIN was set a moment
+			// ago — so it is a failure of the setup itself and is raised as one.
+			if (!res.ok) throw new Error(res.message);
 			// Record the token in the shared session so the navbar is already
 			// signed in when the target page renders.
 			await beginSession(res.token);
@@ -281,13 +298,21 @@
 
 				<div class="mt-4 flex flex-wrap justify-center gap-3 border-t border-border pt-4 text-center">
 					{#if mode === 'person'}
-						<button type="button" class="text-sm underline" onclick={() => { mode = 'activate'; resetMessages(); }}>
+						<Button
+							variant="link"
+							class="h-auto p-0"
+							onclick={() => { mode = 'activate'; resetMessages(); }}
+						>
 							First time here? Set up your account
-						</button>
+						</Button>
 					{/if}
-					<button type="button" class="text-sm underline" onclick={() => { mode = 'choose'; resetMessages(); }}>
+					<Button
+						variant="link"
+						class="h-auto p-0"
+						onclick={() => { mode = 'choose'; resetMessages(); }}
+					>
 						Back
-					</button>
+					</Button>
 				</div>
 			</Card.Content>
 		</Card.Root>

@@ -176,12 +176,22 @@
 			Scanning leads because it is the one thing a student opens this page
 			to do in a lecture. "My subjects" is no longer conditional: a class rep
 			still needs to join and drop subjects like anyone else.
+
+			It is also the loudest thing on the page on purpose — the full width of
+			the grid, a size up, and lifted off the surface with its own shadow. A
+			student standing in a hall is looking for one target, not reading cards.
 		-->
 		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-			<Button href="/scanner" size="lg" class="h-auto flex-col items-start gap-1 py-4 text-left">
-				<ScanLine class="size-5" />
-				<span class="text-sm font-semibold">Scan attendance</span>
-				<span class="text-xs font-normal opacity-80">Point at the screen in the hall</span>
+			<Button
+				href="/scanner"
+				size="lg"
+				class="h-auto flex-col items-start gap-1 py-5 text-left shadow-lg shadow-primary/30 transition-shadow hover:shadow-xl sm:col-span-2 sm:flex-row sm:items-center sm:gap-3 lg:col-span-3"
+			>
+				<ScanLine class="size-8 shrink-0" />
+				<span class="flex flex-col">
+					<span class="text-lg font-bold">Scan attendance</span>
+					<span class="text-xs font-normal opacity-90">Point your phone at the screen in the hall</span>
+				</span>
 			</Button>
 			<Button href="/timetable" size="lg" variant="outline" class="h-auto flex-col items-start gap-1 py-4 text-left">
 				<CalendarDays class="size-5" />

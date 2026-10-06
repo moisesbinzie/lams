@@ -3,6 +3,7 @@
 	import { requireConvexClient } from '$lib/convexClient';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import type { ClassRow, PersonRow } from '$lib/lams/types';
@@ -104,15 +105,14 @@
 				{:else}
 					<div class="flex flex-col gap-1 rounded-md border border-border p-2">
 						{#each classes as c (c._id)}
-							<label class="flex items-center gap-2 text-sm">
-								<input
-									type="checkbox"
-									class="size-4"
+							<div class="flex items-center gap-2">
+								<Checkbox
+									id={`cls-${c._id}`}
 									checked={pickedClassIds.includes(c._id)}
-									onchange={() => toggleClass(c._id)}
+									onCheckedChange={() => toggleClass(c._id)}
 								/>
-								{c.name}
-							</label>
+								<Label for={`cls-${c._id}`} class="font-normal">{c.name}</Label>
+							</div>
 						{/each}
 					</div>
 				{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Button } from '$lib/components/ui/button';
 	import type { ClassRow } from '$lib/lams/types';
 
 	/**
@@ -25,11 +26,12 @@
 	{:else}
 		<div class="flex flex-wrap gap-2" role="group" aria-label="Choose a class">
 			{#each classes as c (c._id)}
-				<button
-					type="button"
-					class="rounded-full border px-3 py-1 text-sm transition-colors {classId === c._id
-						? 'border-lams-navy bg-lams-navy text-white'
-						: 'border-border text-foreground hover:bg-muted'}"
+				<Button
+					variant="outline"
+					size="sm"
+					class="rounded-full {classId === c._id
+						? 'border-lams-navy bg-lams-navy text-white hover:bg-lams-navy hover:text-white dark:bg-lams-navy'
+						: ''}"
 					aria-pressed={classId === c._id}
 					onclick={() => (classId = c._id)}
 				>
@@ -37,7 +39,7 @@
 					{#if typeof c.studentCount === 'number'}
 						<span class="opacity-70">· {c.studentCount}</span>
 					{/if}
-				</button>
+				</Button>
 			{/each}
 		</div>
 	{/if}

@@ -10,6 +10,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Select from '$lib/components/ui/select';
+	import * as Table from '$lib/components/ui/table';
 	import { TriangleAlert } from '@lucide/svelte';
 	import ClassPicker from './class-picker.svelte';
 	import SubjectEditDialog from './subject-edit-dialog.svelte';
@@ -33,6 +35,13 @@
 
 	// Offer-to-class picker.
 	let pickSubjectId = $state('');
+
+	/**
+	 * bits-ui refuses an empty string as a select item's value, so "nothing
+	 * chosen yet" travels through the menu as a sentinel and is mapped back to
+	 * the empty id at both edges.
+	 */
+	const NO_SUBJECT = 'no-subject';
 
 	// Dialogs.
 	let editing = $state<Subject | null>(null);
@@ -210,22 +219,22 @@
 					</p>
 				{:else}
 					<div class="overflow-x-auto rounded-md border">
-						<table class="w-full text-sm">
-							<thead class="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-								<tr>
-									<th class="px-3 py-2 font-medium">Code</th>
-									<th class="px-3 py-2 font-medium">Title</th>
-									<th class="px-3 py-2 font-medium">Hours</th>
-									<th class="px-3 py-2 text-right font-medium">Actions</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-border">
+						<Table.Root>
+							<Table.Header>
+								<Table.Row>
+									<Table.Head>Code</Table.Head>
+									<Table.Head>Title</Table.Head>
+									<Table.Head>Hours</Table.Head>
+									<Table.Head class="text-right">Actions</Table.Head>
+								</Table.Row>
+							</Table.Header>
+							<Table.Body>
 								{#each subjects as s (s._id)}
-									<tr>
-										<td class="px-3 py-2 font-medium">{s.code}</td>
-										<td class="px-3 py-2">{s.title}</td>
-										<td class="px-3 py-2 text-muted-foreground">{s.hoursPerWeek ?? '—'}</td>
-										<td class="px-3 py-2 text-right">
+									<Table.Row>
+										<Table.Cell class="font-medium">{s.code}</Table.Cell>
+										<Table.Cell>{s.title}</Table.Cell>
+										<Table.Cell class="text-muted-foreground">{s.hoursPerWeek ?? '—'}</Table.Cell>
+										<Table.Cell class="text-right">
 											<div class="flex justify-end gap-1">
 												<Button
 													variant="ghost"
@@ -249,11 +258,11 @@
 													Remove
 												</Button>
 											</div>
-										</td>
-									</tr>
+										</Table.Cell>
+									</Table.Row>
 								{/each}
-							</tbody>
-						</table>
+							</Table.Body>
+						</Table.Root>
 					</div>
 				{/if}
 			</Card.Content>
@@ -284,12 +293,25 @@
 						<div class="flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-end">
 							<div class="flex-1">
 								<Label for="pick">Offer a subject from the catalogue</Label>
-								<select id="pick" class="w-full rounded-md border border-input bg-background p-2 text-sm" bind:value={pickSubjectId}>
-									<option value="">Choose a subject</option>
-									{#each notOffered as s (s._id)}
-										<option value={s._id}>{s.code} — {s.title}</option>
-									{/each}
-								</select>
+								<Select.Root
+									type="single"
+									value={pickSubjectId || NO_SUBJECT}
+									onValueChange={(v) => {
+										pickSubjectId = v === NO_SUBJECT ? '' : (v ?? '');
+									}}
+								>
+									<Select.Trigger id="pick" class="w-full">
+										<Select.Value placeholder="Choose a subject" />
+									</Select.Trigger>
+									<Select.Content>
+										<Select.Group>
+											<Select.Item value={NO_SUBJECT}>Choose a subject</Select.Item>
+											{#each notOffered as s (s._id)}
+												<Select.Item value={s._id}>{s.code} — {s.title}</Select.Item>
+											{/each}
+										</Select.Group>
+									</Select.Content>
+								</Select.Root>
 							</div>
 							<Button disabled={!pickSubjectId || busy} onclick={offer}>Offer it</Button>
 						</div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { api } from '../../../convex/_generated/api.js';
 	import { requireConvexClient } from '$lib/convexClient';
 	import { endSession } from '$lib/lams/session.svelte';
@@ -9,6 +10,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Select from '$lib/components/ui/select';
 	import { TriangleAlert } from '@lucide/svelte';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
@@ -76,9 +78,19 @@
 	onMount(async () => {
 		try {
 			const client = requireConvexClient();
-			offerings = (await client.query(api.attendance.listRecordableOfferings, {
+			const rows = (await client.query(api.attendance.listRecordableOfferings, {
 				token
-			})) as unknown as RecordableOffering[];
+			})) as unknown as RecordableOffering[] | null;
+			// `null` is the server saying the token is no longer accepted, which
+			// is what a station screen left open past its session looks like.
+			// There is nothing to list in that case, so sign out cleanly instead
+			// of showing an empty subject box the rep cannot explain.
+			if (rows === null) {
+				endSession();
+				await goto('/signin');
+				return;
+			}
+			offerings = rows;
 		} catch (err) {
 			reportError(err, 'Could not load your subjects.');
 		} finally {
@@ -164,11 +176,20 @@
 			<form class="flex flex-col gap-4" onsubmit={start}>
 				<div class="flex flex-col gap-1.5">
 					<Label for="soff">Subject and class</Label>
-					<select id="soff" class="w-full rounded-md border border-input bg-background p-2 text-sm" bind:value={offeringId}>
-						{#each offerings as o (o._id)}
-							<option value={o._id}>{o.subjectCode} — {o.subjectTitle} · {o.className}</option>
-						{/each}
-					</select>
+					<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
+						<Select.Trigger id="soff" class="w-full">
+							<Select.Value placeholder="Choose a subject" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each offerings as o (o._id)}
+									<Select.Item value={o._id}>
+										{o.subjectCode} — {o.subjectTitle} · {o.className}
+									</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 				</div>
 
 				<div class="rounded-md border border-border p-3">

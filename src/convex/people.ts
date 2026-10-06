@@ -212,39 +212,61 @@ export const activate = mutation({
 	}
 });
 
-/** Sign-in for an already-activated person. */
+/**
+ * Sign-in for an already-activated person.
+ *
+ * The refusals a person can bring on themselves — details that do not match, an
+ * account not set up yet, a suspended account, one already bound to another
+ * phone — come back as `{ ok: false, message }` instead of being thrown. They
+ * are ordinary events: somebody mistyped a PIN. Throwing recorded every one of
+ * them as an uncaught server error, which buries the failures that are actually
+ * faults (2026-10-06 logs: one mistyped PIN, logged as an error).
+ *
+ * Counting is deliberately unchanged: `refuse` still calls `noteFailure`, so the
+ * lockout below — and the `authAttempts` trail behind it — behave exactly as
+ * before. Only the way the answer travels back changed.
+ */
 export const login = mutation({
 	args: { regNumber: v.string(), pin: v.string(), deviceId: v.string() },
 	handler: async (ctx, args) => {
 		const regNorm = normalizeReg(args.regNumber);
-		if (!regNorm) throw new Error('Enter your registration number.');
+		if (!regNorm) return { ok: false as const, message: 'Enter your registration number.' };
 		const limiter = await ctx.db
 			.query('authAttempts')
 			.withIndex('by_key', (q) => q.eq('key', `pin:${regNorm}`))
 			.unique();
 		if (isBlocked(ctx, limiter)) {
-			throw new Error('Too many wrong attempts. Please wait 15 minutes or ask your class rep to reset your PIN.');
+			return {
+				ok: false as const,
+				message:
+					'Too many wrong attempts. Please wait 15 minutes or ask your class rep to reset your PIN.'
+			};
 		}
 
-		const reject = async (message: string): Promise<never> => {
+		/** A failed attempt: counted for the lockout, then answered rather than thrown. */
+		const refuse = async (message: string) => {
 			await noteFailure(ctx, `pin:${regNorm}`);
-			throw new Error(message);
+			return { ok: false as const, message };
 		};
 
 		const person = await ctx.db.query('people').withIndex('by_reg', (q) => q.eq('regNorm', regNorm)).unique();
-		if (!person) return await reject('That PIN is not right.');
+		if (!person) return await refuse('That PIN is not right.');
 		if (person.status === 'invited') {
-			throw new Error('Set up your PIN first — use “Set up your account”.');
+			return { ok: false as const, message: 'Set up your PIN first — use “Set up your account”.' };
 		}
-		if (person.status === 'blocked') throw new Error('Your access has been suspended. Please see your lecturer.');
+		if (person.status === 'blocked') {
+			return { ok: false as const, message: 'Your access has been suspended. Please see your lecturer.' };
+		}
 
 		const ok = await verifySecret(person as never, args.pin);
-		if (!ok) return await reject('That PIN is not right.');
+		if (!ok) return await refuse('That PIN is not right.');
 
 		if (person.boundDeviceId && person.boundDeviceId !== args.deviceId) {
-			throw new Error(
-				'This account is already set up on another phone. Ask your class rep or lecturer to move it to this one.'
-			);
+			return {
+				ok: false as const,
+				message:
+					'This account is already set up on another phone. Ask your class rep or lecturer to move it to this one.'
+			};
 		}
 
 		const existing = await ctx.db
@@ -255,7 +277,7 @@ export const login = mutation({
 			await ctx.db.patch(existing._id, { expiresAt: Date.now() + SESSION_TTL_MS });
 			await ctx.db.patch(person._id, { lastLoginAt: Date.now() });
 			await noteSuccess(ctx, `pin:${regNorm}`);
-			return { token: existing.token, fullName: person.fullName, role: person.role };
+			return { ok: true as const, token: existing.token, fullName: person.fullName, role: person.role };
 		}
 
 		const token = randomHex(24);
@@ -271,7 +293,7 @@ export const login = mutation({
 			lastLoginAt: Date.now()
 		});
 		await noteSuccess(ctx, `pin:${regNorm}`);
-		return { token, fullName: person.fullName, role: person.role };
+		return { ok: true as const, token, fullName: person.fullName, role: person.role };
 	}
 });
 

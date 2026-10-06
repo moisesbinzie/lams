@@ -19,7 +19,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Select from '$lib/components/ui/select';
 	import {
+		ChevronDown,
 		Maximize,
 		Pencil,
 		TriangleAlert,
@@ -37,12 +39,15 @@
 	let origin = $state('');
 
 	// Hand-add / override panel
+	type Status = 'Present' | 'Late' | 'Excused' | 'Absent';
+	/** Adding a record by hand never writes Absent — only a correction can. */
+	type AddedStatus = Exclude<Status, 'Absent'>;
 	let manualReg = $state('');
-	let manualStatus = $state<'Present' | 'Late' | 'Excused'>('Present');
+	let manualStatus = $state<AddedStatus>('Present');
 	let manualReason = $state('');
 	let roster = $state<{ regNumber: string; label: string }[]>([]);
 	let editingId = $state<string | null>(null);
-	let editStatus = $state<'Present' | 'Late' | 'Excused'>('Present');
+	let editStatus = $state<Status>('Present');
 
 	// Station display
 	let qrImg = $state('');
@@ -492,11 +497,24 @@
 
 		<Card.Root>
 			<Card.Content class="pt-6">
-				<details>
+				<!--
+					The chevron is the affordance, not decoration: laying the summary
+					out with flex removes the browser's own disclosure marker, so
+					without it "Past lectures" read as a heading rather than the door
+					to the sessions already recorded. It turns as the list opens, and
+					the row picks up a hover tint so a mouse finds it too.
+				-->
+				<details class="group">
 					<summary
-						class="flex cursor-pointer flex-wrap items-center justify-between gap-2 text-sm font-medium"
+						class="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-3xl px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
 					>
-						<span>Past lectures</span>
+						<span class="flex items-center gap-2">
+							<ChevronDown
+								class="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+								aria-hidden="true"
+							/>
+							Past lectures
+						</span>
 						<span class="text-xs font-normal text-muted-foreground">
 							{sessions.length === 0
 								? 'nothing here yet'
@@ -723,16 +741,23 @@
 						<div class="flex flex-wrap items-end gap-3">
 							<div class="flex flex-col gap-1">
 								<Label for="estatus">Status</Label>
-								<select
-									id="estatus"
-									class="w-full rounded-md border border-input bg-background p-2 text-sm"
-									bind:value={editStatus}
+								<Select.Root
+									type="single"
+									value={editStatus}
+									onValueChange={(v) => (editStatus = (v ?? 'Present') as Status)}
 								>
-									<option value="Present">Present</option>
-									<option value="Late">Late</option>
-									<option value="Excused">Excused</option>
-									<option value="Absent">Absent</option>
-								</select>
+									<Select.Trigger id="estatus" class="w-full">
+										<Select.Value placeholder="Present" />
+									</Select.Trigger>
+									<Select.Content>
+										<Select.Group>
+											<Select.Item value="Present">Present</Select.Item>
+											<Select.Item value="Late">Late</Select.Item>
+											<Select.Item value="Excused">Excused</Select.Item>
+											<Select.Item value="Absent">Absent</Select.Item>
+										</Select.Group>
+									</Select.Content>
+								</Select.Root>
 							</div>
 							<div class="flex min-w-48 flex-1 flex-col gap-1">
 								<Label for="ereason">Reason (required)</Label>
@@ -767,15 +792,22 @@
 						</div>
 						<div class="flex flex-col gap-1">
 							<Label for="mstatus">Status</Label>
-							<select
-								id="mstatus"
-								class="w-full rounded-md border border-input bg-background p-2 text-sm"
-								bind:value={manualStatus}
+							<Select.Root
+								type="single"
+								value={manualStatus}
+								onValueChange={(v) => (manualStatus = (v ?? 'Present') as AddedStatus)}
 							>
-								<option value="Present">Present</option>
-								<option value="Late">Late</option>
-								<option value="Excused">Excused</option>
-							</select>
+								<Select.Trigger id="mstatus" class="w-full">
+									<Select.Value placeholder="Present" />
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Group>
+										<Select.Item value="Present">Present</Select.Item>
+										<Select.Item value="Late">Late</Select.Item>
+										<Select.Item value="Excused">Excused</Select.Item>
+									</Select.Group>
+								</Select.Content>
+							</Select.Root>
 						</div>
 						<div class="flex items-end">
 							<Button type="submit" disabled={busy}>Add</Button>

@@ -10,6 +10,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Select from '$lib/components/ui/select';
+	import DatePicker from '$lib/components/ui/date-picker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Pencil } from '@lucide/svelte';
 	import ClassPicker from './class-picker.svelte';
@@ -50,6 +52,13 @@
 		const y = Number(semYear) || new Date().getFullYear();
 		return [y - 1, y, y + 1].map((v) => String(v));
 	});
+
+	/**
+	 * "No semester" is a real choice in both semester pickers, but bits-ui will
+	 * not take an empty string as an item value — so it travels through the menu
+	 * as a sentinel and is mapped back to the empty string the server expects.
+	 */
+	const NO_SEMESTER = 'none';
 
 	async function loadSemesters() {
 		const client = requireConvexClient();
@@ -237,34 +246,38 @@
 					</div>
 					<div class="flex flex-col gap-1">
 						<Label for="iemy">Year</Label>
-						<select id="iemy" class="w-full rounded-md border border-input bg-background p-2 text-sm" bind:value={semYear}>
-							{#each yearOptions as y (y)}
-								<option value={y}>{y}</option>
-							{/each}
-						</select>
+						<Select.Root type="single" value={semYear} onValueChange={(v) => (semYear = v ?? '')}>
+							<Select.Trigger id="iemy" class="w-full">
+								<Select.Value placeholder="Year" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Group>
+									{#each yearOptions as y (y)}
+										<Select.Item value={y}>{y}</Select.Item>
+									{/each}
+								</Select.Group>
+							</Select.Content>
+						</Select.Root>
 					</div>
 					<div class="flex flex-col gap-1">
 						<Label for="iemn">Semester</Label>
-						<select
-							id="iemn"
-							class="w-full rounded-md border border-input bg-background p-2 text-sm"
-							bind:value={semNumber}
-						>
-							<option value="1">1</option>
-							<option value="2">2</option>
-							<option value="3">3</option>
-						</select>
+						<Select.Root type="single" value={semNumber} onValueChange={(v) => (semNumber = v ?? '1')}>
+							<Select.Trigger id="iemn" class="w-full">
+								<Select.Value placeholder="Semester" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Group>
+									<Select.Item value="1">1</Select.Item>
+									<Select.Item value="2">2</Select.Item>
+									<Select.Item value="3">3</Select.Item>
+								</Select.Group>
+							</Select.Content>
+						</Select.Root>
 					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="sems">Starts</Label>
-						<Input id="sems" type="date" bind:value={semStart} required />
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="seme">Ends</Label>
-						<Input id="seme" type="date" bind:value={semEnd} required />
-					</div>
+					<DatePicker id="sems" label="Starts" bind:value={semStart} />
+					<DatePicker id="seme" label="Ends" bind:value={semEnd} />
 					<div class="flex items-end">
-						<Button type="submit" disabled={busy}>Add semester</Button>
+						<Button type="submit" disabled={busy || !semStart || !semEnd}>Add semester</Button>
 					</div>
 				</form>
 				<p class="text-xs text-muted-foreground">
@@ -315,12 +328,27 @@
 						</div>
 						<div class="flex flex-col gap-1">
 							<Label for="cs">Semester</Label>
-							<select id="cs" class="w-full rounded-md border border-input bg-background p-2 text-sm" bind:value={newClassSemester}>
-								<option value="">{semesters.length === 0 ? 'Create a semester first' : 'No semester'}</option>
-								{#each semesters as s (s._id)}
-									<option value={s._id}>{s.name}</option>
-								{/each}
-							</select>
+							<Select.Root
+								type="single"
+								value={newClassSemester || NO_SEMESTER}
+								onValueChange={(v) => (newClassSemester = v === NO_SEMESTER ? '' : (v ?? ''))}
+							>
+								<Select.Trigger id="cs" class="w-full">
+									<Select.Value
+										placeholder={semesters.length === 0 ? 'Create a semester first' : 'No semester'}
+									/>
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Group>
+										<Select.Item value={NO_SEMESTER}>
+											{semesters.length === 0 ? 'Create a semester first' : 'No semester'}
+										</Select.Item>
+										{#each semesters as s (s._id)}
+											<Select.Item value={s._id}>{s.name}</Select.Item>
+										{/each}
+									</Select.Group>
+								</Select.Content>
+							</Select.Root>
 						</div>
 						<div class="flex items-end">
 							<Button type="submit" disabled={busy}>Add class</Button>
@@ -350,12 +378,23 @@
 				</div>
 				<div class="flex flex-col gap-1">
 					<Label for="ecs">Semester</Label>
-					<select id="ecs" class="w-full rounded-md border border-input bg-background p-2 text-sm" bind:value={editSemester}>
-						<option value="">No semester</option>
-						{#each semesters as s (s._id)}
-							<option value={s._id}>{s.name}</option>
-						{/each}
-					</select>
+					<Select.Root
+						type="single"
+						value={editSemester || NO_SEMESTER}
+						onValueChange={(v) => (editSemester = v === NO_SEMESTER ? '' : (v ?? ''))}
+					>
+						<Select.Trigger id="ecs" class="w-full">
+							<Select.Value placeholder="No semester" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								<Select.Item value={NO_SEMESTER}>No semester</Select.Item>
+								{#each semesters as s (s._id)}
+									<Select.Item value={s._id}>{s.name}</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 				</div>
 			</div>
 			<div class="mt-2 flex items-center justify-between gap-2">

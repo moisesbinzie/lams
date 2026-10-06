@@ -58,17 +58,30 @@ export const ensureSeed = mutation({
 	}
 });
 
+/**
+ * Lecturer sign-in.
+ *
+ * Wrong details and the lockout answer `{ ok: false, message }` instead of
+ * throwing, for the same reason `people.login` does: they are things a person
+ * brings on themselves, and logging them as uncaught server errors buries the
+ * failures that are actually faults. The security trail is unaffected — every
+ * failed attempt still goes through `noteFailure`, so `authAttempts` keeps the
+ * count and the block.
+ */
 export const login = mutation({
 	args: { username: v.string(), password: v.string() },
 	handler: async (ctx, args) => {
 		const usernameNorm = normalizeUsername(args.username);
-		if (!usernameNorm) throw new Error('Enter your username.');
+		if (!usernameNorm) return { ok: false as const, message: 'Enter your username.' };
 		const limiter = await ctx.db
 			.query('authAttempts')
 			.withIndex('by_key', (q) => q.eq('key', `staff:${usernameNorm}`))
 			.unique();
 		if (isBlocked(ctx, limiter)) {
-			throw new Error('Too many wrong attempts. Please wait 15 minutes and try again.');
+			return {
+				ok: false as const,
+				message: 'Too many wrong attempts. Please wait 15 minutes and try again.'
+			};
 		}
 
 		const staff = await ctx.db
@@ -77,13 +90,13 @@ export const login = mutation({
 			.unique();
 		// Same message for unknown user and wrong password, so the form does not
 		// confirm which usernames exist.
-		const reject = async (): Promise<never> => {
+		const refuse = async () => {
 			await noteFailure(ctx, `staff:${usernameNorm}`);
-			throw new Error('Wrong username or password.');
+			return { ok: false as const, message: 'Wrong username or password.' };
 		};
-		if (!staff || !staff.active) return await reject();
+		if (!staff || !staff.active) return await refuse();
 		const ok = await verifySecret(staff as never, args.password);
-		if (!ok) return await reject();
+		if (!ok) return await refuse();
 
 		const token = randomHex(24);
 		await ctx.db.insert('staffSessions', {
@@ -94,7 +107,7 @@ export const login = mutation({
 		});
 		await ctx.db.patch(staff._id, { lastLoginAt: Date.now() });
 		await noteSuccess(ctx, `staff:${usernameNorm}`);
-		return { token, fullName: staff.fullName, username: staff.username };
+		return { ok: true as const, token, fullName: staff.fullName, username: staff.username };
 	}
 });
 

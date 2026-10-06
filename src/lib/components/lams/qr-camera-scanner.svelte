@@ -264,15 +264,15 @@
 	{/if}
 
 	{#if stage !== 'done'}
-		<button
-			type="button"
-			class="flex items-center gap-1.5 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+		<Button
+			variant="ghost"
+			class="h-auto gap-1.5 p-0 text-xs text-muted-foreground underline underline-offset-2"
 			onclick={() => (manualOpen = !manualOpen)}
 			aria-expanded={manualOpen}
 		>
 			<Keyboard class="size-3.5" aria-hidden="true" />
 			{manualOpen ? 'Hide the manual option' : 'Camera will not work?'}
-		</button>
+		</Button>
 	{/if}
 
 	{#if manualOpen && stage !== 'done'}

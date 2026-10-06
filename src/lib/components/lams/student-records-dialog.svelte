@@ -5,6 +5,8 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import * as Select from '$lib/components/ui/select';
+	import * as Table from '$lib/components/ui/table';
 	import StatusBadge from '$lib/lams/status-badge.svelte';
 	import { Flag, TriangleAlert } from '@lucide/svelte';
 	import type { AttendanceStatus } from '$lib/lams/types';
@@ -40,6 +42,13 @@
 	}
 
 	const OVERRIDABLE: AttendanceStatus[] = ['Present', 'Late', 'Out_of_Range', 'Absent', 'Excused'];
+
+	/**
+	 * bits-ui refuses an empty (or undefined) value on a select item, so the
+	 * "Change status…" row travels through the menu as a sentinel and is mapped
+	 * back to nothing-chosen at both edges.
+	 */
+	const NO_STATUS = 'no-status';
 
 	/**
 	 * The lecturer's view of one student: totals per subject, then their
@@ -136,38 +145,38 @@
 			<div class="h-32 animate-pulse rounded-md bg-muted"></div>
 		{:else}
 			<div class="overflow-x-auto rounded-md border">
-				<table class="w-full text-sm">
-					<thead class="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-						<tr>
-							<th class="px-2 py-1.5 font-medium">Subject</th>
-							<th class="px-2 py-1.5 font-medium">Lectures</th>
-							<th class="px-2 py-1.5 font-medium">Present</th>
-							<th class="px-2 py-1.5 font-medium">Late</th>
-							<th class="px-2 py-1.5 font-medium">Absent</th>
-							<th class="px-2 py-1.5 font-medium">Attendance</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-border">
+				<Table.Root>
+					<Table.Header>
+						<Table.Row>
+							<Table.Head>Subject</Table.Head>
+							<Table.Head>Lectures</Table.Head>
+							<Table.Head>Present</Table.Head>
+							<Table.Head>Late</Table.Head>
+							<Table.Head>Absent</Table.Head>
+							<Table.Head>Attendance</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
 						{#each buckets as b (b.subjectId)}
-							<tr>
-								<td class="px-2 py-1.5 font-medium">{b.subjectCode}</td>
-								<td class="px-2 py-1.5">{b.lectures}</td>
-								<td class="px-2 py-1.5">{b.present}</td>
-								<td class="px-2 py-1.5">{b.late}</td>
-								<td class="px-2 py-1.5">{b.absent}</td>
-								<td class="px-2 py-1.5 font-semibold {b.attendPct < 75 ? 'text-amber-700' : 'text-emerald-700'}">
+							<Table.Row>
+								<Table.Cell class="font-medium">{b.subjectCode}</Table.Cell>
+								<Table.Cell>{b.lectures}</Table.Cell>
+								<Table.Cell>{b.present}</Table.Cell>
+								<Table.Cell>{b.late}</Table.Cell>
+								<Table.Cell>{b.absent}</Table.Cell>
+								<Table.Cell class="font-semibold {b.attendPct < 75 ? 'text-amber-700' : 'text-emerald-700'}">
 									{b.attendPct}%
-								</td>
-							</tr>
+								</Table.Cell>
+							</Table.Row>
 						{:else}
-							<tr>
-								<td colspan="6" class="px-2 py-4 text-center text-muted-foreground">
+							<Table.Row>
+								<Table.Cell colspan={6} class="text-center text-muted-foreground">
 									No attendance recorded yet.
-								</td>
-							</tr>
+								</Table.Cell>
+							</Table.Row>
 						{/each}
-					</tbody>
-				</table>
+					</Table.Body>
+				</Table.Root>
 			</div>
 
 			<div class="flex flex-col gap-2">
@@ -201,16 +210,28 @@
 								</p>
 							{/if}
 							<div class="flex flex-wrap items-center gap-2">
-								<select
-									class="rounded-md border border-input bg-background p-1.5 text-xs"
-									aria-label={`Change record for ${r.subjectCode}`}
-									bind:value={draft[r._id]}
+								<Select.Root
+									type="single"
+									value={draft[r._id] ?? NO_STATUS}
+									onValueChange={(v) => {
+										draft[r._id] = v === NO_STATUS ? undefined : (v as AttendanceStatus);
+									}}
 								>
-									<option value={undefined}>Change status…</option>
-									{#each OVERRIDABLE as s (s)}
-										<option value={s}>{s.replace('_', ' ')}</option>
-									{/each}
-								</select>
+									<Select.Trigger
+										size="sm"
+										aria-label={`Change record for ${r.subjectCode}`}
+									>
+										<Select.Value placeholder="Change status…" />
+									</Select.Trigger>
+									<Select.Content>
+										<Select.Group>
+											<Select.Item value={NO_STATUS}>Change status…</Select.Item>
+											{#each OVERRIDABLE as s (s)}
+												<Select.Item value={s}>{s.replace('_', ' ')}</Select.Item>
+											{/each}
+										</Select.Group>
+									</Select.Content>
+								</Select.Root>
 								<Button
 									variant="outline"
 									size="sm"

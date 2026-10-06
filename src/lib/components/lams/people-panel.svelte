@@ -11,6 +11,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Table from '$lib/components/ui/table';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { UserRoundCheck } from '@lucide/svelte';
@@ -260,13 +261,13 @@
 								</div>
 							</form>
 							<div class="flex flex-col gap-2">
-								<label class="text-xs font-medium" for="bulk">Or add many at once — one per line</label>
-								<textarea
+								<Label for="bulk">Or add many at once — one per line</Label>
+								<Textarea
 									id="bulk"
-									class="min-h-20 w-full rounded-md border border-input bg-background p-2 text-sm"
+									class="min-h-20"
 									bind:value={pasteText}
 									placeholder={'Amina Banda, BIT/2024/0123, 2024-0123\nJohn Phiri, BIT/2024/0124, 2024-0124'}
-								></textarea>
+								/>
 								<div>
 									<Button variant="secondary" size="sm" onclick={addMany} disabled={busy}>
 										Add these students

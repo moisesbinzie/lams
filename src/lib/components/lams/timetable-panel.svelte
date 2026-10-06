@@ -8,6 +8,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Select from '$lib/components/ui/select';
+	import DatePicker from '$lib/components/ui/date-picker.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
@@ -175,27 +177,33 @@
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="flex flex-col gap-1.5">
 			<Label for="cls">Class</Label>
-			<select
-				id="cls"
-				class="w-full rounded-md border border-input bg-background p-2 text-sm"
-				bind:value={classId}
-			>
-				{#each classes as c (c._id)}
-					<option value={c._id}>{c.name}</option>
-				{/each}
-			</select>
+			<Select.Root type="single" value={classId} onValueChange={(v) => (classId = v ?? '')}>
+				<Select.Trigger id="cls" class="w-full">
+					<Select.Value placeholder="Choose a class" />
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Group>
+						{#each classes as c (c._id)}
+							<Select.Item value={c._id}>{c.name}</Select.Item>
+						{/each}
+					</Select.Group>
+				</Select.Content>
+			</Select.Root>
 		</div>
 		<div class="flex flex-col gap-1.5">
 			<Label for="off">Subject</Label>
-			<select
-				id="off"
-				class="w-full rounded-md border border-input bg-background p-2 text-sm"
-				bind:value={offeringId}
-			>
-				{#each offerings as o (o._id)}
-					<option value={o._id}>{o.subjectCode} — {o.subjectTitle}</option>
-				{/each}
-			</select>
+			<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
+				<Select.Trigger id="off" class="w-full">
+					<Select.Value placeholder="Choose a subject" />
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Group>
+						{#each offerings as o (o._id)}
+							<Select.Item value={o._id}>{o.subjectCode} — {o.subjectTitle}</Select.Item>
+						{/each}
+					</Select.Group>
+				</Select.Content>
+			</Select.Root>
 		</div>
 	</div>
 
@@ -215,16 +223,25 @@
 				<form class="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]" onsubmit={addWeekly}>
 					<div class="flex flex-col gap-1">
 						<Label for="dow">Day</Label>
-						<select
-							id="dow"
-							class="w-full rounded-md border border-input bg-background p-2 text-sm"
-							bind:value={dayOfWeek}
-							onchange={checkClashes}
+						<Select.Root
+							type="single"
+							value={dayOfWeek}
+							onValueChange={(v) => {
+								dayOfWeek = v ?? '';
+								void checkClashes();
+							}}
 						>
-							{#each DAYS as d, i (d)}
-								<option value={String(i)}>{d}</option>
-							{/each}
-						</select>
+							<Select.Trigger id="dow" class="w-full">
+								<Select.Value placeholder="Choose a day" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Group>
+									{#each DAYS as d, i (d)}
+										<Select.Item value={String(i)}>{d}</Select.Item>
+									{/each}
+								</Select.Group>
+							</Select.Content>
+						</Select.Root>
 					</div>
 					<div class="flex flex-col gap-1">
 						<Label for="st">From</Label>
@@ -282,10 +299,7 @@
 					</div>
 					{#if showMakeup}
 						<form class="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]" onsubmit={addMakeup}>
-							<div class="flex flex-col gap-1">
-								<Label for="md">Date</Label>
-								<Input id="md" type="date" bind:value={makeupDate} required />
-							</div>
+							<DatePicker id="md" label="Date" bind:value={makeupDate} />
 							<div class="flex flex-col gap-1">
 								<Label for="mst">From</Label>
 								<Input id="mst" type="time" bind:value={startTime} required />
@@ -302,10 +316,10 @@
 								<Button type="submit">Add</Button>
 							</div>
 							<div class="sm:col-span-5">
-								<label class="text-xs font-medium" for="mnote">Note (optional)</label>
-								<input
+								<Label for="mnote">Note (optional)</Label>
+								<Input
 									id="mnote"
-									class="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+									class="mt-1 w-full"
 									bind:value={makeupNote}
 									placeholder="e.g. Covers the lecture missed on the 12th"
 								/>

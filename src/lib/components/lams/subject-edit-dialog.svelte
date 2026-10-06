@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Select from '$lib/components/ui/select';
 	import type { StaffRow, Subject } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 
@@ -26,6 +27,13 @@
 	let lecturerId = $state('');
 	let staff = $state<StaffRow[]>([]);
 	let busy = $state(false);
+
+	/**
+	 * bits-ui refuses an empty string as a select item's value, so "no lecturer
+	 * of record" travels through the menu as a sentinel and is mapped back to
+	 * the empty id at both edges.
+	 */
+	const NOT_SET = 'not-set';
 
 	$effect(() => {
 		if (open && subject) {
@@ -87,12 +95,25 @@
 				</div>
 				<div class="flex flex-col gap-1">
 					<Label for="sel">Lecturer of record</Label>
-					<select id="sel" class="w-full rounded-md border border-input bg-background p-2 text-sm" bind:value={lecturerId}>
-						<option value="">Not set</option>
-						{#each staff as s (s._id)}
-							<option value={s._id}>{s.fullName} ({s.username})</option>
-						{/each}
-					</select>
+					<Select.Root
+						type="single"
+						value={lecturerId || NOT_SET}
+						onValueChange={(v) => {
+							lecturerId = v === NOT_SET ? '' : (v ?? '');
+						}}
+					>
+						<Select.Trigger id="sel" class="w-full">
+							<Select.Value placeholder="Not set" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								<Select.Item value={NOT_SET}>Not set</Select.Item>
+								{#each staff as s (s._id)}
+									<Select.Item value={s._id}>{s.fullName} ({s.username})</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 				</div>
 			</div>
 			<div class="flex justify-end gap-2">

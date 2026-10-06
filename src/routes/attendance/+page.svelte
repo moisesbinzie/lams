@@ -11,6 +11,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
 	import * as Table from '$lib/components/ui/table';
+	import DatePicker from '$lib/components/ui/date-picker.svelte';
 	import StatusBadge from '$lib/lams/status-badge.svelte';
 	import { Download } from '@lucide/svelte';
 	import type { MyAttendanceRow, Semester } from '$lib/lams/types';
@@ -38,6 +39,13 @@
 	let loading = $state(true);
 	let disputing = $state<string | null>(null);
 	let disputeNote = $state('');
+
+	/**
+	 * bits-ui will not take an empty string as a select item's value, so "every
+	 * status" travels through the menu as a sentinel and is mapped back to the
+	 * empty filter at both edges.
+	 */
+	const ALL_STATUSES = 'all';
 
 	const visible = $derived(
 		rows.filter((r) => {
@@ -181,14 +189,8 @@
 							</Select.Content>
 						</Select.Root>
 					</div>
-					<div class="flex flex-col gap-1.5">
-						<Label for="from">From</Label>
-						<Input id="from" type="date" bind:value={from} onchange={load} />
-					</div>
-					<div class="flex flex-col gap-1.5">
-						<Label for="to">To</Label>
-						<Input id="to" type="date" bind:value={to} onchange={load} />
-					</div>
+					<DatePicker id="from" label="From" bind:value={from} onchange={load} />
+					<DatePicker id="to" label="To" bind:value={to} onchange={load} />
 				</div>
 				<div class="flex flex-wrap items-center gap-2">
 					<Input
@@ -197,18 +199,27 @@
 						placeholder="Search a subject or date"
 						aria-label="Search"
 					/>
-					<select
-						class="rounded-md border border-input bg-background p-2 text-sm"
-						bind:value={statusFilter}
-						aria-label="Filter by status"
+					<Select.Root
+						type="single"
+						value={statusFilter || ALL_STATUSES}
+						onValueChange={(v) => {
+							statusFilter = v === ALL_STATUSES ? '' : (v ?? '');
+						}}
 					>
-						<option value="">All statuses</option>
-						<option value="Present">On time</option>
-						<option value="Late">Late</option>
-						<option value="Out_of_Range">Out of range</option>
-						<option value="Absent">Absent</option>
-						<option value="Excused">Excused</option>
-					</select>
+						<Select.Trigger class="w-44 shrink-0" aria-label="Filter by status">
+							<Select.Value placeholder="All statuses" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								<Select.Item value={ALL_STATUSES}>All statuses</Select.Item>
+								<Select.Item value="Present">On time</Select.Item>
+								<Select.Item value="Late">Late</Select.Item>
+								<Select.Item value="Out_of_Range">Out of range</Select.Item>
+								<Select.Item value="Absent">Absent</Select.Item>
+								<Select.Item value="Excused">Excused</Select.Item>
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
 					<Button variant="outline" size="sm" onclick={exportCsv} disabled={visible.length === 0}>
 						<Download class="size-3.5" /> Download
 					</Button>
@@ -288,10 +299,9 @@
 											}}
 										>
 											<div class="flex flex-1 flex-col gap-1">
-												<label class="text-xs font-medium" for={`n-${r._id}`}>What went wrong?</label>
-												<input
+												<Label for={`n-${r._id}`}>What went wrong?</Label>
+												<Input
 													id={`n-${r._id}`}
-													class="rounded-md border border-input bg-background p-2 text-sm"
 													bind:value={disputeNote}
 													placeholder="e.g. I was not in the hall that day"
 												/>
