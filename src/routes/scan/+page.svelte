@@ -470,7 +470,7 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-6">
 	{#if viewer?.role === 'lecturer'}
 		<LecturerNav />
 	{:else if viewer?.kind === 'person'}

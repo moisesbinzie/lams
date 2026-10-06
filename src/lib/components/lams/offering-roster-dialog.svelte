@@ -136,7 +136,7 @@
 			{:else}
 				<ul class="flex flex-col divide-y divide-border rounded-md border">
 					{#each filteredRoster as r (r.personId)}
-						<li class="flex items-center justify-between gap-2 p-2 text-sm">
+						<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
 							<span>
 								<strong>{r.fullName}</strong>
 								<span class="block text-xs text-muted-foreground">
@@ -163,7 +163,7 @@
 						<p class="mb-1 text-sm font-medium">In {className}, not taking this subject</p>
 						<ul class="flex flex-col divide-y divide-border rounded-md border">
 							{#each filteredClassCandidates as c (c._id)}
-								<li class="flex items-center justify-between gap-2 p-2 text-sm">
+								<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
 									<span>
 										{c.fullName}
 										<span class="block text-xs text-muted-foreground">{c.regNumber}</span>
@@ -186,7 +186,7 @@
 						</p>
 						<ul class="flex flex-col divide-y divide-border rounded-md border">
 							{#each filteredOtherCandidates as c (c._id)}
-								<li class="flex items-center justify-between gap-2 p-2 text-sm">
+								<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
 									<span>
 										{c.fullName}
 										<span class="block text-xs text-muted-foreground">

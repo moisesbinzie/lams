@@ -176,7 +176,7 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-6">
 	<div class="flex flex-col items-center gap-2 pt-4 text-center">
 		<img src="/lams-logo.png" alt="LAMS" class="size-16 rounded-xl" />
 		<h1 class="text-2xl font-bold text-lams-navy">
@@ -245,7 +245,7 @@
 		<Card.Root>
 			<Card.Content class="pt-6">
 				{#if mode === 'staff'}
-					<form class="flex flex-col gap-4" onsubmit={staffSignIn}>
+					<form class="flex flex-col gap-6" onsubmit={staffSignIn}>
 						<div class="flex flex-col gap-1.5">
 							<Label for="un">Username</Label>
 							<Input id="un" bind:value={username} autocomplete="username" required />
@@ -267,7 +267,7 @@
 						</p>
 					</form>
 				{:else if mode === 'person'}
-					<form class="flex flex-col gap-4" onsubmit={personSignIn}>
+					<form class="flex flex-col gap-6" onsubmit={personSignIn}>
 						<div class="flex flex-col gap-1.5">
 							<Label for="reg">Registration number</Label>
 							<Input id="reg" bind:value={regNumber} placeholder="e.g. BIT/2024/0123" required />
@@ -279,7 +279,7 @@
 						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
 					</form>
 				{:else}
-					<form class="flex flex-col gap-4" onsubmit={activate}>
+					<form class="flex flex-col gap-6" onsubmit={activate}>
 						<div class="flex flex-col gap-1.5">
 							<Label for="areg">Registration number</Label>
 							<Input id="areg" bind:value={regNumber} placeholder="e.g. BIT/2024/0123" required />

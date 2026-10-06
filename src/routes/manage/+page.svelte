@@ -50,7 +50,7 @@
 	] as const;
 </script>
 
-<div class="mx-auto flex w-full max-w-3xl flex-col gap-4">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
 	<div class="flex items-center gap-3">
 		<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
 		<div>

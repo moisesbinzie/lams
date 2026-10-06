@@ -148,7 +148,7 @@
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
-					<form class="grid gap-3 sm:grid-cols-3" onsubmit={saveDetails}>
+					<form class="grid gap-4 sm:grid-cols-3" onsubmit={saveDetails}>
 						<div class="flex flex-col gap-1.5">
 							<Label for="fn">Full name</Label>
 							<Input id="fn" bind:value={fullName} required />
@@ -186,7 +186,7 @@
 			state would only ever have applied at a viewport width the content never
 			sees.
 		-->
-		<div class="grid gap-3 sm:grid-cols-2">
+		<div class="grid gap-4 sm:grid-cols-2">
 			<Button
 				href="/scanner"
 				size="lg"

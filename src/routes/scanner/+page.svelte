@@ -32,7 +32,7 @@
 		camera viewfinder is a square, and at the full page width it would be
 		~740 px tall on a desktop, pushing the instructions below the fold.
 	-->
-	<div class="mx-auto flex w-full max-w-md flex-col gap-4">
+	<div class="mx-auto flex w-full max-w-md flex-col gap-6">
 		<div class="text-center">
 			<h1 class="text-2xl font-bold text-lams-navy">Scan attendance</h1>
 			<p class="text-sm text-muted-foreground">

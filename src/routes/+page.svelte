@@ -244,7 +244,7 @@
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<ul class="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+				<ul class="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
 						<span

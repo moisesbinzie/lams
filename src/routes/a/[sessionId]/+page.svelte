@@ -267,7 +267,7 @@
 		and heading line up across tabs, and the scan flow itself is a narrow
 		centred column — it is read on a phone, one-handed, in a hall.
 	-->
-	<div class="mx-auto flex w-full max-w-md flex-col gap-4">
+	<div class="mx-auto flex w-full max-w-md flex-col gap-6">
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">
 			{#if preview}

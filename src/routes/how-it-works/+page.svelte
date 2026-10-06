@@ -226,7 +226,7 @@
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<ul class="grid gap-3 sm:grid-cols-2">
+				<ul class="grid gap-4 sm:grid-cols-2">
 					{#each statuses as s (s.label)}
 						<li class="flex items-start gap-3 rounded-lg border border-border p-3">
 							<s.icon class="mt-0.5 size-5 shrink-0 text-lams-navy" aria-hidden="true" />
@@ -289,7 +289,7 @@
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<ul class="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+				<ul class="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
 					{#each [
 						{ head: 'The screen keeps changing.', body: 'The barcode holds a code that changes every 10 seconds, so a photograph of it stops working almost immediately. There is nothing useful to send to someone at home.' },
 						{ head: 'Your phone says where it is.', body: 'It reports its own position at the moment you scan, so being in the hall is checked by your handset rather than by somebody else’s.' },
@@ -322,7 +322,7 @@
 			<Card.Header>
 				<Card.Title id="roles-h" class="text-lg">Who does what</Card.Title>
 			</Card.Header>
-			<Card.Content class="grid gap-3 sm:grid-cols-3">
+			<Card.Content class="grid gap-4 sm:grid-cols-3">
 				{#each roles as role (role.who)}
 					<div class="rounded-lg border border-border p-3">
 						<p class="flex items-center gap-2 text-sm font-semibold text-lams-navy">

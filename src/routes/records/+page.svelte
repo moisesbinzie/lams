@@ -170,7 +170,7 @@
 	});
 </script>
 
-<div class="mx-auto flex w-full max-w-3xl flex-col gap-4">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
 	{#if role === 'lecturer'}
 		<LecturerNav />
 	{/if}
@@ -187,7 +187,7 @@
 	{#if loading}
 		<p class="text-sm text-muted-foreground">Loading…</p>
 	{:else}
-		<div class="grid gap-3 sm:grid-cols-2">
+		<div class="grid gap-4 sm:grid-cols-2">
 			<div class="flex flex-col gap-1.5">
 				<Label for="cls">Class</Label>
 				<Select.Root type="single" value={classId} onValueChange={(v) => (classId = v ?? '')}>
@@ -227,7 +227,7 @@
 				</Card.Content>
 			</Card.Root>
 		{:else}
-			<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
 				<div class="rounded-md border border-border p-3 text-center">
 					<p class="text-2xl font-bold">{totalLectures}</p>
 					<p class="text-xs text-muted-foreground">Lectures taken</p>

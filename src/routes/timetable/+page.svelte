@@ -71,7 +71,7 @@
 			</Card.Content>
 		</Card.Root>
 	{:else}
-		<div class="grid gap-3 md:grid-cols-2">
+		<div class="grid gap-4 md:grid-cols-2">
 			{#each byDay as group (group.day)}
 				<Card.Root>
 					<Card.Header>

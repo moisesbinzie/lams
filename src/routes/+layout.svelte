@@ -168,7 +168,7 @@
 			</div>
 		</div>
 	</header>
-	<main class="mx-auto w-full max-w-3xl min-w-0 flex-1 px-4 py-6">{@render children()}</main>
+	<main class="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col gap-6 px-4 py-8">{@render children()}</main>
 	<footer class="print-hide border-t border-border">
 		<div
 			class="mx-auto flex max-w-3xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left"

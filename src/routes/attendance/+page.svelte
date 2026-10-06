@@ -150,7 +150,7 @@
 				Four columns, not six: the site column is 768 px, so a six-column
 				state would give these ~118 px cells and never actually apply.
 			-->
-			<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
 				<div class="rounded-md border border-border p-3 text-center">
 					<p class="text-2xl font-bold text-emerald-700">{summary.attendPct}%</p>
 					<p class="text-xs text-muted-foreground">Attendance</p>
@@ -173,7 +173,7 @@
 				<Card.Description>Check one semester, one month, or one week.</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-3">
-				<div class="grid gap-3 sm:grid-cols-3">
+				<div class="grid gap-4 sm:grid-cols-3">
 					<div class="flex flex-col gap-1.5">
 						<Label for="sem">Semester</Label>
 						<Select.Root
