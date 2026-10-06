@@ -5,7 +5,15 @@
 // in-page strip renders what is left. Two hand-maintained copies would drift
 // the first time a page is added.
 
-import { BarChart3, BookOpen, CalendarDays, ScanLine, UserRound } from '@lucide/svelte';
+import {
+	BarChart3,
+	BookOpen,
+	CalendarDays,
+	ScanLine,
+	Settings,
+	Settings2,
+	UserRound
+} from '@lucide/svelte';
 
 export interface StudentNavItem {
 	href: string;
@@ -27,4 +35,18 @@ export const STUDENT_NAV: StudentNavItem[] = [
 	{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
 	{ href: '/attendance', label: 'Attendance', icon: BarChart3 },
 	{ href: '/courses', label: 'Subjects', icon: BookOpen }
+];
+
+/**
+ * Where a lecturer can go. Same shape as {@link STUDENT_NAV} on purpose: the
+ * lecturer strip (`lecturer-nav.svelte`) is the desktop header's twin for
+ * narrow screens, so the two lists must offer the same destinations in the
+ * same order. `How it works` stays in the chrome (header on desktop, footer
+ * everywhere), exactly like the student strip.
+ */
+export const LECTURER_NAV: StudentNavItem[] = [
+	{ href: '/manage', label: 'Set up', icon: Settings2 },
+	{ href: '/scan', label: 'Take attendance', icon: ScanLine },
+	{ href: '/records', label: 'Records', icon: BarChart3 },
+	{ href: '/settings', label: 'Settings', icon: Settings }
 ];

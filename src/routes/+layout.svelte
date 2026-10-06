@@ -40,8 +40,15 @@
 	 * six-pill row in this bar, which made the top of every page read as a tab
 	 * strip and buried the one control a student actually opens in a lecture.
 	 * They now live in an in-page strip (`StudentNav`, from `$lib/lams/nav`) at
-	 * the top of the student pages, and this bar keeps only what belongs to the
-	 * chrome: where you are, how it works, and how to leave.
+	 * the top of the student pages. Lecturers get the same treatment: their
+	 * section links live in an in-page strip (`LecturerNav`) on the lecturer
+	 * pages, because on a phone this bar has no room for five pills.
+	 *
+	 * Concretely: below `sm` this bar shows only the logo and the sign-in
+	 * state — a single row, nothing scrollable — and the page body carries the
+	 * navigation for both roles. On `sm` and up the bar also shows the pill
+	 * row, which scrolls internally (`overflow-x-auto` inside its own box, so
+	 * it can never widen the page itself).
 	 *
 	 * Icons are for scanning the row at a glance and are dropped below `sm`,
 	 * where the labels alone are tight enough on width.
@@ -90,7 +97,7 @@
 
 <div class="flex min-h-screen flex-col bg-background text-foreground">
 	<header class="print-hide sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-		<div class="mx-auto flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+		<div class="mx-auto flex max-w-3xl items-center gap-x-3 gap-y-2 px-4 py-2.5">
 			<a href={homeHref} class="flex shrink-0 items-center gap-3" aria-label="LAMS home">
 				<img src="/lams-logo.png" alt="" class="size-10 rounded-lg" />
 				<span class="leading-tight">
@@ -101,7 +108,7 @@
 				</span>
 			</a>
 
-			<div class="order-last flex w-full items-center gap-2 sm:order-none sm:w-auto sm:flex-1 sm:justify-end">
+			<div class="flex min-w-0 flex-1 items-center justify-end gap-2">
 				{#if status === 'checking' || status === 'unavailable'}
 					<span class="flex flex-1 items-center gap-2 sm:flex-none">
 						<span class="h-9 w-full animate-pulse rounded-full bg-muted sm:w-36" aria-hidden="true"
@@ -113,12 +120,20 @@
 						{/if}
 					</span>
 				{:else}
-					<!-- The links scroll on narrow screens; the auth button sits outside
-					     that container so Sign out can never scroll away from the top. -->
-					<div class="relative min-w-0 flex-1 sm:flex-none">
+					<!--
+						Desktop only. On a phone this pill row is hidden and the
+						page body carries the navigation instead (`StudentNav` /
+						`LecturerNav`), so the header stays a single row with
+						nothing scrollable in it. The row keeps `overflow-x-auto`
+						for the lecturer's five pills, which are wider than the
+						space left of the auth button — but that scroll is
+						contained in this box (`min-w-0` + `max-w-full`) and can
+						never widen the page itself.
+					-->
+					<div class="relative hidden min-w-0 max-w-full flex-1 sm:block">
 						<nav
 							aria-label="Main"
-							class="nav-scroll flex items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-1"
+							class="nav-scroll flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted p-1"
 						>
 							{#each nav as item (item.href)}
 								<a
@@ -135,11 +150,13 @@
 								</a>
 							{/each}
 						</nav>
-						<!-- Fades the right edge so a scrollable row looks scrollable. -->
-						<div
-							class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent sm:hidden"
-							aria-hidden="true"
-						></div>
+						{#if nav.length > 2}
+							<!-- Fades the right edge so a scrollable row looks scrollable. -->
+							<div
+								class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent"
+								aria-hidden="true"
+							></div>
+						{/if}
 					</div>
 
 					{#if me}
@@ -151,7 +168,7 @@
 			</div>
 		</div>
 	</header>
-	<main class="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{@render children()}</main>
+	<main class="mx-auto w-full max-w-3xl min-w-0 flex-1 px-4 py-6">{@render children()}</main>
 	<footer class="print-hide border-t border-border">
 		<div
 			class="mx-auto flex max-w-3xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left"

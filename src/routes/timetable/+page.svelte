@@ -110,7 +110,13 @@
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
-					<Table.Root>
+					<!--
+						The scroll box matters: without it this table's nowrap
+						cells are wider than a phone column and would push the
+						whole page sideways instead of scrolling in place.
+					-->
+					<div class="overflow-x-auto rounded-md border">
+						<Table.Root>
 						<Table.Header>
 							<Table.Row>
 								<Table.Head>Date</Table.Head>
@@ -132,7 +138,8 @@
 								</Table.Row>
 							{/each}
 						</Table.Body>
-					</Table.Root>
+						</Table.Root>
+					</div>
 				</Card.Content>
 			</Card.Root>
 		{/if}

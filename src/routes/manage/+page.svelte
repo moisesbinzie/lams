@@ -7,6 +7,7 @@
 	import { getToken } from '$lib/lams/auth';
 	import { Button } from '$lib/components/ui/button';
 	import * as Tabs from '$lib/components/ui/tabs';
+	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
 	import SetupPanel from '$lib/components/lams/setup-panel.svelte';
 	import PeoplePanel from '$lib/components/lams/people-panel.svelte';
 	import SubjectsPanel from '$lib/components/lams/subjects-panel.svelte';
@@ -61,6 +62,7 @@
 	</div>
 
 	{#if role === 'lecturer'}
+		<LecturerNav />
 		<Tabs.Root value="setup">
 			<Tabs.List class="h-auto flex-wrap justify-start gap-1">
 				{#each tabs as t (t.key)}

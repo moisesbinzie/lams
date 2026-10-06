@@ -180,6 +180,34 @@
 	display: none;
 }
 
+/* ---- No page-level horizontal scroll ------------------------------------
+   Every surface that can outgrow a phone (report tables, the desktop nav row)
+   scrolls inside its own `overflow-x-auto` box. These guards make sure a wide
+   child can never force the *page* itself wider than the viewport instead:
+
+   - `overflow-x: clip` on the root stops sideways page scroll without
+     creating a scroll container (so `position: sticky` keeps working).
+     `clip` is unsupported on very old browsers, hence the `hidden` fallback.
+   - Replaced elements (station QR, camera viewfinder, logos) cap at the
+     column width rather than their intrinsic pixels. */
+html,
+body {
+	overflow-x: clip;
+}
+
+@supports not (overflow: clip) {
+	html,
+	body {
+		overflow-x: hidden;
+	}
+}
+
+img,
+video,
+canvas {
+	max-width: 100%;
+}
+
 /* Fullscreen QR presentation for the lecture room */
 .qr-panel:fullscreen {
 	display: flex;

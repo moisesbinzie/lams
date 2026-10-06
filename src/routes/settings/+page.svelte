@@ -13,6 +13,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
 	import type { StaffRow } from '$lib/lams/types';
+	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = getToken();
@@ -130,6 +131,7 @@
 	{#if loading}
 		<p class="text-sm text-muted-foreground">Loading…</p>
 	{:else if me?.role === 'lecturer'}
+		<LecturerNav />
 		<Card.Root>
 			<Card.Header>
 				<Card.Title>Change your password</Card.Title>

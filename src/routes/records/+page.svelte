@@ -16,6 +16,7 @@
 	import { Download, Printer } from '@lucide/svelte';
 	import { printElement } from '$lib/lams/print';
 	import StudentRecordsDialog from '$lib/components/lams/student-records-dialog.svelte';
+	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
 	import type { ClassRow, Offering, ReportRow, Semester } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
@@ -31,6 +32,9 @@
 	let offeringId = $state('');
 	let search = $state('');
 	let loading = $state(true);
+	// Gates the in-page section strip: students who land here see the toast
+	// below and no lecturer navigation.
+	let role = $state('');
 
 	let belowPct = $derived(rows.filter((r) => r.attendPct < 75).length);
 	const average = $derived(
@@ -64,6 +68,7 @@
 				loading = false;
 				return;
 			}
+			role = me.role;
 			[classes, semesters] = await Promise.all([
 				client.query(api.academics.listClasses, { token }) as Promise<ClassRow[]>,
 				client.query(api.academics.listSemesters, { token }) as Promise<Semester[]>
@@ -166,6 +171,9 @@
 </script>
 
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-4">
+	{#if role === 'lecturer'}
+		<LecturerNav />
+	{/if}
 	<div class="flex items-center gap-3">
 		<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
 		<div>

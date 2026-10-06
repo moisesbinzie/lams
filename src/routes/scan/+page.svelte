@@ -29,9 +29,20 @@
 	} from '@lucide/svelte';
 	import type { AttendanceRecord, LectureSession, StationFeed } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import { sessionMe } from '$lib/lams/session.svelte';
+	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
+	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
 	let token = $state('');
 	let sessions = $state<LectureSession[]>([]);
+	/**
+	 * This screen is shared: lecturers open it from their console and class
+	 * reps from the station job. The in-page strip follows the viewer — the
+	 * lecturer sections for staff, the student's own sections for a rep, who
+	 * otherwise has no way back to their account once the top bar drops its
+	 * links on a phone.
+	 */
+	const viewer = $derived(sessionMe());
 	let live = $state<StationFeed | null>(null);
 	let records = $state<AttendanceRecord[]>([]);
 	let busy = $state(false);
@@ -460,6 +471,11 @@
 </script>
 
 <div class="flex flex-col gap-4">
+	{#if viewer?.role === 'lecturer'}
+		<LecturerNav />
+	{:else if viewer?.kind === 'person'}
+		<StudentNav />
+	{/if}
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">Take attendance</h1>
 		<p class="text-sm text-muted-foreground">
@@ -697,7 +713,7 @@
 				<img
 					src={qrImg}
 					alt="Attendance QR code for this lecture"
-					class="rounded-lg bg-white {fullscreen ? 'max-h-[55vh] w-auto' : 'size-80 max-w-full'}"
+					class="rounded-lg bg-white {fullscreen ? 'max-h-[55vh] w-auto' : 'h-auto w-80 max-w-full'}"
 				/>
 				<p class="text-center">
 					<span class="block text-4xl font-bold tracking-[0.3em] text-lams-navy">{stationCode}</span>
