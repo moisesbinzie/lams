@@ -139,11 +139,18 @@
 		busy = true;
 		try {
 			const client = requireConvexClient();
-			await client.mutation(api.people.activate, {
+			const activated = await client.mutation(api.people.activate, {
 				regNumber: regNumber.trim(),
 				studentId: studentId.trim(),
 				pin: pin.trim()
 			});
+			// Wrong details are answered, not thrown, so they land here. Staying
+			// on the form with the server's own sentence is the useful response:
+			// the registration number or the student ID is the thing to fix.
+			if (!activated.ok) {
+				toast.error(activated.message);
+				return;
+			}
 			// Straight to sign-in so the new PIN is proven to work.
 			mode = 'person';
 			const createdPin = pin.trim();
@@ -296,16 +303,25 @@
 					</form>
 				{/if}
 
-				<div class="mt-4 flex flex-wrap justify-center gap-3 border-t border-border pt-4 text-center">
-					{#if mode === 'person'}
-						<Button
-							variant="link"
-							class="h-auto p-0"
-							onclick={() => { mode = 'activate'; resetMessages(); }}
-						>
-							First time here? Set up your account
-						</Button>
-					{/if}
+				<!--
+					"First time here?" was a link-sized button sharing a row with
+					"Back", which is where a brand-new student has to look for the
+					one control that gets them into the system at all. It is now a
+					full-width button of its own, sitting above the way back so the
+					two are not read as a pair of equally-weighted links.
+				-->
+				{#if mode === 'person'}
+					<Button
+						variant="outline"
+						size="lg"
+						class="mt-4 w-full border-lams-green/50 text-lams-navy"
+						onclick={() => { mode = 'activate'; resetMessages(); }}
+					>
+						First time here? Set up your account
+					</Button>
+				{/if}
+
+				<div class="mt-3 border-t border-border pt-3 text-center">
 					<Button
 						variant="link"
 						class="h-auto p-0"

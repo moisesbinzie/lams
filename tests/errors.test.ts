@@ -32,6 +32,37 @@ describe('explainError', () => {
 		);
 	});
 
+	// The real thing, captured from the dev deployment via the same client the
+	// browser uses. The request id sits between the function tag and the error
+	// line, and it used to stop the stripping dead: "Server Error" survived at
+	// the front, the phrase table answered for the whole frame, and a student
+	// who mistyped their student ID was told the server was busy updating.
+	it('keeps the server sentence from a real frame that carries a request id', () => {
+		const frame = new Error(
+			[
+				'[CONVEX M(people:activate)] [Request ID: 7e1941e658868a5f] Server Error',
+				'Uncaught Error: Those details do not match our records. Check them with your lecturer.',
+				'    at reject (../src/convex/people.ts:181:17)',
+				'    at async handler (../src/convex/people.ts:186:13)',
+				'',
+				'  Called by client'
+			].join('\n')
+		);
+		assert.equal(
+			explainError(frame),
+			'Those details do not match our records. Check them with your lecturer.'
+		);
+		assert.doesNotMatch(explainError(frame), /busy updating/);
+	});
+
+	it('still has nothing to say for a frame with a request id and no message', () => {
+		// A production deployment redacts the server's sentence; the caller's own
+		// fallback is the honest answer, and "Called by client" never is.
+		assert.equal(explainError(new Error('[CONVEX M(x)] [Request ID: abc123] Server Error\nCalled by client')), '');
+		assert.equal(explainError(new Error('Called by client')), '');
+		assert.equal(explainError(new Error('[CONVEX M(x)] [Request ID: abc123] Server Error')), '');
+	});
+
 	it('returns nothing for a bare Convex frame with no message', () => {
 		// Nothing a person can read, so the caller falls back rather than
 		// rendering an empty toast.
@@ -115,6 +146,24 @@ describe('isNotEnrolled', () => {
 			isNotEnrolled(explainError(new Error('[CONVEX M(attendance:submitStationScan)] Server Error You are not enrolled in this subject.'))),
 			true
 		);
+	});
+
+	// The frame shape that actually reaches the browser carries a request id and
+	// a newline before the sentence. Before that tag was stripped, explainError
+	// answered "The server is busy updating…" for it, so this check never matched
+	// and the one refusal a student can fix themselves — go and join the subject
+	// — was never offered the route to /courses.
+	it('recognises the enrolment refusal from a real request-id frame', () => {
+		const frame = new Error(
+			[
+				'[CONVEX M(attendance:submitStationScan)] [Request ID: 1a2b3c4d5e6f] Server Error',
+				'Uncaught Error: You are not enrolled in this subject.',
+				'    at handler (../src/convex/attendance.ts:434:9)',
+				'',
+				'  Called by client'
+			].join('\n')
+		);
+		assert.equal(isNotEnrolled(explainError(frame)), true);
 	});
 
 	it('recognises the hand-add refusal, which names the student', () => {

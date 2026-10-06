@@ -39,7 +39,22 @@ const WRAPPERS = [
 	/^Server\s+Error:\s*/i,
 	/^Error:\s*/i,
 	/^\[CONVEX\s+[A-Za-z]+\([^\]]*\)\]\s*/i,
-	/^\[CONVEX[^\]]*\]\s*/i
+	/^\[CONVEX[^\]]*\]\s*/i,
+	// A request id sits between the function tag and the error line on a real
+	// frame:
+	//
+	//   [CONVEX M(people:activate)] [Request ID: 7e19…] Server Error
+	//   Uncaught Error: Those details do not match our records. Check them …
+	//       at reject (../src/convex/people.ts:181:17)
+	//
+	// Without this the front never reaches `Server Error`, stripping stops
+	// there, and the phrase table below answers for the whole frame — which is
+	// how a student who mistyped their student ID was told "The server is busy
+	// updating. Please try again in a moment." (2026-10-06) while the sentence
+	// written for them sat one line further down the same message.
+	/^\[Request\s+ID:[^\]]*\]\s*/i,
+	// Any other bracket tag Convex may put in front of the error line.
+	/^\[[^\]\n]{1,64}\]\s*/
 ];
 
 /**
@@ -127,6 +142,11 @@ function tidy(raw: string): string {
 	if (/^\s*\[?CONVEX\b|^\s*WebSocket\b|^\s*Fetch failed|^\s*Load failed/i.test(message)) {
 		return '';
 	}
+	// Convex's own boilerplate, which is not a sentence. Reaching here with it
+	// means the server's message was absent (a production deployment redacts it)
+	// or was already stripped, so the caller's fallback — "Could not load.",
+	// "Could not sign you in." — is a better answer than "Called by client".
+	if (/^(?:Called by client|Server Error)\b/i.test(message)) return '';
 
 	// Multi-line server traces read as a crash report. Keep the first sentence:
 	// it is the part written for a human.

@@ -17,10 +17,8 @@ import {
 const roleValidator = v.union(v.literal('student'), v.literal('rep'), v.literal('lecturer'));
 
 /** PINs are 4–8 digits; short enough to type in a lecture, long enough to matter. */
-function validatePin(pin: string): string {
-	const trimmed = pin.trim();
-	if (!/^\d{4,8}$/.test(trimmed)) throw new Error('PIN must be 4 to 8 digits.');
-	return trimmed;
+function isPinFormat(pin: string): boolean {
+	return /^\d{4,8}$/.test(pin.trim());
 }
 
 // ---------------------------------------------------------- class membership
@@ -160,6 +158,12 @@ export const importPeople = mutation({
  * First sign-in. Claims an `invited` record by proving both identities, then
  * sets the PIN. The two-factor requirement is what stops someone else claiming
  * an account from a guessable registration number alone.
+ *
+ * Refusals are answered rather than thrown, exactly as in `login` below: a
+ * student who mistyped their student ID is an everyday event, and throwing it
+ * logged an uncaught server error per attempt (2026-10-06) while telling the
+ * person nothing the sentence did not already say. Every failed attempt is still
+ * counted by `refuse`, so the lockout and the `authAttempts` trail are unchanged.
  */
 export const activate = mutation({
 	args: { regNumber: v.string(), studentId: v.string(), pin: v.string() },
@@ -173,26 +177,37 @@ export const activate = mutation({
 			.withIndex('by_key', (q) => q.eq('key', `act:${regNorm}`))
 			.unique();
 		if (isBlocked(ctx, limiter)) {
-			throw new Error('Too many attempts. Please wait 15 minutes and try again.');
+			return {
+				ok: false as const,
+				message: 'Too many attempts. Please wait 15 minutes and try again.'
+			};
 		}
 
 		const person = await ctx.db.query('people').withIndex('by_reg', (q) => q.eq('regNorm', regNorm)).unique();
 		// One message for every failure: do not confirm which half was wrong,
 		// or whether the registration number exists at all.
-		const reject = async (message: string): Promise<never> => {
+		const MISMATCH = 'Those details do not match our records. Check them with your lecturer.';
+		const refuse = async (message: string) => {
 			await noteFailure(ctx, `act:${regNorm}`);
-			throw new Error(message);
+			return { ok: false as const, message };
 		};
-		if (!person) return await reject('Those details do not match our records. Check them with your lecturer.');
+		if (!person) return await refuse(MISMATCH);
 		if (person.status === 'blocked') {
-			throw new Error('Your access has been suspended. Please see your lecturer.');
+			return { ok: false as const, message: 'Your access has been suspended. Please see your lecturer.' };
 		}
-		if (person.status === 'active') return await reject('Those details do not match our records. Check them with your lecturer.');
+		if (person.status === 'active') return await refuse(MISMATCH);
 		if (person.idNorm !== idNorm) {
-			return await reject('Those details do not match our records. Check them with your lecturer.');
+			return await refuse(MISMATCH);
 		}
-		const pin = validatePin(args.pin);
-		if (/^(\d)\1+$/.test(pin)) throw new Error('Choose a PIN that is not all the same digit.');
+		// The last two refusals are about the PIN the person just chose, so they
+		// are worded as instructions rather than as a rejection of their details.
+		const pin = args.pin.trim();
+		if (!isPinFormat(pin)) {
+			return { ok: false as const, message: 'PIN must be 4 to 8 digits.' };
+		}
+		if (/^(\d)\1+$/.test(pin)) {
+			return { ok: false as const, message: 'Choose a PIN that is not all the same digit.' };
+		}
 		const salt = randomSalt();
 		const pinHash = await hashPin(pin, salt);
 		await ctx.db.patch(person._id, {
@@ -208,7 +223,7 @@ export const activate = mutation({
 			activatedAt: Date.now()
 		});
 		await noteSuccess(ctx, `act:${regNorm}`);
-		return { ok: true, fullName: person.fullName, regNumber: person.regNumber };
+		return { ok: true as const, fullName: person.fullName, regNumber: person.regNumber };
 	}
 });
 
