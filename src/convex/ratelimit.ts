@@ -29,6 +29,17 @@ const BLOCK_MS = 15 * 60 * 1000;
  */
 export const STATION_LIMITS = { windowMs: 5 * 60 * 1000, maxAttempts: 40, blockMs: 5 * 60 * 1000 };
 
+/**
+ * Limits for *asking* for the current code rather than guessing at it.
+ *
+ * A separate budget on purpose, and keyed separately: the point of this endpoint
+ * is that a student whose scan went stale can recover silently, and a recovery
+ * that spends the same budget as a wrong guess would let a couple of fumbled
+ * camera attempts lock a student out of their own lecture. Generous enough for a
+ * retry or two per scan, far too tight to be a useful way to harvest codes.
+ */
+export const CODE_FETCH_LIMITS = { windowMs: 5 * 60 * 1000, maxAttempts: 60, blockMs: 5 * 60 * 1000 };
+
 export interface RateLimits {
 	windowMs?: number;
 	maxAttempts?: number;

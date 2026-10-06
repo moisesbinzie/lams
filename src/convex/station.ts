@@ -1,14 +1,15 @@
 // The stationary station code.
 //
 // The QR at the front of the hall stays in the same place all lecture, but the
-// code inside it does not: a fresh six-digit code every 30 seconds, derived
+// code inside it does not: a fresh six-digit code every 10 seconds, derived
 // from a secret minted when the session opened. A student who scans it with
 // their own phone establishes two things at once:
 //
 //   - they saw this screen as it is right now. A photograph of it is worthless
-//     within the minute, so it cannot be sent to an absentee abroad and cashed
-//     in later — which is exactly what the old "show your own code to the rep"
-//     flow could not stop, because that code stayed valid for the whole window.
+//     within half a minute, so it cannot be sent to an absentee abroad and
+//     cashed in later — which is exactly what the old "show your own code to
+//     the rep" flow could not stop, because that code stayed valid for the
+//     whole window.
 //   - their own handset reports where they are, so presence is judged from the
 //     student's phone instead of being a proxy from the class rep's.
 //
@@ -29,7 +30,7 @@
 // The identical algorithm lives in `src/lib/lams/station.ts` for the display
 // side; the two must stay in step, so both are covered by tests.
 
-export const STATION_PERIOD_SEC = 30;
+export const STATION_PERIOD_SEC = 10;
 
 /**
  * Slots of drift accepted either side of "now".
@@ -39,7 +40,12 @@ export const STATION_PERIOD_SEC = 30;
  * does the verifying. A cheap Android handset whose clock drifts by half a
  * minute would otherwise see every scan refused. One slot of slack either way
  * buys that back, at the cost of a photographed code staying usable for up to
- * 90 seconds — short enough to be useless to someone who has to travel.
+ * three periods.
+ *
+ * That cost is why the period is 10 seconds and not longer: at 30 the same
+ * window made a photo good for 90 seconds, which is long enough to leave the
+ * room with. At 10 it is about 30 seconds, while the slack is still a full
+ * period on each side — so the skew tolerance is unchanged.
  */
 export const STATION_WINDOW = 1;
 

@@ -110,6 +110,12 @@
 									<p class="text-sm font-semibold">{e.subjectCode} — {e.subjectTitle}</p>
 									<p class="text-xs text-muted-foreground">
 										{e.semesterName}
+										<!--
+											The class is shown because a repeating student takes a
+											subject from a class that is not their own cohort, and
+											the row has to say which one it came from.
+										-->
+										{#if e.className}· {e.className}{/if}
 										{#if e.meetings.length > 0}
 											· meets {e.meetings.map((m) => (m.kind === 'weekly' ? m.startTime : m.date)).join(', ')}
 										{/if}
@@ -135,7 +141,8 @@
 			<Card.Header>
 				<Card.Title>Available to join</Card.Title>
 				<Card.Description>
-					Your lecturer opens a subject for self-enrolment. If something is missing, ask them.
+					Subjects your lecturer has opened, from every class you belong to — including a junior class
+					you are repeating a subject with. If something is missing, ask them.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>

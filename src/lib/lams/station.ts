@@ -8,7 +8,7 @@
 // means the screen refreshes on a timer with no network round trip — it keeps
 // working in exactly the lecture halls where the signal is worst.
 
-export const STATION_PERIOD_SEC = 30;
+export const STATION_PERIOD_SEC = 10;
 
 /** Kept in step with the server's window so both sides agree on what is stale. */
 export const STATION_WINDOW = 1;
@@ -56,6 +56,47 @@ export function secondsRemaining(nowMs: number): number {
 export function buildStationUrl(appUrl: string, sessionId: string, code: string): string {
 	const base = appUrl.replace(/\/$/, '');
 	return `${base}/a/${sessionId}?c=${code}`;
+}
+
+/** A station QR that has been read back in. */
+export interface ScannedStation {
+	sessionId: string;
+	code: string;
+}
+
+/**
+ * Read a scanned QR back into the lecture it points at.
+ *
+ * This is the inverse of `buildStationUrl`, and deliberately strict: a phone
+ * camera will happily read a poster, a bus ticket or a screenshot of an old
+ * lecture, so anything that is not one of our own attendance links has to be
+ * rejected here rather than surfacing later as a confusing server error.
+ *
+ * `base` is optional so the station can be read on any host — the deployed URL
+ * and a localhost one both resolve, which matters when the same poster is
+ * printed once and used from a laptop on the day.
+ */
+export function parseStationUrl(raw: string, base?: string): ScannedStation | null {
+	let url: URL;
+	try {
+		url = new URL(raw, base ?? 'https://placeholder.invalid');
+	} catch {
+		return null;
+	}
+	if (base && url.origin !== new URL(base).origin) return null;
+
+	const match = /^\/a\/([^/]+)\/?$/.exec(url.pathname);
+	if (!match) return null;
+	const sessionId = decodeURIComponent(match[1]);
+	if (!sessionId) return null;
+
+	// Six digits is what the station renders. A missing or differently shaped
+	// code means this is not a live station QR, so it is not worth walking the
+	// student to a page that can only fail.
+	const code = url.searchParams.get('c') ?? '';
+	if (!/^\d{6}$/.test(code)) return null;
+
+	return { sessionId, code };
 }
 
 const PENDING_KEY = 'lams_pending_scan';

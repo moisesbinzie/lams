@@ -144,3 +144,23 @@ function tidy(raw: string): string {
 export function errorMessage(err: unknown, fallback: string): string {
 	return explainError(err) || fallback;
 }
+
+/**
+ * Whether a failure was the server refusing a scan because the caller is not
+ * taking that subject.
+ *
+ * A scan is already gated by enrolment on the server — `submitStationScan`
+ * checks the enrolment itself and is the authority, not this. What the check
+ * buys is the *response*: "not enrolled" is the one refusal a student can fix
+ * on their own, so it is told apart from the terminal ones (a stale code, a
+ * station out of its room) and answered with a route to `/courses` instead of a
+ * dead end.
+ *
+ * Matched on the server's own wording rather than a code, because Convex
+ * carries thrown messages as prose. The regex is deliberately loose: it must
+ * keep working if the sentence around the phrase is reworded, and a false
+ * positive would only ever offer a helpful link to a student who was refused.
+ */
+export function isNotEnrolled(message: string): boolean {
+	return /not enrolled/i.test(message);
+}

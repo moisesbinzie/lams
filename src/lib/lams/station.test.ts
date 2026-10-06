@@ -4,7 +4,9 @@ import { describe, it } from 'node:test';
 import {
 	STATION_PERIOD_SEC,
 	STATION_WINDOW,
+	buildStationUrl,
 	currentStationCode,
+	parseStationUrl,
 	pendingScanTarget,
 	secondsRemaining,
 	stationCodeForSlot,
@@ -114,6 +116,37 @@ describe('verification window', () => {
 		const lastValid = T0 + STATION_PERIOD_SEC * 1000 * (STATION_WINDOW + 1);
 		assert.equal(verifyStationCode(photographed, SECRET, lastValid), false);
 	});
+
+	/**
+	 * The period was shortened from 30s to 10s specifically to shrink this
+	 * number. `STATION_WINDOW = 1` means a code is accepted for the slot it
+	 * belongs to plus one either side, so a photograph lives for exactly three
+	 * periods — and it was 90 seconds when the period was 30.
+	 *
+	 * Pinned as a ceiling so a future change to either constant cannot quietly
+	 * widen the replay window again.
+	 */
+	it('keeps a photographed code alive for at most three periods', () => {
+		const slot = stationSlotAt(T0);
+		const code = stationCodeForSlot(SECRET, slot);
+
+		// Still good at the end of its own slot's window...
+		assert.equal(verifyStationCode(code, SECRET, T0), true);
+		// ...and dead once the window has passed in both directions.
+		const tooLate = T0 + STATION_PERIOD_SEC * 1000 * (STATION_WINDOW + 1);
+		const tooEarly = T0 - STATION_PERIOD_SEC * 1000 * (STATION_WINDOW + 1);
+		assert.equal(verifyStationCode(code, SECRET, tooLate), false);
+		assert.equal(verifyStationCode(code, SECRET, tooEarly), false);
+
+		// The whole exposure window a student could forward a photo within.
+		const exposureSec = STATION_PERIOD_SEC * (STATION_WINDOW * 2 + 1);
+		assert.equal(exposureSec, 30);
+		assert.ok(exposureSec <= 30, `a photograph stays usable for ${exposureSec}s`);
+	});
+
+	it('rotates often enough that a code is stale within a minute', () => {
+		assert.equal(STATION_PERIOD_SEC, 10);
+	});
 });
 
 describe('countdown', () => {
@@ -135,5 +168,67 @@ describe('countdown', () => {
 		it('refuses a stash that belongs to a different lecture', () => {
 			// A scan stashed for session A must never be spent on session B.
 			assert.equal(takePendingScan('some-other-session'), null);
+		});
+	});
+
+	describe('reading a scanned station QR', () => {
+		const ORIGIN = 'https://lams.example.edu';
+		const SESSION = 'j57abc123def456';
+
+		it('round-trips what the station draws', () => {
+			const url = buildStationUrl(ORIGIN, SESSION, '482913');
+			assert.deepEqual(parseStationUrl(url, ORIGIN), { sessionId: SESSION, code: '482913' });
+		});
+
+		// The in-app scanner passes its own origin, so a QR printed for the
+		// deployed host stays readable from a laptop on localhost.
+		it('resolves a station drawn on any host when no base is given', () => {
+			const url = buildStationUrl('http://localhost:5173', SESSION, '000001');
+			assert.deepEqual(parseStationUrl(url), { sessionId: SESSION, code: '000001' });
+		});
+
+		it('accepts a trailing slash', () => {
+			assert.deepEqual(parseStationUrl(`${ORIGIN}/a/${SESSION}/?c=123456`), {
+				sessionId: SESSION,
+				code: '123456'
+			});
+		});
+
+		it('ignores unrelated query parameters', () => {
+			assert.deepEqual(parseStationUrl(`${ORIGIN}/a/${SESSION}?c=123456&utm_source=poster`), {
+				sessionId: SESSION,
+				code: '123456'
+			});
+		});
+
+		it('refuses a lecture from another site', () => {
+			// Otherwise a QR pointing at an attacker's host would be followed.
+			const url = buildStationUrl('https://evil.example', SESSION, '482913');
+			assert.equal(parseStationUrl(url, ORIGIN), null);
+		});
+
+		it('refuses anything that is not a station code', () => {
+			const bad = [
+				'',
+				'not a url at all',
+				'https://example.com/',
+				`${ORIGIN}/a/${SESSION}`,
+				`${ORIGIN}/a/${SESSION}?c=`,
+				`${ORIGIN}/a/${SESSION}?c=12345`,
+				`${ORIGIN}/a/${SESSION}?c=1234567`,
+				`${ORIGIN}/a/${SESSION}?c=abcdef`,
+				`${ORIGIN}/timetable?c=123456`,
+				`${ORIGIN}/a/?c=123456`,
+				`${ORIGIN}/a/${SESSION}/extra?c=123456`
+			];
+			for (const value of bad) {
+				assert.equal(parseStationUrl(value, ORIGIN), null, `accepted ${JSON.stringify(value)}`);
+			}
+		});
+
+		it('never throws on a hostile payload', () => {
+			for (const value of ['%%%', 'javascript:alert(1)', 'http://[', '/a/x?c=123456']) {
+				assert.doesNotThrow(() => parseStationUrl(value, ORIGIN));
+			}
 		});
 	});

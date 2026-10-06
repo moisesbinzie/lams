@@ -165,6 +165,12 @@ export interface StationPreview {
 	closesAt: number;
 	/** The screen is out of its room, so scanning is being refused. */
 	stationMoved: boolean;
+	/**
+	 * Whether the person asking holds an active enrolment in this subject. The
+	 * scan is refused regardless; this only lets the page say so before asking
+	 * for a location fix.
+	 */
+	viewerEnrolled: boolean;
 }
 
 export interface StationScanResult {

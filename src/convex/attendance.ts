@@ -20,8 +20,8 @@ import {
 	toleranceFor
 } from './helpers';
 import { judgeProximity, STUDENT_ACCURACY_TOLERANCE } from './proximity';
-import { isBlocked, noteFailure, noteSuccess, STATION_LIMITS } from './ratelimit';
-import { verifyStationCode } from './station';
+import { isBlocked, noteFailure, noteSuccess, CODE_FETCH_LIMITS, STATION_LIMITS } from './ratelimit';
+import { currentStationCode, verifyStationCode } from './station';
 
 const DEFAULT_ON_TIME_SEC = 300;
 const DEFAULT_LATE_UNTIL_SEC = 600;
@@ -172,6 +172,59 @@ export const startSession = mutation({
 	}
 });
 
+/**
+ * The code the station is showing right now, for a student whose own scan of it
+ * went stale on the way here.
+ *
+ * Why this exists: the QR carries the code that was on screen when it was read,
+ * and a code is only good for its own slot and the two neighbours. A student
+ * whose phone then spends longer than that — a sign-in round trip, a cold start,
+ * a slow location fix on a bad connection, which is exactly the situation in the
+ * halls this is built for — arrives holding a code that has already rolled, and
+ * is refused for a reason that is not their fault. This lets that scan be
+ * finished silently instead of sending them back to squint at the screen again.
+ *
+ * This deliberately gives up no secret. The code it returns is the one already
+ * displayed on a screen at the front of a room full of people, so it is public
+ * by construction; the caller must be signed in *and* actively enrolled in this
+ * exact offering, and the value is useless without a location fix inside the
+ * station radius, which is the control that actually stops sharing (see the
+ * header of `station.ts`).
+ *
+ * It is rate-limited on its own budget rather than the scan budget, so a silent
+ * retry never eats into a student's allowance for misreading the screen.
+ */
+export const currentCode = query({
+	args: { token: v.string(), sessionId: v.id('sessions') },
+	handler: async (ctx, args) => {
+		const person = await requirePerson(ctx, args.token);
+		const session = await ctx.db.get('sessions', args.sessionId);
+		if (!session || session.status !== 'open' || Date.now() > session.closesAt) return null;
+		if (!session.stationSecret) return null;
+
+		const enrolments = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', person._id))
+			.take(300);
+		const enrolled = enrolments.some(
+			(e: any) => e.offeringId === session.offeringId && e.status === 'active'
+		);
+		if (!enrolled) return null;
+
+		const limitKey = `stationcode:${String(person._id)}`;
+		const limiter = await ctx.db
+			.query('authAttempts')
+			.withIndex('by_key', (q) => q.eq('key', limitKey))
+			.unique();
+		if (isBlocked(ctx, limiter)) return null;
+
+		// Counted, not failed: this endpoint has no "wrong answer" to throttle, so
+		// the same counter is used to cap how often the code may be pulled.
+		await noteFailure(ctx, limitKey, CODE_FETCH_LIMITS);
+		return { code: currentStationCode(session.stationSecret) };
+	}
+});
+
 /** Public, session-agnostic details a scanner needs before opening the camera. */
 export const getSession = query({
 	args: { token: v.string(), sessionId: v.id('sessions') },
@@ -251,15 +304,36 @@ export const stationFeed = query({
  * Minimal, non-sensitive details a student sees on the page the QR opened.
  * Any signed-in person may read it — it reveals no location and no secret, and
  * it has to render before the scan is submitted.
+ *
+ * It also answers one question about the caller: are they enrolled in this
+ * subject? The scan is refused either way — `submitStationScan` re-checks and
+ * is the authority — but knowing early is what lets the page say "add this
+ * subject first" instead of asking for a location fix and *then* refusing.
+ * Only the caller's own enrolment is reported, so no information about anyone
+ * else is exposed.
  */
 export const stationPreview = query({
 	args: { token: v.string(), sessionId: v.id('sessions') },
 	handler: async (ctx, args) => {
-		await requireActor(ctx, args.token);
+		const actor = await requireActor(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
 		const subject = await ctx.db.get('subjects', session.subjectId);
 		const classDoc = await ctx.db.get('classes', session.classId);
+
+		// A lecturer is not enrolled in anything and cannot scan as a student, so
+		// the flag is only meaningful for a person.
+		let viewerEnrolled = false;
+		if (actor.kind === 'person') {
+			const mine = await ctx.db
+				.query('enrolments')
+				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+				.take(300);
+			viewerEnrolled = mine.some(
+				(e: any) => e.offeringId === session.offeringId && e.status === 'active'
+			);
+		}
+
 		return {
 			subjectCode: subject?.code ?? '',
 			subjectTitle: subject?.title ?? '',
@@ -270,7 +344,8 @@ export const stationPreview = query({
 			// Only the yes/no, never the coordinates: the student is about to be
 			// told why a scan was refused, and has no business learning where the
 			// room is pinned.
-			stationMoved: session.stationMoved === true
+			stationMoved: session.stationMoved === true,
+			viewerEnrolled
 		};
 	}
 });

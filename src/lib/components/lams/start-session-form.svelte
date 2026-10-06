@@ -23,13 +23,39 @@
 	 * Start a live attendance window from the scanning screen. Lecturers see
 	 * every offering; a class rep sees only offerings for classes they
 	 * represent — the server enforces the same rule.
+	 *
+	 * `initialOfferingId` pre-selects a subject, which is what lets the station
+	 * screen put "start the next hour of this lecture" one tap away instead of
+	 * making the rep find the same subject in a list again.
 	 */
-	let { onstarted }: { onstarted: (sessionId: string) => void | Promise<void> } = $props();
+	let {
+		onstarted,
+		initialOfferingId = ''
+	}: {
+		onstarted: (sessionId: string) => void | Promise<void>;
+		initialOfferingId?: string;
+	} = $props();
 
 	let token = getToken();
 	let offerings = $state<RecordableOffering[]>([]);
 	let offeringId = $state('');
 	let loading = $state(true);
+
+	/**
+	 * The suggestion rarely exists when this component mounts: the lecture list
+	 * it comes from is still loading. So it is applied whenever it changes,
+	 * which covers both arriving late and the running lecture being swapped for
+	 * another one — but only while the selection is still untouched or still
+	 * holds the previous suggestion. A subject the rep picked themselves is
+	 * never overwritten under them.
+	 */
+	let appliedSuggestion = '';
+	$effect(() => {
+		const suggested = initialOfferingId;
+		if (!suggested || suggested === appliedSuggestion) return;
+		if (offeringId === '' || offeringId === appliedSuggestion) offeringId = suggested;
+		appliedSuggestion = suggested;
+	});
 	let lat = $state('');
 	let lng = $state('');
 	// Where the screen itself stands. Left blank it follows the lecture

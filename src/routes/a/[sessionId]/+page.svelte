@@ -12,7 +12,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { CircleCheck, CircleSlash, CircleX, MapPin, MapPinCheck, TriangleAlert } from '@lucide/svelte';
 	import type { StationPreview, StationScanResult } from '$lib/lams/types';
-	import { explainError } from '$lib/lams/errors';
+	import { explainError, isNotEnrolled } from '$lib/lams/errors';
+	import { reportSerious } from '$lib/lams/notify.svelte';
+
+	/**
+	 * A refusal that a fresh code can fix: the station code rolled before the scan
+	 * reached the server. Matched on the server's wording ("That station code has
+	 * expired. Scan the screen again.") the same way `isNotEnrolled` is.
+	 */
+	const RECOVERABLE = /expired|not valid/i;
 
 	let sessionId = $derived(page.params.sessionId ?? '');
 	/**
@@ -22,7 +30,7 @@
 	 */
 	let code = $state('');
 
-	type Stage = 'checking' | 'signin' | 'ready' | 'locating' | 'done' | 'failed';
+	type Stage = 'checking' | 'signin' | 'ready' | 'locating' | 'done' | 'failed' | 'not_enrolled';
 
 	let stage = $state<Stage>('checking');
 	let error = $state('');
@@ -33,6 +41,23 @@
 	/** The screen has left its room, so the refusal is not the student's to fix. */
 	let stationMoved = $state(false);
 	let now = $state(Date.now());
+	/**
+	 * The "you are not enrolled" toast is shown once per visit. The card below it
+	 * stays put, so a second toast on a retry would add nothing.
+	 */
+	let enrolmentWarned = $state(false);
+	/** Set once a stale scan has been recovered with a fresh code, to say so. */
+	let staleRecovered = $state(false);
+
+	/** One toast, then the persistent card that tells them what to do about it. */
+	function warnNotEnrolled(): void {
+		if (enrolmentWarned) return;
+		enrolmentWarned = true;
+		reportSerious(
+			new Error('You are not enrolled in this subject yet, so this scan was not recorded.'),
+			''
+		);
+	}
 
 	const closed = $derived(preview ? preview.status === 'closed' || now >= preview.closesAt : false);
 	const expiresIn = $derived(preview ? Math.max(0, preview.closesAt - now) : 0);
@@ -78,6 +103,15 @@
 				}
 				preview = info as unknown as StationPreview;
 				stage = 'ready';
+				// Refused before the location prompt, not after it: asking a
+				// student for a position fix and then telling them they were never
+				// going to be recorded is the worst order to do these in. The
+				// server re-checks on submit and remains the authority.
+				if (!preview.viewerEnrolled) {
+					stage = 'not_enrolled';
+					warnNotEnrolled();
+					return;
+				}
 				// Scan-and-go: the browser asks for location straight away, because
 				// the distance check is the point of the whole scheme.
 				void submit();
@@ -96,13 +130,25 @@
 		};
 	});
 
+	/**
+	 * The code in the URL is the one that was on screen when the QR was read, and
+	 * it stops verifying after its slot and the two neighbours — up to 90 seconds.
+	 * A sign-in round trip, a cold PWA start or a slow location fix on a bad
+	 * connection can easily outlast that, so a scan that has gone stale is
+	 * recovered rather than refused: the server hands back the code the screen is
+	 * showing *now*, and the scan is submitted again with it.
+	 *
+	 * Once only. A second stale code means something else is wrong, and looping
+	 * would hide that behind a spinner.
+	 */
 	async function submit() {
-		if (stage === 'locating' || stage === 'done') return;
+		if (stage === 'locating' || stage === 'done' || stage === 'not_enrolled') return;
 		stage = 'locating';
 		error = '';
 		locationNote = '';
 		codeExpired = false;
-			stationMoved = false;
+		staleRecovered = false;
+		stationMoved = false;
 
 		let pos: { lat: number; lng: number; accuracyM?: number } | null = null;
 		try {
@@ -117,9 +163,10 @@
 			locationNote = explainError(err) || 'Your location could not be read on this device.';
 		}
 
-		try {
-			const client = requireConvexClient();
-			const res = await client.mutation(api.attendance.submitStationScan, {
+		const client = requireConvexClient();
+		/** One attempt with whatever code is currently held. */
+		const attempt = () =>
+			client.mutation(api.attendance.submitStationScan, {
 				token: getToken(),
 				sessionId: sessionId as never,
 				code,
@@ -129,35 +176,86 @@
 				...(pos ? { latitude: pos.lat, longitude: pos.lng } : {}),
 				...(pos?.accuracyM !== undefined ? { accuracyM: pos.accuracyM } : {})
 			});
-			result = res as unknown as StationScanResult;
-			stage = 'done';
+
+		let retriedFreshCode = false;
+		try {
+			for (;;) {
+				try {
+					result = (await attempt()) as unknown as StationScanResult;
+					stage = 'done';
+					return;
+				} catch (err) {
+					const message = explainError(err) || 'That scan could not be recorded.';
+
+					// An expired or moved token is not the student's problem to solve
+					// here — send them through sign-in and the scan finishes itself.
+					if (/sign in again|different phone|moved to another phone/i.test(message)) {
+						endSession();
+						if (code) stashPendingScan(sessionId, code);
+						stage = 'signin';
+						return;
+					}
+
+					// The whole point of this loop. Retrying the *same* code would fail
+					// identically, so a fresh one is fetched instead — and if it cannot
+					// be had, the failure below is the honest answer.
+					if (!retriedFreshCode && RECOVERABLE.test(message)) {
+						retriedFreshCode = true;
+						let fresh: { code: string } | null = null;
+						try {
+							fresh = (await client.query(api.attendance.currentCode, {
+								token: getToken(),
+								sessionId: sessionId as never
+							})) as { code: string } | null;
+						} catch {
+							// Offline, rate-limited, or the token went stale under us. The
+							// card below says what happened; a recovery that itself failed
+							// is still just a failed scan.
+							fresh = null;
+						}
+						if (fresh?.code) {
+							code = fresh.code;
+							staleRecovered = true;
+							continue;
+						}
+					}
+
+					error = message;
+					// Enrolment can be dropped between the preview and the scan, so
+					// this path is reachable even though the preview checks first.
+					if (isNotEnrolled(message)) {
+						stage = 'not_enrolled';
+						warnNotEnrolled();
+						return;
+					}
+					stage = 'failed';
+					// A stale code is the one failure the student cannot fix by trying
+					// again: the code in the URL is the one that rolled. Retrying it
+					// would fail identically, so ask for a fresh scan instead of showing
+					// a button that loops.
+					codeExpired = RECOVERABLE.test(message);
+					// A station that has left its room stops accepting scans, and the
+					// "try again" button would loop for as long as it stays there. Say
+					// plainly that this is the screen's problem and the student has done
+					// nothing wrong.
+					stationMoved = /station has been moved out of its room/i.test(message);
+					return;
+				}
+			}
 		} catch (err) {
-			// Kept inline, not toasted. Every failure below is terminal for this
-			// page: the student is either sent to sign in or shown a card with a
-			// retry, and a toast would vanish before they had read which one
-			// happened. The regexes below also have to match the server's wording,
-			// so the raw message is what gets tested here rather than a rewrite.
-			const message = explainError(err) || 'That scan could not be recorded.';
-			// An expired or moved token is not the student's problem to solve here —
-			// send them through sign-in and the scan will finish itself afterwards.
-			if (/sign in again|different phone|moved to another phone/i.test(message)) {
+			// Reaching here means something outside an attempt failed — the client
+			// itself. An expired token still has to go through sign-in rather than
+			// being reported as a failed scan, or the student is stuck on a card
+			// with no way forward.
+			error = explainError(err) || 'That scan could not be recorded.';
+			if (/sign in again|different phone|moved to another phone/i.test(error)) {
 				endSession();
 				if (code) stashPendingScan(sessionId, code);
 				stage = 'signin';
 				return;
 			}
-			error = message;
 			stage = 'failed';
-			// A stale code is the one failure the student cannot fix by trying
-			// again: the code in the URL is the one that rolled. Retrying it would
-			// fail identically, so ask for a fresh scan instead of showing a button
-			// that loops.
-			codeExpired = /expired|not valid/i.test(message);
-			// A station that has left its room stops accepting scans, and the "try
-			// again" button would loop for as long as it stays there. Say plainly
-			// that this is the screen's problem and the student has done nothing
-			// wrong.
-			stationMoved = /station has been moved out of its room/i.test(message);
+			codeExpired = RECOVERABLE.test(error);
 		}
 	}
 </script>
@@ -190,6 +288,31 @@
 					Your scan is saved. Sign in and it will be recorded straight away.
 				</p>
 				<Button href="/signin" onclick={() => goto('/signin')}>Sign in</Button>
+			</Card.Content>
+		</Card.Root>
+	{:else if stage === 'not_enrolled'}
+		<!--
+			The one refusal a student can fix themselves, so it gets a route out
+			rather than a dead end. Worded as an instruction, because "not
+			enrolled" is the system's vocabulary and not theirs.
+		-->
+		<Card.Root class="border-amber-300 bg-amber-50">
+			<Card.Content class="flex flex-col items-center gap-3 pt-8 pb-8 text-center">
+				<TriangleAlert class="size-10 text-amber-600" aria-hidden="true" />
+				<p class="text-lg font-semibold text-amber-900">Add this subject first</p>
+				<p class="text-sm text-amber-900">
+					Nothing was recorded, because you are not taking
+					<strong>{preview ? `${preview.subjectCode} — ${preview.subjectTitle}` : 'this subject'}</strong
+					>. Add it to your subjects, then scan the screen again.
+				</p>
+				<div class="mt-1 flex flex-wrap justify-center gap-3">
+					<Button href="/courses">Add this subject</Button>
+					<Button variant="outline" href="/home">Not now</Button>
+				</div>
+				<p class="text-xs text-amber-900">
+					If it should already be there, or you are repeating this subject with another class, ask your
+					class rep or lecturer to add you.
+				</p>
 			</Card.Content>
 		</Card.Root>
 	{:else if stage === 'locating'}
@@ -244,6 +367,18 @@
 					<Button variant="outline" href="/attendance">See my attendance</Button>
 					<Button href="/home">Done</Button>
 				</div>
+
+				<!--
+					Said out loud rather than kept quiet: the code they scanned had already
+					rolled when it reached the server, and the recovery did the work for
+					them. Silent success would leave them believing a stale scan is fine,
+					which is the habit the rotating code exists to break.
+				-->
+				{#if staleRecovered}
+					<p class="text-xs text-muted-foreground">
+						The code had already changed by the time your scan arrived, so the current one was used for you.
+					</p>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 
@@ -295,7 +430,7 @@
 					{#if codeExpired}
 						<p class="text-sm font-medium">Point your camera at the screen again.</p>
 						<p class="text-xs text-muted-foreground">
-							The code on the screen changes every 30 seconds. Scan it once more and this page will open
+							The code on the screen changes every 10 seconds. Scan it once more and this page will open
 							again by itself.
 						</p>
 					{:else}

@@ -68,9 +68,10 @@
 	/**
 	 * How often the screen tells the server where it is.
 	 *
-	 * Matched to the code's 30-second rotation so the two clocks line up: by the
-	 * time a photographed code has expired, the station has also proved it was
-	 * still in the room.
+	 * Matched to the code's rotation so the two clocks line up: by the time a
+	 * photographed code has expired, the station has also proved it was still in
+	 * the room. Tied to the period rather than a literal, so shortening the
+	 * rotation tightens this with it instead of letting the two drift apart.
 	 */
 	const PLACEMENT_INTERVAL_MS = STATION_PERIOD_SEC * 1000;
 
@@ -95,7 +96,34 @@
 	const remaining = $derived(secondsRemaining(now));
 
 	/**
-	 * The code rolling every 30 seconds is the whole anti-sharing mechanism, so
+	 * A lecture is only usable while the server says it is open *and* its window
+	 * has not run out. The list survives a browser left open past the end of a
+	 * lecture, so the two have to be checked together rather than trusting the
+	 * stored status alone.
+	 */
+	function isOpen(s: LectureSession): boolean {
+		return s.status === 'open' && now < s.closesAt;
+	}
+
+	// Most recently started first, so the lecture a rep is most likely to want
+	// is the one at the top of the list.
+	const byNewest = (a: LectureSession, b: LectureSession) => b.startedAt - a.startedAt;
+	const openNow = $derived(sessions.filter(isOpen).sort(byNewest));
+	const past = $derived(sessions.filter((s) => !isOpen(s)).sort(byNewest));
+	const current = $derived(openNow[0] ?? null);
+
+	/**
+	 * Starting a lecture is the main job on this screen, so the subject is
+	 * pre-answered when there is only one lecture it could be. With several
+	 * running side by side the rep has to say which, rather than the screen
+	 * guessing and quietly closing the wrong one.
+	 */
+	const suggestedOfferingId = $derived(
+		openNow.length === 1 && openNow[0].offeringId ? openNow[0].offeringId : ''
+	);
+
+	/**
+	 * The code rolling every few seconds is the whole anti-sharing mechanism, so
 	 * the screen has to stay legible at a distance — hence full screen, the code
 	 * in large type as well as the QR for anyone whose camera will not focus, and
 	 * the countdown so the room can see it is live rather than a printout.
@@ -155,7 +183,39 @@
 		}
 	}
 
+	/**
+	 * Opening a lecture whose window has already run out closes it on the way in,
+	 * which is what writes the Absent rows. Doing it here rather than leaving the
+	 * rep staring at a station that refuses every scan is the difference between
+	 * a usable record and a queue of confused students.
+	 *
+	 * Closing is destructive — it settles absences — so it is confirmed first.
+	 */
 	async function openSession(id: string) {
+		const target = sessions.find((s) => s._id === id);
+		if (target && target.status === 'open' && now >= target.closesAt) {
+			const when = new Date(target.closesAt).toLocaleTimeString();
+			if (
+				!confirm(
+					`${target.subjectCode}'s window ended at ${when}. Close it now and mark everyone not recorded absent?`
+				)
+			) {
+				return;
+			}
+			try {
+				const client = requireConvexClient();
+				const res = await client.mutation(api.attendance.closeSession, {
+					token,
+					sessionId: id as never
+				});
+				reportSuccess(`Lecture closed. ${res.absentAdded} student(s) marked absent.`);
+				await loadSessions();
+			} catch (err) {
+				reportError(err, 'Could not close that lecture.');
+			}
+			return;
+		}
+
 		try {
 			const client = requireConvexClient();
 			const feed = await client.query(api.attendance.stationFeed, {
@@ -403,38 +463,77 @@
 	</div>
 
 	{#if !live}
+		<!--
+			Living room order: what is happening now, then what you came here to
+			do, then the archive. The history used to be the first thing on this
+			screen and the reason the page read as a list to browse rather than a
+			tool to pick up mid-lecture.
+		-->
+		{#if current}
+			<Card.Root class="border-lams-green/40 bg-lams-green/5">
+				<Card.Content class="flex flex-wrap items-center justify-between gap-3 pt-6">
+					<div>
+						<p class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
+							<span class="inline-block size-2 shrink-0 animate-pulse rounded-full bg-lams-green" aria-hidden="true"></span>
+							A lecture is running now
+						</p>
+						<p class="mt-1 text-xs text-muted-foreground">
+							{current.subjectCode} — {current.subjectTitle} · {current.className} · closes in {formatCountdown(
+								current.closesAt - now
+							)}
+						</p>
+					</div>
+					<Button size="sm" onclick={() => openSession(current._id)}>Back to the station</Button>
+				</Card.Content>
+			</Card.Root>
+		{/if}
+
+		<StartSessionForm onstarted={(id) => openSession(id)} initialOfferingId={suggestedOfferingId} />
+
 		<Card.Root>
-			<Card.Header>
-				<Card.Title>Open lectures</Card.Title>
-				<Card.Description>Only lectures for your classes are listed.</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				{#if sessions.length === 0}
-					<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-						No lectures running yet. Start one below, or wait for one to open.
-					</p>
-				{:else}
-					<ul class="flex flex-col gap-2">
-						{#each sessions as s (s._id)}
-							<li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
-								<span class="text-sm">
-									<strong>{s.subjectCode}</strong> — {s.subjectTitle}
-									<span class="block text-xs text-muted-foreground">
-										{s.className} · {new Date(s.startedAt).toLocaleString()}
-									</span>
-								</span>
-								<span class="flex items-center gap-2">
-									<StatusBadge status={s.status} />
-									<Button size="sm" onclick={() => openSession(s._id)}>Open</Button>
-								</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
+			<Card.Content class="pt-6">
+				<details>
+					<summary
+						class="flex cursor-pointer flex-wrap items-center justify-between gap-2 text-sm font-medium"
+					>
+						<span>Past lectures</span>
+						<span class="text-xs font-normal text-muted-foreground">
+							{sessions.length === 0
+								? 'nothing here yet'
+								: `${sessions.length} recent ${sessions.length === 1 ? 'record' : 'records'} · open one to review or correct it`}
+						</span>
+					</summary>
+					<div class="mt-3">
+						{#if sessions.length === 0}
+							<p
+								class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground"
+							>
+								No lectures recorded yet. Start one above.
+							</p>
+						{:else}
+							<ul class="flex max-h-96 flex-col divide-y divide-border overflow-y-auto">
+								{#each [...openNow, ...past] as s (s._id)}
+									<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+										<span>
+											<strong>{s.subjectCode}</strong> — {s.subjectTitle}
+											<span class="block text-xs text-muted-foreground">
+												{s.className} · {new Date(s.startedAt).toLocaleString()}
+											</span>
+										</span>
+										<span class="flex items-center gap-2">
+											<StatusBadge status={isOpen(s) ? 'open' : 'closed'} />
+											<Button variant="outline" size="sm" onclick={() => openSession(s._id)}>
+												{isOpen(s) ? 'Open' : 'Review'}
+											</Button>
+										</span>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+				</details>
 			</Card.Content>
 		</Card.Root>
-
-		<StartSessionForm onstarted={(id) => openSession(id)} />
 	{:else}
 		<Card.Root>
 			<Card.Content class="flex flex-wrap items-center justify-between gap-3 pt-6">
@@ -580,7 +679,7 @@
 				<img
 					src={qrImg}
 					alt="Attendance QR code for this lecture"
-					class="rounded-lg bg-white {fullscreen ? 'max-h-[55vh] w-auto' : 'size-72'}"
+					class="rounded-lg bg-white {fullscreen ? 'max-h-[55vh] w-auto' : 'size-80 max-w-full'}"
 				/>
 				<p class="text-center">
 					<span class="block text-4xl font-bold tracking-[0.3em] text-lams-navy">{stationCode}</span>
@@ -592,12 +691,12 @@
 						role="progressbar"
 						aria-label="Time until this code refreshes"
 						aria-valuemin="0"
-						aria-valuemax="30"
+						aria-valuemax={STATION_PERIOD_SEC}
 						aria-valuenow={remaining}
 					>
 						<div
 							class="h-full rounded-full bg-lams-green transition-[width] duration-1000"
-							style={`width: ${(remaining / 30) * 100}%`}
+							style={`width: ${(remaining / STATION_PERIOD_SEC) * 100}%`}
 						></div>
 					</div>
 					<p class="mt-1 text-center text-xs text-muted-foreground" aria-live="polite">

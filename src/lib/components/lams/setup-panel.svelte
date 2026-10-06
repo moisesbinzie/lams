@@ -24,11 +24,36 @@
 	let busy = $state(false);
 
 	// New semester form.
-	let semName = $state('');
+	//
+	// A semester has no name of its own — its number is its name. So the name
+	// starts as "Semester 1" and follows the number until the user types one of
+	// their own, after which it is left alone for the rest of the visit.
+	let semName = $state('Semester 1');
 	let semYear = $state(String(new Date().getFullYear()));
 	let semNumber = $state('1');
+	// Starts true: `semName` above is already the right initial value, and a
+	// false start would make the effect below rewrite it on mount.
+	let nameEdited = $state(true);
 	let semStart = $state('');
 	let semEnd = $state('');
+
+	/** "Semester 1" / "Semester 2" — the only name a semester needs by default. */
+	function defaultSemesterName(number: string): string {
+		return `Semester ${number}`;
+	}
+
+	// Marks the name as hand-written the moment it differs from the suggestion,
+	// so a later change of number cannot silently discard a custom name. Checked
+	// on input rather than in an effect so the flag is never a tick behind the
+	// keystroke that set it.
+	function noteSemesterName() {
+		if (semName !== defaultSemesterName(semNumber)) nameEdited = true;
+	}
+
+	function pickSemesterNumber(number: string) {
+		semNumber = number;
+		if (!nameEdited) semName = defaultSemesterName(number);
+	}
 
 	// New class form.
 	let newClassName = $state('');
@@ -81,7 +106,9 @@
 				startDate: semStart,
 				endDate: semEnd
 			});
-			semName = '';
+			semName = defaultSemesterName(semNumber);
+			// Back to managed, so the next semester is numbered for the user again.
+			nameEdited = false;
 			semStart = '';
 			semEnd = '';
 			await loadSemesters();
@@ -226,10 +253,10 @@
 					</ul>
 				{/if}
 
-				<form class="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1.5fr_1.5fr_auto]" onsubmit={createSemester}>
+				<form class="grid gap-2 sm:grid-cols-[1.5fr_1fr_1fr_1.2fr_1.2fr_auto]" onsubmit={createSemester}>
 					<div class="flex flex-col gap-1">
 						<Label for="semn">Name</Label>
-						<Input id="semn" bind:value={semName} placeholder="e.g. Semester 1" required />
+						<Input id="semn" bind:value={semName} oninput={noteSemesterName} placeholder="Semester" required />
 					</div>
 					<div class="flex flex-col gap-1">
 						<Label for="iemy">Year</Label>
@@ -240,8 +267,13 @@
 						</select>
 					</div>
 					<div class="flex flex-col gap-1">
-						<Label for="iemn">No.</Label>
-						<select id="iemn" class="w-full rounded-md border border-input bg-background p-2 text-sm" bind:value={semNumber}>
+						<Label for="iemn">Semester</Label>
+						<select
+							id="iemn"
+							class="w-full rounded-md border border-input bg-background p-2 text-sm"
+							value={semNumber}
+							onchange={(e) => pickSemesterNumber(e.currentTarget.value)}
+						>
 							<option value="1">1</option>
 							<option value="2">2</option>
 							<option value="3">3</option>
@@ -259,6 +291,9 @@
 						<Button type="submit" disabled={busy}>Add semester</Button>
 					</div>
 				</form>
+				<p class="text-xs text-muted-foreground">
+					A year normally holds two semesters; use 3 only for a summer session.
+				</p>
 			</Card.Content>
 		</Card.Root>
 
@@ -266,8 +301,8 @@
 			<Card.Header>
 				<Card.Title>Classes</Card.Title>
 				<Card.Description>
-					A class is a cohort, e.g. “BSc Computer Science Year 2”. Subjects are offered to classes, and
-					students belong to one.
+					A class is a cohort, e.g. “BSc Computer Science”. Its year of study is set separately below.
+					Subjects are offered to classes, and students belong to one or more of them.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
@@ -296,7 +331,7 @@
 					<form class="mt-3 grid gap-2 sm:grid-cols-[2fr_1fr_1.5fr_auto]" onsubmit={createClass}>
 						<div class="flex flex-col gap-1">
 							<Label for="cn">Class name</Label>
-							<Input id="cn" bind:value={newClassName} placeholder="e.g. BSc Computer Science Year 2" required />
+							<Input id="cn" bind:value={newClassName} placeholder="e.g. BSc Computer Science" required />
 						</div>
 						<div class="flex flex-col gap-1">
 							<Label for="cy">Year of study</Label>

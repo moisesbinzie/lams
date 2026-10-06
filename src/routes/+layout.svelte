@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { Button } from '$lib/components/ui/button';
+	import { Toaster } from '$lib/components/ui/sonner';
 	import {
 		BarChart3,
 		BookOpen,
@@ -57,18 +58,20 @@
 			return [
 				{ href: '/home', label: 'My account', icon: UserRound },
 				{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
+				{ href: '/scanner', label: 'Scan attendance', icon: ScanLine },
 				{ href: '/scan', label: 'Take attendance', icon: ScanLine },
 				how,
 				{ href: '/courses', label: 'My subjects', icon: BookOpen }
 			];
 		}
-		return [
-			{ href: '/home', label: 'My account', icon: UserRound },
-			{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
-			how,
-			{ href: '/courses', label: 'My subjects', icon: BookOpen },
-			{ href: '/attendance', label: 'My attendance', icon: BarChart3 }
-		];
+			return [
+				{ href: '/home', label: 'My account', icon: UserRound },
+				{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
+				{ href: '/scanner', label: 'Scan attendance', icon: ScanLine },
+				how,
+				{ href: '/courses', label: 'My subjects', icon: BookOpen },
+				{ href: '/attendance', label: 'My attendance', icon: BarChart3 }
+			];
 	});
 
 	const homeHref = $derived(!me ? '/' : me.kind === 'person' ? '/home' : '/manage');
@@ -168,4 +171,11 @@
 			>
 		</div>
 	</footer>
+	<!--
+		The one mount point for every toast in the app. It was missing, which made
+		every `reportError` / `toast.*` call a no-op: failures had nowhere to
+		render. Kept at the root so a toast survives navigation — a student sent
+		from a scan to `/courses` still sees why.
+	-->
+	<Toaster position="top-center" richColors closeButton />
 </div>

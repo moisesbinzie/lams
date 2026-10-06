@@ -45,7 +45,7 @@
 			tone: 'text-lams-navy',
 			lines: [
 				'Sign in with your registration number and PIN.',
-				'Scan the QR on the screen with your own camera — it refreshes every 30 seconds.',
+				'Scan the QR on the screen with your own camera — it refreshes every 10 seconds.',
 				'Check your own attendance and report anything wrong.'
 			]
 		},
@@ -256,7 +256,7 @@
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
 						<span
-							>The code on the screen changes every 30 seconds, so a photo of the screen stops working almost
+							>The code on the screen changes every 10 seconds, so a photo of the screen stops working almost
 							immediately.</span
 						>
 					</li>

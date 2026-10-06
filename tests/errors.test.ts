@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { errorMessage, explainError } from '../src/lib/lams/errors.ts';
+import { errorMessage, explainError, isNotEnrolled } from '../src/lib/lams/errors.ts';
 
 describe('explainError', () => {
 	it('passes through a message already written for a person', () => {
@@ -103,5 +103,43 @@ describe('errorMessage', () => {
 
 	it('prefers the real message over the fallback', () => {
 		assert.equal(errorMessage(new Error('This lecture is closed.'), 'Could not load.'), 'This lecture is closed.');
+	});
+});
+
+describe('isNotEnrolled', () => {
+	// The exact sentence the server throws, and the exact sentence the student
+	// ends up reading once Convex has wrapped it. Both have to match.
+	it('recognises the server refusal as thrown and as displayed', () => {
+		assert.equal(isNotEnrolled('You are not enrolled in this subject.'), true);
+		assert.equal(
+			isNotEnrolled(explainError(new Error('[CONVEX M(attendance:submitStationScan)] Server Error You are not enrolled in this subject.'))),
+			true
+		);
+	});
+
+	it('recognises the hand-add refusal, which names the student', () => {
+		assert.equal(isNotEnrolled('Jane Banda is not enrolled in this subject.'), true);
+	});
+
+	it('keeps working if the sentence around the phrase is reworded', () => {
+		assert.equal(isNotEnrolled('NOT ENROLLED for this offering.'), true);
+	});
+
+	// Each of these is a different card on the scan page, so a false positive
+	// here would send a student to /courses over a problem /courses cannot fix.
+	it('does not claim the terminal failures are an enrolment problem', () => {
+		const terminal = [
+			'That station code has expired. Scan the screen again.',
+			'The station has been moved out of its room, so it is not accepting attendance right now.',
+			'This lecture is closed.',
+			'The attendance window for this lecture has closed.',
+			'You are already recorded as Present for this lecture.',
+			'This scan came from a different phone from the one you signed in on, so it was refused.',
+			'No connection to the server. Check your internet and try again.',
+			''
+		];
+		for (const message of terminal) {
+			assert.equal(isNotEnrolled(message), false, `misfired on ${JSON.stringify(message)}`);
+		}
 	});
 });

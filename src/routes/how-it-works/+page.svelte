@@ -99,7 +99,7 @@
 			icon: Clock,
 			question: 'The screen says the code has expired',
 			answer:
-				'The code changes every 30 seconds so a photo of the screen cannot be used later. Just scan the screen again — the page opens by itself.'
+				'The code changes every 10 seconds so a photo of the screen cannot be used later. Just scan the screen again — the page opens by itself.'
 		},
 		{
 			icon: ShieldCheck,
@@ -130,7 +130,7 @@
 	const timeline = [
 		{ at: 'Before', title: 'Your rep or lecturer opens the lecture', body: 'They set where the screen stands and how long you have to arrive.' },
 		{ at: 'Start', title: 'The screen appears', body: 'A code is created for this lecture only, and the barcode goes live.' },
-		{ at: 'Every 30s', title: 'The code changes', body: 'This is what stops a photo of the screen being used later.' },
+		{ at: 'Every 10s', title: 'The code changes', body: 'This is what stops a photo of the screen being used later.' },
 		{ at: '0–10 min', title: 'You scan as you arrive', body: 'Your name shows up on the rep’s list straight away, with the time and your distance.' },
 		{ at: 'Close', title: 'Anyone not scanned becomes absent', body: 'The lecture closes itself, so nobody is left out by an oversight.' },
 		{ at: 'After', title: 'Anything can be put right', body: 'A lecturer can correct, excuse or remove any record. What it was before is always kept.' }
@@ -291,7 +291,7 @@
 			<Card.Content>
 				<ul class="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
 					{#each [
-						{ head: 'The screen keeps changing.', body: 'The barcode holds a code that changes every 30 seconds, so a photograph of it stops working almost immediately. There is nothing useful to send to someone at home.' },
+						{ head: 'The screen keeps changing.', body: 'The barcode holds a code that changes every 10 seconds, so a photograph of it stops working almost immediately. There is nothing useful to send to someone at home.' },
 						{ head: 'Your phone says where it is.', body: 'It reports its own position at the moment you scan, so being in the hall is checked by your handset rather than by somebody else’s.' },
 						{ head: 'The screen has to stay put.', body: 'LAMS knows which room the screen belongs to. If it is carried out of that room it stops recording, so attendance cannot be taken in the wrong place.' },
 						{ head: 'You sign in on one phone.', body: 'Your account belongs to the handset you set it up on, so somebody else cannot use your sign-in on theirs.' }
