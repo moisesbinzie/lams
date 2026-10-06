@@ -176,7 +176,7 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-md flex-col gap-4">
+<div class="flex flex-col gap-4">
 	<div class="flex flex-col items-center gap-2 pt-4 text-center">
 		<img src="/lams-logo.png" alt="LAMS" class="size-16 rounded-xl" />
 		<h1 class="text-2xl font-bold text-lams-navy">

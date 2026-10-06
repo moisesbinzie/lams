@@ -163,7 +163,7 @@
 	/>
 </svelte:head>
 
-<div class="flex flex-col gap-8">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-8">
 	<section class="flex flex-col items-start gap-3 pt-2">
 		<Badge class="gap-1.5 bg-lams-navy text-white"><MonitorSmartphone class="size-3.5" /> In plain language</Badge>
 		<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">How it works</h1>
@@ -347,7 +347,7 @@
 				<Card.Description>All of it is visible to you, and you can query any of it.</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<ul class="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
+				<ul class="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 md:grid-cols-4">
 					{#each kept as item (item)}
 						<li class="flex items-start gap-2">
 							<CircleCheck class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />

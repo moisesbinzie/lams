@@ -100,7 +100,6 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-3xl flex-col gap-4">
 	<StudentNav />
 	{#if loading}
 		<Card.Root aria-busy="true">
@@ -179,15 +178,19 @@
 			to do in a lecture. "My subjects" is no longer conditional: a class rep
 			still needs to join and drop subjects like anyone else.
 
-			It is also the loudest thing on the page on purpose — the full width of
-			the grid, a size up, and lifted off the surface with its own shadow. A
-			student standing in a hall is looking for one target, not reading cards.
+			It is also the loudest thing on the page on purpose — a full row, a size
+			up, and lifted off the surface with its own shadow. A student standing in
+			a hall is looking for one target, not reading cards.
+
+			Two columns, not three: the site column is 768 px, so a three-column
+			state would only ever have applied at a viewport width the content never
+			sees.
 		-->
-		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+		<div class="grid gap-3 sm:grid-cols-2">
 			<Button
 				href="/scanner"
 				size="lg"
-				class="h-auto flex-col items-start gap-1 py-5 text-left shadow-lg shadow-primary/30 transition-shadow hover:shadow-xl sm:col-span-2 sm:flex-row sm:items-center sm:gap-3 lg:col-span-3"
+				class="h-auto flex-col items-start gap-1 py-5 text-left shadow-lg shadow-primary/30 transition-shadow hover:shadow-xl sm:col-span-2 sm:flex-row sm:items-center sm:gap-3"
 			>
 				<ScanLine class="size-8 shrink-0" />
 				<span class="flex flex-col">
@@ -276,4 +279,3 @@
 			</Card.Root>
 		{/if}
 	{/if}
-</div>

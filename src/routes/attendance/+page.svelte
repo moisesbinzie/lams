@@ -130,7 +130,6 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-4xl flex-col gap-4">
 	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My attendance</h1>
@@ -147,7 +146,11 @@
 		</Card.Root>
 	{:else}
 		{#if summary && summary.totalLectures > 0}
-			<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+			<!--
+				Four columns, not six: the site column is 768 px, so a six-column
+				state would give these ~118 px cells and never actually apply.
+			-->
+			<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 				<div class="rounded-md border border-border p-3 text-center">
 					<p class="text-2xl font-bold text-emerald-700">{summary.attendPct}%</p>
 					<p class="text-xs text-muted-foreground">Attendance</p>
@@ -319,4 +322,3 @@
 			</div>
 		{/if}
 	{/if}
-</div>

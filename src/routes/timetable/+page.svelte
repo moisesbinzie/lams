@@ -47,7 +47,6 @@
 	);
 </script>
 
-<div class="mx-auto flex max-w-4xl flex-col gap-4">
 	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My timetable</h1>
@@ -142,4 +141,3 @@
 			<Button variant="outline" href="/courses">Change my subjects</Button>
 		</div>
 	{/if}
-</div>

@@ -121,7 +121,7 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-2xl flex-col gap-4">
+<div class="flex flex-col gap-4">
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">Lecturer settings</h1>
 		<p class="text-sm text-muted-foreground">Your sign-in details and other lecturer accounts.</p>

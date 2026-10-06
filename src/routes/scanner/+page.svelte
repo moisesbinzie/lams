@@ -25,52 +25,58 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-md flex-col gap-4">
 	<StudentNav />
-	<div class="text-center">
-		<h1 class="text-2xl font-bold text-lams-navy">Scan attendance</h1>
-		<p class="text-sm text-muted-foreground">
-			Point your camera at the code on the screen at the front of the hall. Your name, the time and
-			how far you were from the screen are recorded for you.
-		</p>
-	</div>
-
-	<Card.Root>
-		<Card.Content class="pt-6">
-			{#if token}
-				<QrCameraScanner onscanned={openLecture} />
-			{:else}
-				<div class="flex flex-col items-center gap-3 py-6 text-center">
-					<p class="text-sm text-muted-foreground">You need to sign in before you can scan.</p>
-					<Button href="/signin">Sign in</Button>
-				</div>
-			{/if}
-		</Card.Content>
-	</Card.Root>
-
-	<Card.Root>
-		<Card.Header>
-			<Card.Title class="text-base">How this works</Card.Title>
-		</Card.Header>
-		<Card.Content>
-			<ol class="flex flex-col gap-2 text-sm text-muted-foreground">
-				<li>
-					<strong class="text-foreground">1.</strong> The screen at the front shows a fresh code that
-					changes every 10 seconds.
-				</li>
-				<li>
-					<strong class="text-foreground">2.</strong> Hold your phone up to it. You are recorded as
-					present the moment it reads.
-				</li>
-				<li>
-					<strong class="text-foreground">3.</strong> Arrive late and it still counts — up to the limit
-					your lecturer set.
-				</li>
-			</ol>
-			<p class="mt-3 text-xs text-muted-foreground">
-				Your normal camera app does the same job: scanning the screen with it opens this page with the
-				code already filled in. Some phone cameras will not open links, which is what this page is for.
+	<!--
+		The page itself is the shared student width so the strip and the heading
+		line up across tabs, but the content stays in a narrow centred column: the
+		camera viewfinder is a square, and at the full page width it would be
+		~740 px tall on a desktop, pushing the instructions below the fold.
+	-->
+	<div class="mx-auto flex w-full max-w-md flex-col gap-4">
+		<div class="text-center">
+			<h1 class="text-2xl font-bold text-lams-navy">Scan attendance</h1>
+			<p class="text-sm text-muted-foreground">
+				Point your camera at the code on the screen at the front of the hall. Your name, the time and
+				how far you were from the screen are recorded for you.
 			</p>
-		</Card.Content>
-	</Card.Root>
-</div>
+		</div>
+
+		<Card.Root>
+			<Card.Content class="pt-6">
+				{#if token}
+					<QrCameraScanner onscanned={openLecture} />
+				{:else}
+					<div class="flex flex-col items-center gap-3 py-6 text-center">
+						<p class="text-sm text-muted-foreground">You need to sign in before you can scan.</p>
+						<Button href="/signin">Sign in</Button>
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-base">How this works</Card.Title>
+			</Card.Header>
+			<Card.Content>
+				<ol class="flex flex-col gap-2 text-sm text-muted-foreground">
+					<li>
+						<strong class="text-foreground">1.</strong> The screen at the front shows a fresh code that
+						changes every 10 seconds.
+					</li>
+					<li>
+						<strong class="text-foreground">2.</strong> Hold your phone up to it. You are recorded as
+						present the moment it reads.
+					</li>
+					<li>
+						<strong class="text-foreground">3.</strong> Arrive late and it still counts — up to the limit
+						your lecturer set.
+					</li>
+				</ol>
+				<p class="mt-3 text-xs text-muted-foreground">
+					Your normal camera app does the same job: scanning the screen with it opens this page with the
+					code already filled in. Some phone cameras will not open links, which is what this page is for.
+				</p>
+			</Card.Content>
+		</Card.Root>
+	</div>

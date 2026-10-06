@@ -81,7 +81,6 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-3xl flex-col gap-4">
 	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My subjects</h1>
@@ -171,4 +170,3 @@
 			</Card.Content>
 		</Card.Root>
 	{/if}
-</div>

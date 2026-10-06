@@ -261,8 +261,13 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-md flex-col gap-4">
 	<StudentNav />
+	<!--
+		Same shape as `/scanner`: the page is the shared student width so the strip
+		and heading line up across tabs, and the scan flow itself is a narrow
+		centred column — it is read on a phone, one-handed, in a hall.
+	-->
+	<div class="mx-auto flex w-full max-w-md flex-col gap-4">
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">
 			{#if preview}
@@ -452,5 +457,5 @@
 		<p class="text-center text-xs text-muted-foreground" aria-live="polite">
 			{preview.subjectCode} closes in {Math.ceil(expiresIn / 1000)}s
 		</p>
-	{/if}
-</div>
+		{/if}
+	</div>

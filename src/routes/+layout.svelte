@@ -90,7 +90,7 @@
 
 <div class="flex min-h-screen flex-col bg-background text-foreground">
 	<header class="print-hide sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-		<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+		<div class="mx-auto flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
 			<a href={homeHref} class="flex shrink-0 items-center gap-3" aria-label="LAMS home">
 				<img src="/lams-logo.png" alt="" class="size-10 rounded-lg" />
 				<span class="leading-tight">
@@ -151,10 +151,10 @@
 			</div>
 		</div>
 	</header>
-	<main class="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{@render children()}</main>
+	<main class="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{@render children()}</main>
 	<footer class="print-hide border-t border-border">
 		<div
-			class="mx-auto flex max-w-6xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left"
+			class="mx-auto flex max-w-3xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left"
 		>
 			<p class="font-semibold text-lams-navy">Attend • Track • Succeed</p>
 			<p>Scan the screen at the front of the hall, and the rest is recorded for you.</p>

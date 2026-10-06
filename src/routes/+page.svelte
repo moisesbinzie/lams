@@ -82,7 +82,7 @@
 	];
 </script>
 
-<div class="flex flex-col gap-8">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-8">
 	<section class="grid items-center gap-8 py-4 md:grid-cols-[1.15fr_1fr]">
 		<div class="flex flex-col items-start gap-4">
 			<div class="flex flex-wrap items-center gap-2">
@@ -204,7 +204,13 @@
 
 	<Separator />
 
-	<section aria-label="Who uses LAMS" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+	<!--
+		Two columns, not four. The site column is 768 px, so a viewport would have
+		to be ~1100 px wide before `lg` applied here — but the *grid* only ever
+		gets the 736 px inside that column, which is too narrow for four cards of
+		this text. `md` is the honest breakpoint for this layout.
+	-->
+	<section aria-label="Who uses LAMS" class="grid gap-4 sm:grid-cols-2">
 		{#each roles as role (role.title)}
 			<Card.Root>
 				<Card.Header>
