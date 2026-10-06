@@ -14,9 +14,20 @@
 	 * which is not what this is — it just borrows the tab *look*, because that is
 	 * the shape people already read as "sections of one area".
 	 *
-	 * The row scrolls sideways instead of wrapping on a phone. Five labels wrap
-	 * to three lines at 360px, which pushes the actual page content below the
-	 * fold, and a student opening this in a hall wants the content, not the menu.
+	 * Three failed attempts are worth recording so they are not repeated:
+	 *
+	 *   - `w-fit` centred: clipped the last label on the narrow student pages
+	 *     (`/scanner` is `max-w-md`) with no sign it could scroll.
+	 *   - full width with `flex-1 min-w-0` pills: forced five labels into a
+	 *     448 px row, so each pill shrank narrower than its own text and the
+	 *     labels ran out past the rounded backgrounds.
+	 *   - a single non-wrapping row: correct at full width, but it overhung the
+	 *     `max-w-md` column on `/scanner` and `/a/[sessionId]`.
+	 *
+	 * The row is therefore sized by its content and wraps when the column is too
+	 * narrow, which is what a page that deliberately constrains its own width
+	 * should do rather than being overrun. Below `sm` the labels are dropped
+	 * altogether and the icons carry it, matching how the top bar behaves.
 	 */
 	let { class: className = '' }: { class?: string } = $props();
 
@@ -27,28 +38,25 @@
 	}
 </script>
 
-<nav aria-label="My LAMS" class={cn('min-w-0 max-w-full overflow-x-auto', className)}>
-	<ul
-		class="flex w-fit min-w-full items-center gap-1 rounded-full bg-muted p-1 sm:min-w-0"
-	>
+<nav aria-label="My LAMS" class={cn('py-0.5', className)}>
+	<ul class="flex max-w-full flex-wrap items-center gap-0.5 rounded-3xl bg-muted p-1">
 		{#each STUDENT_NAV as item (item.href)}
 			{@const active = isActive(item.href)}
 			<li class="shrink-0">
 				<a
 					href={item.href}
 					aria-current={active ? 'page' : undefined}
+					aria-label={item.label}
+					title={item.label}
 					class={cn(
-						'flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
+						'flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
 						active
 							? 'bg-background text-lams-navy shadow-sm'
 							: 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
 					)}
 				>
 					<item.icon class="size-4 shrink-0" aria-hidden="true" />
-					<span class="flex flex-col leading-tight">
-						{item.label}
-						<span class="hidden text-[11px] font-normal opacity-70 lg:block">{item.hint}</span>
-					</span>
+					<span class="hidden sm:inline">{item.label}</span>
 				</a>
 			</li>
 		{/each}
