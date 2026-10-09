@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 import {
 	assertCanAccessOffering,
 	canRecordFor,
+	offeringLecturers,
 	requirePerson,
 	requireRecorder,
 	requireStaff
@@ -250,9 +251,10 @@ export const listForProgram = query({
 			.take(200);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			// Own offerings plus unassigned ones in this program (substitute cover).
-			offerings = offerings.filter(
-				(o: any) => String(o.lecturerId ?? '') === String(actor.id) || !o.lecturerId
-			);
+			offerings = offerings.filter((o: any) => {
+				const holders = offeringLecturers(o);
+				return holders.includes(String(actor.id)) || holders.length === 0;
+			});
 		}
 		const weekly: any[] = [];
 		const makeups: any[] = [];
@@ -300,9 +302,10 @@ export const listTodayForProgram = query({
 			.take(200);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			// Own offerings plus unassigned ones in this program (substitute cover).
-			offerings = offerings.filter(
-				(o: any) => String(o.lecturerId ?? '') === String(actor.id) || !o.lecturerId
-			);
+			offerings = offerings.filter((o: any) => {
+				const holders = offeringLecturers(o);
+				return holders.includes(String(actor.id)) || holders.length === 0;
+			});
 		}
 		const out: any[] = [];
 		for (const o of offerings) {
@@ -351,9 +354,10 @@ export const findClashes = query({
 		// Lecturers only compare against their own offerings.
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			// Own offerings plus unassigned ones in this program (substitute cover).
-			offerings = offerings.filter(
-				(o: any) => String(o.lecturerId ?? '') === String(actor.id) || !o.lecturerId
-			);
+			offerings = offerings.filter((o: any) => {
+				const holders = offeringLecturers(o);
+				return holders.includes(String(actor.id)) || holders.length === 0;
+			});
 		}
 		const clashes: string[] = [];
 		for (const o of offerings) {

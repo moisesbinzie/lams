@@ -4,6 +4,7 @@
 	import { requireConvexClient } from '$lib/convexClient';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
@@ -21,9 +22,10 @@
 	/**
 	 * The teaching structure as a tree: Program → Year → Offered course.
 	 *
-	 * `admin` manages everything inline: add programs, add years' courses
-	 * (by picker or by dragging a catalogue course onto a year), assign
-	 * lecturers, open enrolment and remove offerings. `mine` is the
+	 * `admin` manages everything inline: add programs, offer courses per year
+	 * (by picker, or by dragging a catalogue course onto a year), assign any
+	 * number of lecturers per course (checkboxes, or by dragging a lecturer
+	 * chip onto a course), open enrolment and remove offerings. `mine` is the
 	 * lecturer's read-only view of the same tree plus roster and enrolment
 	 * switches. `student` is the student's own view: enrolled courses grouped
 	 * by program, open courses to join, and drop where nothing is recorded.
@@ -58,21 +60,24 @@
 	// Admin drafts, keyed by `${programId}:Y${year}` — or 'new-program'.
 	let offerCourse = $state<Record<string, string>>({});
 	let offerSemester = $state<Record<string, string>>({});
-	let offerLecturer = $state<Record<string, string>>({});
+	let offerLecturers = $state<Record<string, string[]>>({});
 	let showOffer = $state<Record<string, boolean>>({});
 	let showProgram = $state(false);
+	let showLecturers = $state(false);
 	let newProgramName = $state('');
 	let newProgramYears = $state('4');
 	let dropTarget = $state<string | null>(null);
+	let editingLecturers = $state<string | null>(null);
+	let editLecturers = $state<string[]>([]);
 
 	const NO_COURSE = 'no-course';
 	const NO_SEMESTER = 'no-semester';
-	const NO_LECTURER = 'unassigned';
 
 	const semestersOrdered = $derived(
 		[...semesters].sort((a, b) => b.year - a.year || a.number - b.number)
 	);
 	const programsOrdered = $derived([...programs].sort((a, b) => a.name.localeCompare(b.name)));
+	const activeLecturers = $derived(lecturers.filter((l) => l.active));
 
 	function yearsOf(p: ProgramRow): number[] {
 		const n = Math.min(10, Math.max(1, p.durationYears ?? 1));
@@ -85,8 +90,23 @@
 			.sort((a, b) => a.courseCode.localeCompare(b.courseCode));
 	}
 
-	function semesterName(id: string): string {
-		return semesters.find((s) => String(s._id) === String(id))?.name ?? '';
+	function lecturerNamesOf(o: Offering): string {
+		if (o.lecturerNames && o.lecturerNames.length > 0) return o.lecturerNames.join(', ');
+		return o.lecturerName ?? '';
+	}
+
+	/** Courses already offered to this program year in the chosen semester. */
+	function offeredCourseIds(programId: string, year: number, semesterId: string): Set<string> {
+		return new Set(
+			offerings
+				.filter(
+					(o) =>
+						String(o.programId) === String(programId) &&
+						o.yearOfStudy === year &&
+						String(o.semesterId) === String(semesterId)
+				)
+				.map((o) => String(o.courseId))
+		);
 	}
 
 	const enrolledByProgram = $derived.by(() => {
@@ -130,7 +150,7 @@
 				programs = res[1];
 				offerings = res[2];
 				courses = res[3];
-				if (admin && res[4]) lecturers = res[4];
+				if (admin && res[4]) lecturers = res[4].filter((s) => !s.isAdmin);
 			}
 		} catch (err) {
 			reportError(err, 'Could not load the teaching structure.');
@@ -172,16 +192,16 @@
 		busy = true;
 		try {
 			const client = requireConvexClient();
-			const lecturerId = offerLecturer[key];
 			await client.mutation(api.academics.createOffering, {
 				token,
 				courseId: courseId as never,
 				programId: programId as never,
 				semesterId: semesterId as never,
 				yearOfStudy: year,
-				...(lecturerId ? { lecturerId: lecturerId as never } : {})
+				lecturerIds: (offerLecturers[key] ?? []) as never[]
 			});
 			offerCourse[key] = '';
+			offerLecturers[key] = [];
 			showOffer[key] = false;
 			await load();
 			reportSuccess('Course offered. Set its timetable, then open enrolment or assign students.');
@@ -204,19 +224,55 @@
 		document.getElementById(`offer-${programId}-${year}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
-	async function assign(offeringId: string, value: string | undefined) {
-		if (!value) return;
+	function toggleOfferLecturer(key: string, id: string) {
+		const current = offerLecturers[key] ?? [];
+		offerLecturers[key] = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+	}
+
+	function toggleEditLecturer(id: string) {
+		editLecturers = editLecturers.includes(id) ? editLecturers.filter((x) => x !== id) : [...editLecturers, id];
+	}
+
+	async function saveLecturers(offeringId: string) {
 		try {
 			const client = requireConvexClient();
-			await client.mutation(api.academics.setOfferingLecturer, {
+			await client.mutation(api.academics.setOfferingLecturers, {
 				token,
 				id: offeringId as never,
-				lecturerId: value === NO_LECTURER ? null : (value as never)
+				lecturerIds: editLecturers as never[]
+			});
+			editingLecturers = null;
+			await load();
+			reportSuccess(editLecturers.length > 0 ? 'Lecturers assigned.' : 'Offering unassigned.');
+		} catch (err) {
+			reportError(err, 'Could not assign lecturers.');
+		}
+	}
+
+	/** Drop a lecturer chip onto a course: append them to its lecturers. */
+	async function dropLecturer(e: DragEvent, o: Offering) {
+		e.preventDefault();
+		dropTarget = null;
+		const id = e.dataTransfer?.getData('text/lams-lecturer') ?? '';
+		if (!id) return;
+		const lecturer = activeLecturers.find((l) => String(l._id) === id);
+		if (!lecturer) return;
+		const current = o.lecturerIds && o.lecturerIds.length > 0 ? [...o.lecturerIds] : [];
+		if (current.includes(id)) {
+			reportSuccess(`${lecturer.fullName} already teaches this course.`);
+			return;
+		}
+		try {
+			const client = requireConvexClient();
+			await client.mutation(api.academics.setOfferingLecturers, {
+				token,
+				id: o._id as never,
+				lecturerIds: [...current, id] as never[]
 			});
 			await load();
-			reportSuccess(value === NO_LECTURER ? 'Offering unassigned.' : 'Lecturer assigned.');
+			reportSuccess(`${lecturer.fullName} now teaches ${o.courseCode}.`);
 		} catch (err) {
-			reportError(err, 'Could not assign that offering.');
+			reportError(err, 'Could not assign that lecturer.');
 		}
 	}
 
@@ -405,6 +461,33 @@
 					{/each}
 				</div>
 			</details>
+			<details class="rounded-lg border border-dashed border-border">
+				<summary class="cursor-pointer list-none px-4 py-3 [&::-webkit-details-marker]:hidden">
+					<span class="text-sm font-medium text-muted-foreground">
+						Lecturers ({activeLecturers.length}) — drag one onto a course to assign them
+					</span>
+				</summary>
+				<div class="flex flex-wrap gap-2 border-t border-border p-4">
+					{#each activeLecturers as l (l._id)}
+						<span
+							role="button"
+							tabindex="0"
+							draggable="true"
+							aria-label={`Drag ${l.fullName} onto a course`}
+							title="Drag onto a course below"
+							class="cursor-grab rounded-full border border-lams-navy/30 bg-lams-navy/5 px-3 py-1 text-xs font-medium text-lams-navy active:cursor-grabbing"
+							ondragstart={(e) => {
+								e.dataTransfer?.setData('text/lams-lecturer', String(l._id));
+								if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+							}}
+						>
+							{l.fullName} ({l.username})
+						</span>
+					{:else}
+						<p class="text-xs text-muted-foreground">No active lecturers — create accounts first.</p>
+					{/each}
+				</div>
+			</details>
 		{/if}
 
 		{#each programsOrdered as p (p._id)}
@@ -452,7 +535,23 @@
 							{:else}
 								<ul class="mt-1 flex flex-col divide-y divide-border">
 									{#each list as o (o._id)}
-										<li class="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+										<li
+											class="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between {dropTarget ===
+											`L:${o._id}`
+												? 'rounded-md bg-lams-green/5 ring-2 ring-lams-green/40'
+												: ''}"
+											ondragover={(e) => {
+												if (!admin) return;
+												if (!e.dataTransfer?.types.includes('text/lams-lecturer')) return;
+												e.preventDefault();
+												if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+												dropTarget = `L:${o._id}`;
+											}}
+											ondragleave={() => {
+												if (dropTarget === `L:${o._id}`) dropTarget = null;
+											}}
+											ondrop={(e) => dropLecturer(e, o)}
+										>
 											<div>
 												<p class="text-sm font-semibold">
 													{o.courseCode} — {o.courseTitle}
@@ -467,7 +566,7 @@
 													{:else}
 														closed
 													{/if}
-													{#if o.lecturerName}· {o.lecturerName}{/if}
+													{#if lecturerNamesOf(o)}· {lecturerNamesOf(o)}{/if}
 												</p>
 											</div>
 											<div class="flex flex-wrap items-center gap-2">
@@ -477,29 +576,39 @@
 													</Button>
 												{/if}
 												{#if admin}
-													<div class="w-48">
-														<Select.Root
-															type="single"
-															value={o.lecturerId ?? NO_LECTURER}
-															onValueChange={(v) => {
-																if (v) void assign(o._id, v);
+													{#if editingLecturers === o._id}
+														<div class="flex max-h-32 flex-col gap-1 overflow-y-auto rounded-md border border-border p-2">
+															{#each activeLecturers as l (l._id)}
+																<div class="flex items-center gap-2">
+																	<Checkbox
+																		id={`ol-${o._id}-${l._id}`}
+																		checked={editLecturers.includes(String(l._id))}
+																		onCheckedChange={() => toggleEditLecturer(String(l._id))}
+																	/>
+																	<Label for={`ol-${o._id}-${l._id}`} class="text-xs font-normal">
+																		{l.fullName} ({l.username})
+																	</Label>
+																</div>
+															{/each}
+															<div class="flex gap-1 pt-1">
+																<Button size="sm" onclick={() => saveLecturers(o._id)}>Save</Button>
+																<Button size="sm" variant="ghost" onclick={() => (editingLecturers = null)}>
+																	Cancel
+																</Button>
+															</div>
+														</div>
+													{:else}
+														<Button
+															variant="outline"
+															size="sm"
+															onclick={() => {
+																editingLecturers = o._id;
+																editLecturers = o.lecturerIds && o.lecturerIds.length > 0 ? [...o.lecturerIds] : [];
 															}}
 														>
-															<Select.Trigger size="sm" class="w-full">
-																<Select.Value placeholder="Lecturer" />
-															</Select.Trigger>
-															<Select.Content>
-																<Select.Group>
-																	<Select.Item value={NO_LECTURER} label="Unassigned">Unassigned</Select.Item>
-																	{#each lecturers.filter((l) => l.active) as l (l._id)}
-																		<Select.Item value={l._id} label={`${l.fullName} (${l.username})`}>
-																			{l.fullName} ({l.username})
-																		</Select.Item>
-																	{/each}
-																</Select.Group>
-															</Select.Content>
-														</Select.Root>
-													</div>
+															Lecturers ({(o.lecturerIds ?? []).length})
+														</Button>
+													{/if}
 													<Button variant="ghost" size="sm" class="text-red-700" onclick={() => removeOfferingRow(o._id, o.courseCode)}>
 														Remove
 													</Button>
@@ -520,7 +629,7 @@
 										{showOffer[key] ? 'Close' : '+ Offer a course'}
 									</Button>
 									{#if showOffer[key]}
-										<div id="offer-{p._id}-{year}" class="mt-2 grid gap-2 sm:grid-cols-[2fr_2fr_2fr_auto]">
+										<div id="offer-{p._id}-{year}" class="mt-2 grid gap-2 sm:grid-cols-[2fr_2fr_auto]">
 											<Select.Root
 												type="single"
 												value={offerCourse[key] ?? NO_COURSE}
@@ -534,7 +643,10 @@
 												<Select.Content>
 													<Select.Group>
 														<Select.Item value={NO_COURSE} label="Choose a course">Choose a course</Select.Item>
-														{#each courses as s (s._id)}
+														{#each courses.filter((s) => {
+															const sem = offerSemester[key];
+															return !sem || !offeredCourseIds(String(p._id), year, sem).has(String(s._id));
+														}) as s (s._id)}
 															<Select.Item value={s._id} label={`${s.code} — ${s.title}`}>
 																{s.code} — {s.title}
 															</Select.Item>
@@ -563,27 +675,6 @@
 													</Select.Group>
 												</Select.Content>
 											</Select.Root>
-											<Select.Root
-												type="single"
-												value={offerLecturer[key] ?? NO_LECTURER}
-												onValueChange={(v) => {
-													offerLecturer[key] = v === NO_LECTURER ? '' : (v ?? '');
-												}}
-											>
-												<Select.Trigger class="w-full">
-													<Select.Value placeholder="Lecturer (optional)" />
-												</Select.Trigger>
-												<Select.Content>
-													<Select.Group>
-														<Select.Item value={NO_LECTURER} label="Leave unassigned">Leave unassigned</Select.Item>
-														{#each lecturers.filter((l) => l.active) as l (l._id)}
-															<Select.Item value={l._id} label={`${l.fullName} (${l.username})`}>
-																{l.fullName} ({l.username})
-															</Select.Item>
-														{/each}
-													</Select.Group>
-												</Select.Content>
-											</Select.Root>
 											<Button
 												size="sm"
 												disabled={!(offerCourse[key] && offerSemester[key]) || busy}
@@ -591,6 +682,23 @@
 											>
 												Offer it
 											</Button>
+										</div>
+										<div class="mt-2 flex flex-col gap-1">
+											<span class="text-xs font-medium text-muted-foreground">Lecturers (optional)</span>
+											<div class="flex flex-wrap gap-x-4 gap-y-1">
+												{#each activeLecturers as l (l._id)}
+													<div class="flex items-center gap-1.5">
+														<Checkbox
+															id={`nl-${key}-${l._id}`}
+															checked={(offerLecturers[key] ?? []).includes(String(l._id))}
+															onCheckedChange={() => toggleOfferLecturer(key, String(l._id))}
+														/>
+														<Label for={`nl-${key}-${l._id}`} class="text-xs font-normal">
+															{l.fullName}
+														</Label>
+													</div>
+												{/each}
+											</div>
 										</div>
 									{/if}
 								</div>

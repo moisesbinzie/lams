@@ -10,8 +10,10 @@ import {
 	generateTempPassword,
 	hashSecret,
 	isAdminStaff,
+	lecturerOfferings,
 	logAudit,
 	normalizeUsername,
+	offeringLecturers,
 	randomSalt,
 	requireAdmin,
 	requireStaff,
@@ -429,10 +431,12 @@ export const lecturerStats = query({
 		const offeringLecturer = new Map<string, string>();
 		const assignments = new Map<string, number>();
 		for (const o of offerings) {
-			if (!o.lecturerId) continue;
-			const lid = String(o.lecturerId);
-			offeringLecturer.set(String(o._id), lid);
-			assignments.set(lid, (assignments.get(lid) ?? 0) + 1);
+			const holders = offeringLecturers(o);
+			if (holders.length === 0) continue;
+			offeringLecturer.set(String(o._id), holders[0]);
+			for (const lid of holders) {
+				assignments.set(lid, (assignments.get(lid) ?? 0) + 1);
+			}
 		}
 		const now = Date.now();
 		const sessions = (await ctx.db.query('sessions').order('desc').take(2000)) as any[];
@@ -549,12 +553,15 @@ export const setActive = mutation({
 			// Release their offerings back to unassigned so courses do not
 			// silently become unstartable — history stays attributed via
 			// `startedByStaffId`, and the admin reassigns from the console.
-			const held = await ctx.db
-				.query('offerings')
-				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', args.staffId))
-				.take(500);
-			for (const o of held) {
-				await ctx.db.patch(o._id, { lecturerId: undefined });
+			// A released lecturer is dropped from shared offerings but
+			// co-lecturers keep them.
+			const held = await lecturerOfferings(ctx, args.staffId);
+			for (const o of held as any[]) {
+				const remaining = offeringLecturers(o).filter((id) => id !== String(args.staffId));
+				await ctx.db.patch(o._id, {
+					lecturerIds: remaining.length > 0 ? (remaining as never[]) : undefined,
+					lecturerId: (remaining[0] ?? undefined) as never
+				});
 				released += 1;
 			}
 		}

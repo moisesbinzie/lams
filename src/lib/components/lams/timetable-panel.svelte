@@ -254,7 +254,7 @@
 							<Select.Content>
 								<Select.Group>
 									{#each DAYS as d, i (d)}
-										<Select.Item value={String(i)}>{d}</Select.Item>
+										<Select.Item value={String(i)} label={d}>{d}</Select.Item>
 									{/each}
 								</Select.Group>
 							</Select.Content>

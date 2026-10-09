@@ -98,6 +98,9 @@ export interface Offering {
 	semesterId: string;
 	semesterName: string;
 	openForEnrolment: boolean;
+	lecturerIds?: string[];
+	lecturerNames?: string[];
+	lecturerUsernames?: string[];
 	lecturerId?: string | null;
 	lecturerName?: string | null;
 	lecturerUsername?: string | null;

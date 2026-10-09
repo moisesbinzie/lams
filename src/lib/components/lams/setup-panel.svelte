@@ -10,7 +10,6 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import * as Select from '$lib/components/ui/select';
 	import DatePicker from '$lib/components/ui/date-picker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Pencil } from '@lucide/svelte';
@@ -34,17 +33,6 @@
 	let ayS2Start = $state(`${thisYear}-07-01`);
 	let ayS2End = $state(`${thisYear}-12-31`);
 
-	// New semester form.
-	//
-	// The name is a fixed default the user can overwrite. It is deliberately not
-	// derived from the number: the number has its own field, and a name that
-	// rewrote itself while being typed in was more surprising than helpful.
-	let semName = $state('Semester');
-	let semYear = $state(String(new Date().getFullYear()));
-	let semNumber = $state('1');
-	let semStart = $state('');
-	let semEnd = $state('');
-
 	// New program form.
 	let newProgramName = $state('');
 	let newProgramYears = $state('4');
@@ -57,11 +45,6 @@
 
 	const me = $derived(sessionMe());
 	const isAdmin = $derived(me?.kind === 'staff' && (me.isAdmin === true || me.role === 'admin'));
-
-	const yearOptions = $derived.by(() => {
-		const y = Number(semYear) || new Date().getFullYear();
-		return [y - 1, y, y + 1].map((v) => String(v));
-	});
 
 	async function loadSemesters() {
 		const client = requireConvexClient();
@@ -83,33 +66,6 @@
 			loading = false;
 		}
 	});
-
-	async function createSemester(e: SubmitEvent) {
-		e.preventDefault();
-		busy = true;
-		try {
-			const client = requireConvexClient();
-			await client.mutation(api.academics.createSemester, {
-				token,
-				name: semName.trim(),
-				year: Number(semYear),
-				number: Number(semNumber),
-				startDate: semStart,
-				endDate: semEnd
-			});
-			semName = 'Semester';
-			semStart = '';
-			semEnd = '';
-			await loadSemesters();
-			// The "now add X" half of these messages is a next step, not a receipt, so
-					// they are given long enough to actually read before they disappear.
-				reportSuccess('Semester created. Programs take courses per semester in the structure.', 7000);
-		} catch (err) {
-			reportError(err, 'Could not create the semester.');
-		} finally {
-			busy = false;
-		}
-	}
 
 	async function ensureYear(e: SubmitEvent) {
 		e.preventDefault();
@@ -256,14 +212,14 @@
 				<Card.Title>Semesters</Card.Title>
 				<Card.Description>
 					{isAdmin
-						? 'Courses are offered per semester, so create the current one first.'
-						: 'Semesters for the programs you teach in. Only the admin can create them.'}
+						? 'Semesters come from the academic year above — one flow, no duplicates.'
+						: 'Semesters for the programs you teach in.'}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
 				{#if semesters.length === 0}
 					<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-						No semesters yet. {isAdmin ? 'Create the first one below.' : 'Ask the admin to create one.'}
+						No semesters yet. {isAdmin ? 'Create the academic year above.' : 'Ask the admin to create one.'}
 					</p>
 				{:else}
 					<ul class="flex flex-col divide-y divide-border">
@@ -272,7 +228,7 @@
 								<span>
 									<strong>{s.name}</strong>
 									<span class="text-xs text-muted-foreground">
-										· {s.startDate} to {s.endDate}
+										· {s.year} · {s.startDate} to {s.endDate}
 									</span>
 								</span>
 								{#if isAdmin}
@@ -300,53 +256,6 @@
 							</li>
 						{/each}
 					</ul>
-				{/if}
-
-				{#if isAdmin}
-					<form class="grid gap-2 sm:grid-cols-[1.5fr_1fr_1fr_1.2fr_1.2fr_auto]" onsubmit={createSemester}>
-					<div class="flex flex-col gap-1">
-						<Label for="semn">Name</Label>
-						<Input id="semn" bind:value={semName} placeholder="Semester" required />
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="iemy">Year</Label>
-						<Select.Root type="single" value={semYear} onValueChange={(v) => (semYear = v ?? '')}>
-							<Select.Trigger id="iemy" class="w-full">
-								<Select.Value placeholder="Year" />
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Group>
-									{#each yearOptions as y (y)}
-										<Select.Item value={y}>{y}</Select.Item>
-									{/each}
-								</Select.Group>
-							</Select.Content>
-						</Select.Root>
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="iemn">Semester</Label>
-						<Select.Root type="single" value={semNumber} onValueChange={(v) => (semNumber = v ?? '1')}>
-							<Select.Trigger id="iemn" class="w-full">
-								<Select.Value placeholder="Semester" />
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Group>
-									<Select.Item value="1">1</Select.Item>
-									<Select.Item value="2">2</Select.Item>
-									<Select.Item value="3">3</Select.Item>
-								</Select.Group>
-							</Select.Content>
-						</Select.Root>
-					</div>
-					<DatePicker id="sems" label="Starts" bind:value={semStart} />
-					<DatePicker id="seme" label="Ends" bind:value={semEnd} />
-						<div class="flex items-end">
-							<Button type="submit" disabled={busy || !semStart || !semEnd}>Add semester</Button>
-						</div>
-					</form>
-					<p class="text-xs text-muted-foreground">
-						A year normally holds two semesters; use 3 only for a summer session.
-					</p>
 				{/if}
 			</Card.Content>
 		</Card.Root>

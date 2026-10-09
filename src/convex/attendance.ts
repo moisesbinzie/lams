@@ -6,6 +6,7 @@ import {
 	canRecordFor,
 	canRecordSession,
 	lecturerProgramIds,
+	offeringLecturers,
 	recorderFields,
 	requireActor,
 	requirePerson,
@@ -850,11 +851,13 @@ export const listForRecordKeeper = query({
 			// (substitute cover) — mirroring `canAccessOffering`.
 			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
 			const all = await ctx.db.query('offerings').take(500);
-			const offerings = all.filter(
-				(o: any) =>
-					String(o.lecturerId ?? '') === String(actor.id) ||
-					(!o.lecturerId && mine.has(String(o.programId)))
-			);
+			const offerings = all.filter((o: any) => {
+				const holders = offeringLecturers(o);
+				return (
+					holders.includes(String(actor.id)) ||
+					(holders.length === 0 && mine.has(String(o.programId)))
+				);
+			});
 			programIds = [...new Set(offerings.map((o: any) => String(o.programId)))];
 			ownOfferingIds = new Set(offerings.map((o: any) => String(o._id)));
 			if (args.offeringId && !ownOfferingIds.has(String(args.offeringId))) {
@@ -1063,11 +1066,13 @@ export const listRecordableOfferings = query({
 			// (substitute cover) — mirroring `canAccessOffering`.
 			const all = await ctx.db.query('offerings').take(500);
 			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
-			offerings = all.filter(
-				(o: any) =>
-					String(o.lecturerId ?? '') === String(actor.id) ||
-					(!o.lecturerId && mine.has(String(o.programId)))
-			);
+			offerings = all.filter((o: any) => {
+				const holders = offeringLecturers(o);
+				return (
+					holders.includes(String(actor.id)) ||
+					(holders.length === 0 && mine.has(String(o.programId)))
+				);
+			});
 		} else {
 			const repClasses = await ctx.db
 				.query('programReps')

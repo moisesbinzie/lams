@@ -307,21 +307,44 @@ export async function isRepFor(ctx: any, personId: unknown, programId: unknown):
 	return rows.some((r: any) => String(r.programId) === String(programId));
 }
 
+/** Every lecturer id on an offering, old single field included. */
+export function offeringLecturers(offering: any): string[] {
+	if (Array.isArray(offering?.lecturerIds) && offering.lecturerIds.length > 0) {
+		return offering.lecturerIds.map(String);
+	}
+	if (offering?.lecturerId) return [String(offering.lecturerId)];
+	return [];
+}
+
+/** Offerings touching one lecturer, across both lecturer fields. */
+export async function lecturerOfferings(ctx: any, staffId: unknown): Promise<any[]> {
+	const [bySingle, byMany] = await Promise.all([
+		ctx.db
+			.query('offerings')
+			.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', staffId))
+			.take(500),
+		ctx.db
+			.query('offerings')
+			.withIndex('by_lecturer_ids', (q: any) => q.eq('lecturerIds', staffId))
+			.take(500)
+	]);
+	const seen = new Set<string>();
+	return [...(bySingle as any[]), ...(byMany as any[])].filter((o: any) => {
+		const key = String(o._id);
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
 /** Offering ids assigned to one lecturer. */
 export async function lecturerOfferingIds(ctx: any, staffId: unknown): Promise<string[]> {
-	const rows = await ctx.db
-		.query('offerings')
-		.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', staffId))
-		.take(500);
-	return rows.map((r: any) => String(r._id));
+	return (await lecturerOfferings(ctx, staffId)).map((r: any) => String(r._id));
 }
 
 /** Program ids a lecturer teaches (via their assigned offerings). */
 export async function lecturerProgramIds(ctx: any, staffId: unknown): Promise<string[]> {
-	const rows = (await ctx.db
-		.query('offerings')
-		.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', staffId))
-		.take(500)) as any[];
+	const rows = await lecturerOfferings(ctx, staffId);
 	return [...new Set(rows.map((r: any) => String(r.programId ?? r.classId)))];
 }
 
@@ -334,8 +357,8 @@ export async function lecturerProgramIds(ctx: any, staffId: unknown): Promise<st
 export async function canAccessOffering(ctx: any, actor: Actor, offering: any): Promise<boolean> {
 	if (actor.kind === 'staff' && actor.isAdmin) return true;
 	if (actor.kind === 'staff') {
-		if (String(offering?.lecturerId ?? '') === String(actor.id)) return true;
-		if (!offering?.lecturerId) {
+		if (offeringLecturers(offering).includes(String(actor.id))) return true;
+		if (offeringLecturers(offering).length === 0) {
 			const programs = await lecturerProgramIds(ctx, actor.id);
 			return programs.includes(String(offering?.programId ?? offering?.classId));
 		}
@@ -353,7 +376,8 @@ export async function lecturerAccessibleOfferingIds(ctx: any, staffId: unknown):
 	const programs = new Set(await lecturerProgramIds(ctx, staffId));
 	const ids = all.filter((o: any) => {
 		const programId = String(o.programId ?? o.classId);
-		return String(o.lecturerId ?? '') === String(staffId) || (!o.lecturerId && programs.has(programId));
+		const holders = offeringLecturers(o);
+		return holders.includes(String(staffId)) || (holders.length === 0 && programs.has(programId));
 	});
 	return new Set(ids.map((o: any) => String(o._id)));
 }

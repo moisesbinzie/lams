@@ -103,7 +103,11 @@
 	const lecturers = $derived(staff.filter((s) => !s.isAdmin));
 	const admins = $derived(staff.filter((s) => s.isAdmin));
 	const activeLecturers = $derived(lecturers.filter((s) => s.active));
-	const unassigned = $derived(offerings.filter((o) => !o.lecturerId));
+	const offeringHolders = (o: Offering): string[] => {
+		if (o.lecturerIds && o.lecturerIds.length > 0) return o.lecturerIds;
+		return o.lecturerId ? [o.lecturerId] : [];
+	};
+	const unassigned = $derived(offerings.filter((o) => offeringHolders(o).length === 0));
 	const assignedCount = $derived(offerings.length - unassigned.length);
 
 	const statById = $derived(new Map(lectureStats.map((s) => [String(s._id), s])));

@@ -277,6 +277,26 @@ export const migrateToProgramsAndCourses = mutation({
 	}
 });
 
+/**
+ * Backfills `offerings.lecturerIds` from the legacy single `lecturerId`.
+ * Idempotent; safe to re-run. Run once after deploying multi-lecturer.
+ */
+export const backfillLecturerIds = mutation({
+	args: { token: v.string() },
+	handler: async (ctx, args) => {
+		await requireAdmin(ctx, args.token);
+		const offerings = (await ctx.db.query('offerings').take(2000)) as any[];
+		let patched = 0;
+		for (const o of offerings) {
+			if (Array.isArray(o.lecturerIds) && o.lecturerIds.length > 0) continue;
+			if (!o.lecturerId) continue;
+			await ctx.db.patch(o._id, { lecturerIds: [o.lecturerId] });
+			patched += 1;
+		}
+		return { scanned: offerings.length, patched, truncated: offerings.length >= 2000 };
+	}
+});
+
 /** Migration progress: old vs new counts so the admin can verify the move. */
 export const renameStatus = query({
 	args: { token: v.string() },

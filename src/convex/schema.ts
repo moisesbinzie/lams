@@ -236,7 +236,13 @@ export default defineSchema({
 		semesterId: v.id('semesters'),
 		/** Which year of the program this offering is taught in (1..durationYears). */
 		yearOfStudy: v.optional(v.number()),
-		/** The lecturer teaching this offering. One offering has one lecturer; a lecturer may teach many. */
+		/**
+		 * Lecturers teaching this offering — several may share one course.
+		 * `lecturerId` stays as the first of the list for older rows; new
+		 * code reads `lecturerIds` with that fallback.
+		 */
+		lecturerIds: v.optional(v.array(v.id('staff'))),
+		/** Deprecated single holder, kept for rows written before multi-lecturer. */
 		lecturerId: v.optional(v.id('staff')),
 		openForEnrolment: v.boolean(),
 		createdAt: v.number()
@@ -247,6 +253,7 @@ export default defineSchema({
 		.index('by_program', ['programId'])
 		.index('by_semester', ['semesterId'])
 		.index('by_lecturer', ['lecturerId'])
+		.index('by_lecturer_ids', ['lecturerIds'])
 		.index('by_class_and_semester', ['classId', 'semesterId'])
 		.index('by_program_and_semester', ['programId', 'semesterId']),
 
