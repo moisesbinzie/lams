@@ -20,15 +20,16 @@
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	/**
-	 * The teaching structure as a tree: Program → Year → Offered course.
+	 * The teaching structure as a tree: Semester → Year → Program → Course.
 	 *
 	 * `admin` manages everything inline: add programs, offer courses per year
-	 * (by picker, or by dragging a catalogue course onto a year), assign any
-	 * number of lecturers per course (checkboxes, or by dragging a lecturer
-	 * chip onto a course), open enrolment and remove offerings. `mine` is the
-	 * lecturer's read-only view of the same tree plus roster and enrolment
-	 * switches. `student` is the student's own view: enrolled courses grouped
-	 * by program, open courses to join, and drop where nothing is recorded.
+	 * (by picker, or by dragging a catalogue course onto a program), assign
+	 * any number of lecturers per course (checkboxes, or by dragging a
+	 * lecturer chip onto a course), open enrolment and remove offerings.
+	 * `mine` is the lecturer's read-only view of the same tree plus roster
+	 * and enrolment switches. `student` is the student's own view: enrolled
+	 * courses grouped by program, open courses to join, and drop where
+	 * nothing is recorded.
 	 */
 	let {
 		token,
@@ -57,9 +58,8 @@
 	let busy = $state(false);
 	let busyId = $state('');
 
-	// Admin drafts, keyed by `${programId}:Y${year}` — or 'new-program'.
+	// Admin drafts, keyed by `${programId}:Y${year}:S${semesterId}`.
 	let offerCourse = $state<Record<string, string>>({});
-	let offerSemester = $state<Record<string, string>>({});
 	let offerLecturers = $state<Record<string, string[]>>({});
 	let showOffer = $state<Record<string, boolean>>({});
 	let showProgram = $state(false);
@@ -71,32 +71,62 @@
 	let editLecturers = $state<string[]>([]);
 
 	const NO_COURSE = 'no-course';
-	const NO_SEMESTER = 'no-semester';
 
 	const semestersOrdered = $derived(
 		[...semesters].sort((a, b) => b.year - a.year || a.number - b.number)
 	);
-
-	const semestersByYear = $derived.by(() => {
-		const m = new Map<number, Semester[]>();
-		for (const s of semestersOrdered) {
-			if (!m.has(s.year)) m.set(s.year, []);
-			m.get(s.year)!.push(s);
-		}
-		return [...m.entries()].sort((a, b) => b[0] - a[0]);
-	});
 	const programsOrdered = $derived([...programs].sort((a, b) => a.name.localeCompare(b.name)));
 	const activeLecturers = $derived(lecturers.filter((l) => l.active));
 
-	function yearsOf(p: ProgramRow): number[] {
-		const n = Math.min(10, Math.max(1, p.durationYears ?? 1));
-		return Array.from({ length: n }, (_, i) => i + 1);
+	function offeringsIn(programId: string, year: number, semesterId: string): Offering[] {
+		return offerings
+			.filter(
+				(o) =>
+					String(o.programId) === String(programId) &&
+					o.yearOfStudy === year &&
+					String(o.semesterId) === String(semesterId)
+			)
+			.sort((a, b) => a.courseCode.localeCompare(b.courseCode));
 	}
 
-	function offeringsIn(programId: string, year: number): Offering[] {
-		return offerings
-			.filter((o) => String(o.programId) === String(programId) && o.yearOfStudy === year)
-			.sort((a, b) => a.courseCode.localeCompare(b.courseCode));
+	/** Years to show inside one semester: everything up to the longest program (admin), or only years with offerings (lecturer). */
+	function yearsInSemester(semesterId: string): number[] {
+		const sid = String(semesterId);
+		if (admin) {
+			const maxDur = Math.min(
+				10,
+				Math.max(1, ...programs.map((p) => p.durationYears ?? 1))
+			);
+			return Array.from({ length: maxDur }, (_, i) => i + 1);
+		}
+		return [
+			...new Set(
+				offerings.filter((o) => String(o.semesterId) === sid).map((o) => o.yearOfStudy ?? 0)
+			)
+		]
+			.filter((y) => y > 0)
+			.sort((a, b) => a - b);
+	}
+
+	/** Programs with offerings in one semester (any year): for header counts. */
+	function programsInSemester(semesterId: string): ProgramRow[] {
+		const sid = String(semesterId);
+		const ids = new Set(
+			offerings.filter((o) => String(o.semesterId) === sid).map((o) => String(o.programId))
+		);
+		return programsOrdered.filter((p) => ids.has(String(p._id)));
+	}
+
+	/** Programs to show inside one semester year: all of them (admin), or only ones with offerings (lecturer). */
+	function programsInSemesterYear(semesterId: string, year: number): ProgramRow[] {
+		const sid = String(semesterId);
+		if (admin) return programsOrdered;
+		const ids = new Set(
+			offerings
+				.filter((o) => String(o.semesterId) === sid && o.yearOfStudy === year)
+				.map((o) => String(o.programId))
+		);
+		return programsOrdered.filter((p) => ids.has(String(p._id)));
 	}
 
 	function lecturerNamesOf(o: Offering): string {
@@ -193,11 +223,10 @@
 		}
 	}
 
-	async function offer(programId: string, year: number) {
-		const key = `${programId}:Y${year}`;
+	async function offer(programId: string, year: number, semesterId: string) {
+		const key = `${programId}:Y${year}:S${semesterId}`;
 		const courseId = offerCourse[key];
-		const semesterId = offerSemester[key];
-		if (!courseId || !semesterId) return;
+		if (!courseId) return;
 		busy = true;
 		try {
 			const client = requireConvexClient();
@@ -221,16 +250,18 @@
 		}
 	}
 
-	/** Drop target: prefill the year's offer form with the dragged course. */
-	function dropCourse(e: DragEvent, programId: string, year: number) {
+	/** Drop target: prefill the program's offer form with the dragged course. */
+	function dropCourse(e: DragEvent, programId: string, year: number, semesterId: string) {
 		e.preventDefault();
 		const courseId = e.dataTransfer?.getData('text/lams-course') ?? '';
 		dropTarget = null;
 		if (!courseId || !courses.some((c) => String(c._id) === courseId)) return;
-		const key = `${programId}:Y${year}`;
+		const key = `${programId}:Y${year}:S${semesterId}`;
 		offerCourse[key] = courseId;
 		showOffer[key] = true;
-		document.getElementById(`offer-${programId}-${year}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		document
+			.getElementById(`offer-${programId}-${year}-${semesterId}`)
+			?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
 	function toggleOfferLecturer(key: string, id: string) {
@@ -446,7 +477,7 @@
 			<details class="rounded-lg border border-dashed border-border">
 				<summary class="cursor-pointer list-none px-4 py-3 [&::-webkit-details-marker]:hidden">
 					<span class="text-sm font-medium text-muted-foreground">
-						Course catalogue ({courses.length}) — drag a course onto a year to offer it there
+						Course catalogue ({courses.length}) — drag a course onto a program to offer it there
 					</span>
 				</summary>
 				<div class="flex flex-wrap gap-2 border-t border-border p-4">
@@ -499,226 +530,234 @@
 			</details>
 		{/if}
 
-		{#each programsOrdered as p (p._id)}
-			{@const years = yearsOf(p)}
-			{@const total = years.reduce((n, y) => n + offeringsIn(String(p._id), y).length, 0)}
-			<details open class="rounded-lg border border-border">
-				<summary class="cursor-pointer list-none px-4 py-3 [&::-webkit-details-marker]:hidden">
-					<span class="flex flex-wrap items-center gap-2">
-						<span class="text-sm font-bold text-lams-navy">{p.name}</span>
-						<Badge variant="secondary">
-							{p.durationYears} year{p.durationYears === 1 ? '' : 's'}
-						</Badge>
-						<Badge variant="outline">
-							{total} course{total === 1 ? '' : 's'}
-						</Badge>
-					</span>
-				</summary>
-				<div class="flex flex-col gap-3 border-t border-border p-4">
-					{#each years as year (year)}
-						{@const key = `${String(p._id)}:Y${year}`}
-						{@const list = offeringsIn(String(p._id), year)}
-						<div
-							role="region"
-							aria-label={`Year ${year} courses`}
-							class="rounded-md border border-border p-3 {dropTarget === key
-								? 'border-lams-green ring-2 ring-lams-green/40'
-								: ''}"
-							ondragover={(e) => {
-								if (!admin) return;
-								e.preventDefault();
-								if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-								dropTarget = key;
-							}}
-							ondragleave={() => {
-								if (dropTarget === key) dropTarget = null;
-							}}
-							ondrop={(e) => dropCourse(e, String(p._id), year)}
-						>
-							<p class="text-sm font-semibold">Year {year}</p>
+		{#each semestersOrdered as sem, si (sem._id)}
+			{@const semCount = offerings.filter((o) => String(o.semesterId) === String(sem._id)).length}
+			{@const semPrograms = programsInSemester(String(sem._id))}
+			{#if admin || semCount > 0}
+				<details open={si === 0} class="rounded-lg border border-border">
+					<summary class="cursor-pointer list-none px-4 py-3 [&::-webkit-details-marker]:hidden">
+						<span class="flex flex-wrap items-center gap-2">
+							<span class="text-sm font-bold text-lams-navy">{sem.name} {sem.year}</span>
+							<Badge variant="secondary">{sem.startDate} to {sem.endDate}</Badge>
+							<Badge variant="outline">
+								{semPrograms.length} program{semPrograms.length === 1 ? '' : 's'} · {semCount} course{semCount === 1 ? '' : 's'}
+							</Badge>
+						</span>
+					</summary>
+					<div class="flex flex-col gap-3 border-t border-border p-4">
+						{#each yearsInSemester(String(sem._id)) as year (year)}
+							{@const yearPrograms = programsInSemesterYear(String(sem._id), year)}
+							<div class="rounded-md border border-border p-3">
+								<p class="text-sm font-semibold">Year {year}</p>
+								{#if yearPrograms.length === 0}
+									<p class="mt-1 text-xs text-muted-foreground">No courses here yet.</p>
+								{/if}
+								{#each yearPrograms as p (p._id)}
+									{@const key = `${String(p._id)}:Y${year}:S${String(sem._id)}`}
+									{@const list = offeringsIn(String(p._id), year, String(sem._id))}
+									<div
+										role="region"
+										aria-label={`${p.name} year ${year} courses`}
+										class="mt-2 rounded-md border border-border p-3 {dropTarget === key
+											? 'border-lams-green ring-2 ring-lams-green/40'
+											: ''}"
+										ondragover={(e) => {
+											if (!admin) return;
+											e.preventDefault();
+											if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+											dropTarget = key;
+										}}
+										ondragleave={() => {
+											if (dropTarget === key) dropTarget = null;
+										}}
+										ondrop={(e) => dropCourse(e, String(p._id), year, String(sem._id))}
+									>
+										<div class="flex flex-wrap items-center gap-2">
+											<span class="text-sm font-semibold">{p.name}</span>
+											<Badge variant="secondary">
+												{list.length} course{list.length === 1 ? '' : 's'}
+											</Badge>
+										</div>
 
-							{#if list.length === 0}
-								<p class="mt-1 text-xs text-muted-foreground">
-									{admin ? 'No courses yet — drag one here or offer below.' : 'No courses for you here yet.'}
-								</p>
-							{:else}
-								<ul class="mt-1 flex flex-col divide-y divide-border">
-									{#each list as o (o._id)}
-										<li
-											class="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between {dropTarget ===
-											`L:${o._id}`
-												? 'rounded-md bg-lams-green/5 ring-2 ring-lams-green/40'
-												: ''}"
-											ondragover={(e) => {
-												if (!admin) return;
-												if (!e.dataTransfer?.types.includes('text/lams-lecturer')) return;
-												e.preventDefault();
-												if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-												dropTarget = `L:${o._id}`;
-											}}
-											ondragleave={() => {
-												if (dropTarget === `L:${o._id}`) dropTarget = null;
-											}}
-											ondrop={(e) => dropLecturer(e, o)}
-										>
-											<div>
-												<p class="text-sm font-semibold">
-													{o.courseCode} — {o.courseTitle}
-													{#if o.hoursPerWeek}
-														<span class="font-normal text-muted-foreground">· {o.hoursPerWeek} h/week</span>
-													{/if}
-												</p>
-												<p class="text-xs text-muted-foreground">
-													{o.semesterName} · {o.studentCount} student(s) ·
-													{#if o.openForEnrolment}
-														<span class="font-medium text-emerald-700">open to students</span>
-													{:else}
-														closed
-													{/if}
-													{#if lecturerNamesOf(o)}· {lecturerNamesOf(o)}{/if}
-												</p>
-											</div>
-											<div class="flex flex-wrap items-center gap-2">
-												{#if onroster}
-													<Button variant="outline" size="sm" onclick={() => onroster?.(o)}>
-														Roster ({o.studentCount})
-													</Button>
-												{/if}
-												{#if admin}
-													{#if editingLecturers === o._id}
-														<div class="flex max-h-32 flex-col gap-1 overflow-y-auto rounded-md border border-border p-2">
-															{#each activeLecturers as l (l._id)}
-																<div class="flex items-center gap-2">
-																	<Checkbox
-																		id={`ol-${o._id}-${l._id}`}
-																		checked={editLecturers.includes(String(l._id))}
-																		onCheckedChange={() => toggleEditLecturer(String(l._id))}
-																	/>
-																	<Label for={`ol-${o._id}-${l._id}`} class="text-xs font-normal">
-																		{l.fullName} ({l.username})
-																	</Label>
-																</div>
-															{/each}
-															<div class="flex gap-1 pt-1">
-																<Button size="sm" onclick={() => saveLecturers(o._id)}>Save</Button>
-																<Button size="sm" variant="ghost" onclick={() => (editingLecturers = null)}>
-																	Cancel
-																</Button>
-															</div>
+										{#if list.length === 0}
+											<p class="mt-1 text-xs text-muted-foreground">
+												{admin ? 'No courses yet — drag one here or offer below.' : 'No courses for you here yet.'}
+											</p>
+										{:else}
+											<ul class="mt-1 flex flex-col divide-y divide-border">
+												{#each list as o (o._id)}
+													<li
+														class="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between {dropTarget ===
+														`L:${o._id}`
+															? 'rounded-md bg-lams-green/5 ring-2 ring-lams-green/40'
+															: ''}"
+														ondragover={(e) => {
+															if (!admin) return;
+															if (!e.dataTransfer?.types.includes('text/lams-lecturer')) return;
+															e.preventDefault();
+															if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+															dropTarget = `L:${o._id}`;
+														}}
+														ondragleave={() => {
+															if (dropTarget === `L:${o._id}`) dropTarget = null;
+														}}
+														ondrop={(e) => dropLecturer(e, o)}
+													>
+														<div>
+															<p class="text-sm font-semibold">
+																{o.courseCode} — {o.courseTitle}
+																{#if o.hoursPerWeek}
+																	<span class="font-normal text-muted-foreground">· {o.hoursPerWeek} h/week</span>
+																{/if}
+															</p>
+															<p class="text-xs text-muted-foreground">
+																{o.studentCount} student(s) ·
+																{#if o.openForEnrolment}
+																	<span class="font-medium text-emerald-700">open to students</span>
+																{:else}
+																	closed
+																{/if}
+																{#if lecturerNamesOf(o)}· {lecturerNamesOf(o)}{/if}
+															</p>
+															{#if admin && !lecturerNamesOf(o)}
+																<p class="mt-0.5 text-xs">
+																	<span class="font-semibold text-amber-700">Unassigned</span>
+																	<span class="text-muted-foreground"> — no lecturer sees this course yet</span>
+																</p>
+															{/if}
 														</div>
-													{:else}
-														<Button
-															variant="outline"
-															size="sm"
-															onclick={() => {
-																editingLecturers = o._id;
-																editLecturers = o.lecturerIds && o.lecturerIds.length > 0 ? [...o.lecturerIds] : [];
-															}}
-														>
-															Lecturers ({(o.lecturerIds ?? []).length})
-														</Button>
-													{/if}
-													<Button variant="ghost" size="sm" class="text-red-700" onclick={() => removeOfferingRow(o._id, o.courseCode)}>
-														Remove
-													</Button>
-												{:else}
-													<Button variant="outline" size="sm" onclick={() => toggleOpen(o._id, !o.openForEnrolment)}>
-														{o.openForEnrolment ? 'Close enrolment' : 'Let students join'}
-													</Button>
+														<div class="flex flex-wrap items-center gap-2">
+															{#if onroster}
+																<Button variant="outline" size="sm" onclick={() => onroster?.(o)}>
+																	Roster ({o.studentCount})
+																</Button>
+															{/if}
+															{#if admin}
+																{#if editingLecturers === o._id}
+																	<div class="flex max-h-32 flex-col gap-1 overflow-y-auto rounded-md border border-border p-2">
+																		{#each activeLecturers as l (l._id)}
+																			<div class="flex items-center gap-2">
+																				<Checkbox
+																					id={`ol-${o._id}-${l._id}`}
+																					checked={editLecturers.includes(String(l._id))}
+																					onCheckedChange={() => toggleEditLecturer(String(l._id))}
+																				/>
+																				<Label for={`ol-${o._id}-${l._id}`} class="text-xs font-normal">
+																					{l.fullName} ({l.username})
+																				</Label>
+																			</div>
+																		{/each}
+																		<div class="flex gap-1 pt-1">
+																			<Button size="sm" onclick={() => saveLecturers(o._id)}>Save</Button>
+																			<Button size="sm" variant="ghost" onclick={() => (editingLecturers = null)}>
+																				Cancel
+																			</Button>
+																		</div>
+																	</div>
+																{:else}
+																	<Button
+																		variant="outline"
+																		size="sm"
+																		onclick={() => {
+																			editingLecturers = o._id;
+																			editLecturers = o.lecturerIds && o.lecturerIds.length > 0 ? [...o.lecturerIds] : [];
+																		}}
+																	>
+																		Lecturers ({(o.lecturerIds ?? []).length})
+																	</Button>
+																{/if}
+																<Button variant="ghost" size="sm" class="text-red-700" onclick={() => removeOfferingRow(o._id, o.courseCode)}>
+																	Remove
+																</Button>
+															{:else}
+																<Button variant="outline" size="sm" onclick={() => toggleOpen(o._id, !o.openForEnrolment)}>
+																	{o.openForEnrolment ? 'Close enrolment' : 'Let students join'}
+																</Button>
+															{/if}
+														</div>
+													</li>
+												{/each}
+											</ul>
+										{/if}
+
+										{#if admin}
+											<div class="mt-2">
+												<Button variant="ghost" size="sm" onclick={() => (showOffer[key] = !showOffer[key])}>
+													{showOffer[key] ? 'Close' : '+ Add a course to this program'}
+												</Button>
+												{#if showOffer[key]}
+													<div id="offer-{p._id}-{year}-{sem._id}" class="mt-2 flex flex-col gap-2 rounded-md border border-border p-3">
+														<div class="grid gap-2 sm:grid-cols-[2fr_auto]">
+															<Select.Root
+																type="single"
+																value={offerCourse[key] ?? NO_COURSE}
+																onValueChange={(v) => {
+																	offerCourse[key] = v === NO_COURSE ? '' : (v ?? '');
+																}}
+															>
+																<Select.Trigger class="w-full">
+																	<Select.Value placeholder="Choose a course" />
+																</Select.Trigger>
+																<Select.Content>
+																	<Select.Group>
+																		<Select.Item value={NO_COURSE} label="Choose a course">Choose a course</Select.Item>
+																		{#each courses.filter((s) => !offeredCourseIds(String(p._id), year, String(sem._id)).has(String(s._id))) as s (s._id)}
+																			<Select.Item value={s._id} label={`${s.code} — ${s.title}`}>
+																				{s.code} — {s.title}
+																			</Select.Item>
+																		{/each}
+																	</Select.Group>
+																</Select.Content>
+															</Select.Root>
+															<Button
+																size="sm"
+																disabled={!offerCourse[key] || busy}
+																onclick={() => offer(String(p._id), year, String(sem._id))}
+															>
+																Add course{(offerLecturers[key] ?? []).length > 0
+																	? ` + ${(offerLecturers[key] ?? []).length} lecturer${(offerLecturers[key] ?? []).length === 1 ? '' : 's'}`
+																	: ''}
+															</Button>
+														</div>
+														<div class="flex flex-col gap-1">
+															<span class="text-xs font-medium">
+																Assign lecturers
+																<span class="font-normal text-muted-foreground">
+																	— whoever teaches it sees it in their console
+																</span>
+															</span>
+															<div class="flex flex-wrap gap-x-4 gap-y-1">
+																{#each activeLecturers as l (l._id)}
+																	<div class="flex items-center gap-1.5">
+																		<Checkbox
+																			id={`nl-${key}-${l._id}`}
+																			checked={(offerLecturers[key] ?? []).includes(String(l._id))}
+																			onCheckedChange={() => toggleOfferLecturer(key, String(l._id))}
+																		/>
+																		<Label for={`nl-${key}-${l._id}`} class="text-xs font-normal">
+																			{l.fullName}
+																		</Label>
+																	</div>
+																{/each}
+															</div>
+															{#if !(offerCourse[key] && (offerLecturers[key] ?? []).length > 0)}
+																<p class="text-xs text-muted-foreground">
+																	Tip: pick the course and tick its lecturers, then add — or add
+																	first and assign from the row afterwards.
+																</p>
+															{/if}
+														</div>
+													</div>
 												{/if}
 											</div>
-										</li>
-									{/each}
-								</ul>
-							{/if}
-
-							{#if admin}
-								<div class="mt-2">
-									<Button variant="ghost" size="sm" onclick={() => (showOffer[key] = !showOffer[key])}>
-										{showOffer[key] ? 'Close' : '+ Offer a course'}
-									</Button>
-									{#if showOffer[key]}
-										<div id="offer-{p._id}-{year}" class="mt-2 grid gap-2 sm:grid-cols-[2fr_2fr_auto]">
-											<Select.Root
-												type="single"
-												value={offerCourse[key] ?? NO_COURSE}
-												onValueChange={(v) => {
-													offerCourse[key] = v === NO_COURSE ? '' : (v ?? '');
-												}}
-											>
-												<Select.Trigger class="w-full">
-													<Select.Value placeholder="Choose a course" />
-												</Select.Trigger>
-												<Select.Content>
-													<Select.Group>
-														<Select.Item value={NO_COURSE} label="Choose a course">Choose a course</Select.Item>
-														{#each courses.filter((s) => {
-															const sem = offerSemester[key];
-															return !sem || !offeredCourseIds(String(p._id), year, sem).has(String(s._id));
-														}) as s (s._id)}
-															<Select.Item value={s._id} label={`${s.code} — ${s.title}`}>
-																{s.code} — {s.title}
-															</Select.Item>
-														{/each}
-													</Select.Group>
-												</Select.Content>
-											</Select.Root>
-											<Select.Root
-												type="single"
-												value={offerSemester[key] ?? NO_SEMESTER}
-												onValueChange={(v) => {
-													offerSemester[key] = v === NO_SEMESTER ? '' : (v ?? '');
-												}}
-											>
-												<Select.Trigger class="w-full">
-													<Select.Value placeholder="Semester" />
-												</Select.Trigger>
-												<Select.Content>
-													<Select.Item value={NO_SEMESTER} label="Semester">Semester</Select.Item>
-													{#each semestersByYear as [year, list] (year)}
-														<Select.Group>
-															<Select.GroupHeading>Academic year {year}</Select.GroupHeading>
-															{#each list as s (s._id)}
-																<Select.Item value={s._id} label={`${s.name} ${s.year}`}>
-																	{s.name} {s.year}
-																</Select.Item>
-															{/each}
-														</Select.Group>
-													{/each}
-												</Select.Content>
-											</Select.Root>
-											<Button
-												size="sm"
-												disabled={!(offerCourse[key] && offerSemester[key]) || busy}
-												onclick={() => offer(String(p._id), year)}
-											>
-												Offer it
-											</Button>
-										</div>
-										<div class="mt-2 flex flex-col gap-1">
-											<span class="text-xs font-medium text-muted-foreground">Lecturers (optional)</span>
-											<div class="flex flex-wrap gap-x-4 gap-y-1">
-												{#each activeLecturers as l (l._id)}
-													<div class="flex items-center gap-1.5">
-														<Checkbox
-															id={`nl-${key}-${l._id}`}
-															checked={(offerLecturers[key] ?? []).includes(String(l._id))}
-															onCheckedChange={() => toggleOfferLecturer(key, String(l._id))}
-														/>
-														<Label for={`nl-${key}-${l._id}`} class="text-xs font-normal">
-															{l.fullName}
-														</Label>
-													</div>
-												{/each}
-											</div>
-										</div>
-									{/if}
-								</div>
-							{/if}
-						</div>
-					{/each}
-				</div>
-			</details>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/each}
+					</div>
+				</details>
+			{/if}
 		{/each}
 	{/if}
 </div>
