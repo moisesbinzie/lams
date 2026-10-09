@@ -10,17 +10,19 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { GraduationCap, TriangleAlert, UserRound } from '@lucide/svelte';
+	import { GraduationCap, ShieldCheck, TriangleAlert, UserRound } from '@lucide/svelte';
 	import { reportError } from '$lib/lams/notify.svelte';
 		import { toast } from 'svelte-sonner';
 
 	/**
-	 * Two audiences, two doors. Lecturers use a username and password; students
-	 * and class reps use a registration number and a PIN they chose. Keeping
-	 * them apart means a student who guesses a registration number cannot reach
-	 * a lecturer account, and vice versa.
+	 * Three audiences, three doors. Admins and lecturers both use a username
+	 * and password, but they land in different consoles: admins manage
+	 * accounts and assignments, lecturers see only their own subjects.
+	 * Students and class reps use a registration number and a PIN they chose.
+	 * Keeping staff and student doors apart means a student who guesses a
+	 * registration number cannot reach a staff account, and vice versa.
 	 */
-	type Mode = 'choose' | 'staff' | 'person' | 'activate';
+	type Mode = 'choose' | 'staff' | 'admin' | 'person' | 'activate';
 
 	let mode = $state<Mode>('choose');
 	let regNumber = $state('');
@@ -74,7 +76,8 @@
 		password = '';
 	}
 
-	async function staffSignIn(e: SubmitEvent) {
+	/** Staff sign-in shared by both staff doors. `adminOnly` refuses lecturers. */
+	async function staffSignIn(e: SubmitEvent, adminOnly = false) {
 		e.preventDefault();
 		busy = true;
 		try {
@@ -93,17 +96,18 @@
 				toast.error(res.message);
 				return;
 			}
+			const loggedInIsAdmin =
+				(res as { isAdmin?: boolean }).isAdmin === true || (res as { role?: string }).role === 'admin';
+			if (adminOnly && !loggedInIsAdmin) {
+				// Do not store the token: this door is admins only.
+				toast.error('That account is a lecturer account. Use “I am a lecturer” instead.');
+				return;
+			}
 			// Record the token in the shared session so the navbar is already
 			// signed in when the target page renders. Admins land on the admin
 			// console; lecturers land on their (scoped) console.
 			await beginSession(res.token);
-			const who = sessionMe();
-			const isAdmin =
-				(res as { isAdmin?: boolean }).isAdmin === true ||
-				(res as { role?: string }).role === 'admin' ||
-				(who?.kind === 'staff' &&
-					((who as { isAdmin?: boolean }).isAdmin === true || who.role === 'admin'));
-			await goto(isAdmin ? '/admin' : '/manage');
+			await goto(loggedInIsAdmin ? '/admin' : '/manage');
 		} catch (err) {
 			reportError(err, 'Could not sign you in.');
 		} finally {
@@ -196,11 +200,20 @@
 	<div class="flex flex-col items-center gap-2 pt-4 text-center">
 		<img src="/lams-logo.png" alt="LAMS" class="size-16 rounded-xl" />
 		<h1 class="text-2xl font-bold text-lams-navy">
-			{mode === 'staff' ? 'Lecturer sign in' : mode === 'activate' ? 'Set up your account' : 'Sign in to LAMS'}
+			{mode === 'staff'
+				? 'Lecturer sign in'
+				: mode === 'admin'
+					? 'Admin sign in'
+					: mode === 'activate'
+						? 'Set up your account'
+						: 'Sign in to LAMS'}
 		</h1>
 		<p class="text-sm text-muted-foreground">
 			{#if mode === 'staff'}
-				For lecturers. Use the username and password you were given.
+				For lecturers. Use the username and temporary password the admin gave you.
+			{:else if mode === 'admin'}
+				For administrators. Manage lecturer accounts and subject assignments. First run? Use
+				<code class="rounded bg-muted px-1 font-mono">admin / admin</code>, then change the password in Settings.
 			{:else if mode === 'activate'}
 				Your class rep or lecturer has already added you. Confirm your details and choose a PIN.
 			{:else if mode === 'person'}
@@ -232,13 +245,26 @@
 			<Card.Root class="transition-shadow hover:shadow-md">
 				<Card.Content class="flex items-center gap-4 pt-6">
 					<span class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-lams-navy text-white">
+						<ShieldCheck class="size-6" aria-hidden="true" />
+					</span>
+					<div class="flex-1">
+						<p class="font-semibold">I am an admin</p>
+						<p class="text-sm text-muted-foreground">Create lecturers, reset passwords, assign subjects.</p>
+					</div>
+					<Button onclick={() => { mode = 'admin'; resetMessages(); }}>Continue</Button>
+				</Card.Content>
+			</Card.Root>
+
+			<Card.Root class="transition-shadow hover:shadow-md">
+				<Card.Content class="flex items-center gap-4 pt-6">
+					<span class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-lams-navy text-white">
 						<GraduationCap class="size-6" aria-hidden="true" />
 					</span>
 					<div class="flex-1">
 						<p class="font-semibold">I am a lecturer</p>
-						<p class="text-sm text-muted-foreground">Set up classes, subjects and timetables.</p>
+						<p class="text-sm text-muted-foreground">Take attendance for my assigned subjects.</p>
 					</div>
-					<Button onclick={() => { mode = 'staff'; resetMessages(); }}>Continue</Button>
+					<Button variant="secondary" onclick={() => { mode = 'staff'; resetMessages(); }}>Continue</Button>
 				</Card.Content>
 			</Card.Root>
 
@@ -261,7 +287,7 @@
 		<Card.Root>
 			<Card.Content class="pt-6">
 				{#if mode === 'staff'}
-					<form class="flex flex-col gap-6" onsubmit={staffSignIn}>
+					<form class="flex flex-col gap-6" onsubmit={(e) => staffSignIn(e, false)}>
 						<div class="flex flex-col gap-1.5">
 							<Label for="un">Username</Label>
 							<Input id="un" bind:value={username} autocomplete="username" required />
@@ -278,8 +304,30 @@
 						</div>
 						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
 						<p class="text-xs text-muted-foreground">
-							First time here? Sign in with the username and password you were given, then change the
-							password from your settings.
+							First time here? Sign in with the username and temporary password the admin gave you,
+							then change the password from your settings.
+						</p>
+					</form>
+				{:else if mode === 'admin'}
+					<form class="flex flex-col gap-6" onsubmit={(e) => staffSignIn(e, true)}>
+						<div class="flex flex-col gap-1.5">
+							<Label for="aun">Admin username</Label>
+							<Input id="aun" bind:value={username} autocomplete="username" placeholder="admin" required />
+						</div>
+						<div class="flex flex-col gap-1.5">
+							<Label for="apw">Password</Label>
+							<Input
+								id="apw"
+								type="password"
+								bind:value={password}
+								autocomplete="current-password"
+								required
+							/>
+						</div>
+						<Button type="submit" size="lg" disabled={busy}>{busy ? 'Signing in…' : 'Open admin console'}</Button>
+						<p class="text-xs text-muted-foreground">
+							Default on first run: <code class="rounded bg-muted px-1 font-mono">admin / admin</code>.
+							Change it in Settings after signing in. Lecturers: use the lecturer door above instead.
 						</p>
 					</form>
 				{:else if mode === 'person'}

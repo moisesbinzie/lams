@@ -6,6 +6,7 @@
 	import { endSession } from '$lib/lams/session.svelte';
 	import { getToken } from '$lib/lams/auth';
 	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -51,9 +52,11 @@
 				await goto('/signin');
 				return;
 			}
-			// Lecturers have their own console; this page is for people.
+			// Staff have their own consoles; this page is for students and reps.
 			if (found.kind !== 'person') {
-				await goto('/manage');
+				const staffIsAdmin =
+					(found as { isAdmin?: boolean }).isAdmin === true || found.role === 'admin';
+				await goto(staffIsAdmin ? '/admin' : '/manage');
 				return;
 			}
 			me = found;
@@ -112,7 +115,14 @@
 		<Card.Root>
 			<Card.Content class="flex flex-wrap items-start justify-between gap-4 pt-6">
 				<div>
-					<h1 class="text-2xl font-bold text-lams-navy">{person.fullName}</h1>
+					<h1 class="flex flex-wrap items-center gap-2 text-2xl font-bold text-lams-navy">
+						{person.fullName}
+						{#if person.role === 'rep'}
+							<Badge class="bg-lams-green text-white">Class rep account</Badge>
+						{:else}
+							<Badge variant="secondary">Student account</Badge>
+						{/if}
+					</h1>
 					<p class="text-sm text-muted-foreground">
 						{person.regNumber}
 						{#if person.classNames.length > 0}

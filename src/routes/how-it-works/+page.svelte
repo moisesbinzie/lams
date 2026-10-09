@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
+	import { ensureSession, sessionMe, sessionStatus } from '$lib/lams/session.svelte';
 	import {
 		AlertTriangle,
 		Ban,
@@ -153,6 +155,29 @@
 		['#wrong', 'If something goes wrong'],
 		['#roles', 'Who does what']
 	];
+
+	const viewer = $derived(sessionMe());
+	const isAuthed = $derived(sessionStatus() === 'authed' && !!viewer);
+	const isStaffViewer = $derived(viewer?.kind === 'staff');
+	const isAdminViewer = $derived(
+		viewer?.kind === 'staff' && ((viewer as { isAdmin?: boolean }).isAdmin === true || viewer.role === 'admin')
+	);
+	const dashboardHref = $derived(
+		!viewer ? '/signin' : viewer.kind === 'person' ? '/home' : isAdminViewer ? '/admin' : '/manage'
+	);
+	const dashboardLabel = $derived(
+		!viewer
+			? 'Sign in'
+			: isAdminViewer
+				? 'Open admin console'
+				: isStaffViewer
+					? 'Open lecturer console'
+					: 'Go to my account'
+	);
+
+	onMount(() => {
+		void ensureSession();
+	});
 </script>
 
 <svelte:head>
@@ -396,14 +421,18 @@
 
 	<Separator />
 
-	<section class="flex flex-col items-center gap-3 rounded-lg bg-lams-light/70 p-8 text-center">
+			<section class="flex flex-col items-center gap-3 rounded-lg bg-lams-light/70 p-8 text-center">
 					<p class="text-lg font-semibold text-lams-navy">That is the whole system.</p>
 					<p class="max-w-md text-sm text-muted-foreground">
-						One scan, one record, and nothing for a student to type. Sign in to see your own attendance, or to run
-						a lecture.
+						{#if isAuthed}
+							You are signed in — continue where you left off.
+						{:else}
+							One scan, one record, and nothing for a student to type. Sign in to see your own attendance, or to run
+							a lecture.
+						{/if}
 					</p>
 					<div class="flex flex-wrap justify-center gap-2">
-						<Button href="/signin">Sign in</Button>
+						<Button href={dashboardHref}>{dashboardLabel}</Button>
 						<Button variant="outline" href="/">Back to the start</Button>
 					</div>
 				</section>

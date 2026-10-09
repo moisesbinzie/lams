@@ -157,7 +157,9 @@
 	<div class="flex items-center gap-3">
 		<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
 		<div>
-			<h1 class="text-xl font-bold text-lams-navy">Admin console</h1>
+			<h1 class="flex flex-wrap items-center gap-2 text-xl font-bold text-lams-navy">
+				Admin console <Badge class="bg-amber-600 text-white">Admin account</Badge>
+			</h1>
 			<p class="text-xs text-muted-foreground">
 				Signed in as <strong>{me?.username ?? '…'}</strong>. Create lecturer accounts, reset passwords, and
 				assign each subject to the lecturer teaching it. Lecturers sign in with their username and the

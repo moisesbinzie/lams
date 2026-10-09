@@ -6,6 +6,7 @@
 	import { endSession } from '$lib/lams/session.svelte';
 	import { getToken } from '$lib/lams/auth';
 	import { Button } from '$lib/components/ui/button';
+	import { Badge } from '$lib/components/ui/badge';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
 	import SetupPanel from '$lib/components/lams/setup-panel.svelte';
@@ -60,7 +61,14 @@
 	<div class="flex items-center gap-3">
 		<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
 		<div>
-			<h1 class="text-xl font-bold text-lams-navy">Lecturer console</h1>
+			<h1 class="flex flex-wrap items-center gap-2 text-xl font-bold text-lams-navy">
+				Lecturer console
+				{#if isAdmin}
+					<Badge class="bg-amber-600 text-white">Admin account</Badge>
+				{:else}
+					<Badge class="bg-lams-navy text-white">Lecturer account</Badge>
+				{/if}
+			</h1>
 			<p class="text-xs text-muted-foreground">
 				Set up semesters, classes and subjects, add students, then start lectures and review records.
 			</p>

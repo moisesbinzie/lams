@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import StatusBadge from '$lib/lams/status-badge.svelte';
+	import { ensureSession, sessionMe, sessionStatus } from '$lib/lams/session.svelte';
 	import {
 		ScanLine,
 		MapPin,
@@ -37,6 +39,25 @@
 			body: 'Point your phone camera at the QR on the screen at the front of the hall. Your name, the time and how far you are from the screen are recorded for you.'
 		}
 	];
+
+	/** Role-aware calls to action: never offer "Sign in" to someone signed in. */
+	const sessionState = $derived(sessionStatus());
+	const viewer = $derived(sessionMe());
+	const isAuthed = $derived(sessionState === 'authed' && !!viewer);
+	const isStaff = $derived(viewer?.kind === 'staff');
+	const isAdmin = $derived(
+		viewer?.kind === 'staff' && ((viewer as { isAdmin?: boolean }).isAdmin === true || viewer.role === 'admin')
+	);
+	const dashboardHref = $derived(
+		!viewer ? '/signin' : viewer.kind === 'person' ? '/home' : isAdmin ? '/admin' : '/manage'
+	);
+	const dashboardLabel = $derived(
+		!viewer ? 'Sign in' : isAdmin ? 'Open admin console' : isStaff ? 'Open lecturer console' : 'Go to my account'
+	);
+
+	onMount(() => {
+		void ensureSession();
+	});
 
 	const roles = [
 		{
@@ -99,10 +120,22 @@
 				itself and your percentages add up on their own.
 			</p>
 			<div class="flex flex-wrap gap-2">
-				<Button href="/signin" size="lg">Sign in</Button>
+				{#if isAuthed}
+					<Button href={dashboardHref} size="lg">{dashboardLabel}</Button>
+				{:else}
+					<Button href="/signin" size="lg">Sign in</Button>
+				{/if}
 			</div>
 			<p class="text-xs text-muted-foreground">
-				New here? Ask your class representative or lecturer to add you, then set your PIN.
+				{#if isAuthed}
+					Signed in{viewer?.kind === 'staff'
+						? ` as ${viewer.username} (${isAdmin ? 'admin' : 'lecturer'})`
+						: viewer?.kind === 'person'
+							? ` as ${viewer.fullName}`
+							: ''}. Use the navigation above to continue.
+				{:else}
+					New here? Ask your class representative or lecturer to add you, then set your PIN.
+				{/if}
 			</p>
 		</div>
 		<div class="flex justify-center">
@@ -301,7 +334,13 @@
 					Set up subjects, classes and semesters, decide who can enrol, build the weekly timetable, choose
 					class reps, start lectures and change any record afterwards.
 				</p>
-				<Button variant="outline" size="sm" href="/signin">Sign in to continue</Button>
+				{#if isAuthed}
+					<Button variant="outline" size="sm" href={isStaff ? '/manage' : '/home'}>
+						{isStaff ? 'Open lecturer console' : 'Go to my account'}
+					</Button>
+				{:else}
+					<Button variant="outline" size="sm" href="/signin">Sign in to continue</Button>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 
@@ -316,7 +355,13 @@
 					See how much of each lecture everyone attended, spot anyone falling behind, and download a full list
 					for your department. Approved absences count separately so they never work against a student.
 				</p>
-				<Button variant="outline" size="sm" href="/signin">Sign in to continue</Button>
+				{#if isAuthed}
+					<Button variant="outline" size="sm" href={isStaff ? '/records' : '/attendance'}>
+						{isStaff ? 'Open records' : 'See my attendance'}
+					</Button>
+				{:else}
+					<Button variant="outline" size="sm" href="/signin">Sign in to continue</Button>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 	</section>
