@@ -222,40 +222,62 @@
 						No semesters yet. {isAdmin ? 'Create the academic year above.' : 'Ask the admin to create one.'}
 					</p>
 				{:else}
-					<ul class="flex flex-col divide-y divide-border">
-						{#each semesters as s (s._id)}
-							<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-								<span>
-									<strong>{s.name}</strong>
-									<span class="text-xs text-muted-foreground">
-										· {s.year} · {s.startDate} to {s.endDate}
+					{@const byYear = (() => {
+						const m = new Map<number, typeof semesters>();
+						for (const s of [...semesters].sort((a, b) => b.year - a.year || a.number - b.number)) {
+							if (!m.has(s.year)) m.set(s.year, []);
+							m.get(s.year)!.push(s);
+						}
+						return [...m.entries()].sort((a, b) => b[0] - a[0]);
+					})()}
+					<div class="flex flex-col gap-3">
+						{#each byYear as [year, list] (year)}
+							<details open class="rounded-lg border border-border">
+								<summary class="cursor-pointer list-none px-4 py-2.5 [&::-webkit-details-marker]:hidden">
+									<span class="flex flex-wrap items-center gap-2">
+										<span class="text-sm font-bold text-lams-navy">Academic year {year}</span>
+										<Badge variant="outline">
+											{list.length} semester{list.length === 1 ? '' : 's'}
+										</Badge>
 									</span>
-								</span>
-								{#if isAdmin}
-									<AlertDialog.Root>
-										<AlertDialog.Trigger
-											class="text-xs text-red-700 underline"
-											disabled={busy}
-										>
-											Remove
-										</AlertDialog.Trigger>
-										<AlertDialog.Content>
-											<AlertDialog.Header>
-												<AlertDialog.Title>Remove {s.name}?</AlertDialog.Title>
-												<AlertDialog.Description>
-													This only works while no program or course uses the semester.
-												</AlertDialog.Description>
-											</AlertDialog.Header>
-											<AlertDialog.Footer>
-												<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-												<AlertDialog.Action onclick={() => removeSemester(s._id)}>Remove</AlertDialog.Action>
-											</AlertDialog.Footer>
-										</AlertDialog.Content>
-									</AlertDialog.Root>
-								{/if}
-							</li>
+								</summary>
+								<ul class="flex flex-col divide-y divide-border border-t border-border px-4">
+									{#each list as s (s._id)}
+										<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+											<span>
+												<strong>{s.name}</strong>
+												<span class="text-xs text-muted-foreground">
+													· {s.startDate} to {s.endDate}
+												</span>
+											</span>
+											{#if isAdmin}
+												<AlertDialog.Root>
+													<AlertDialog.Trigger
+														class="text-xs text-red-700 underline"
+														disabled={busy}
+													>
+														Remove
+													</AlertDialog.Trigger>
+													<AlertDialog.Content>
+														<AlertDialog.Header>
+															<AlertDialog.Title>Remove {s.name}?</AlertDialog.Title>
+															<AlertDialog.Description>
+																This only works while no program or course uses the semester.
+															</AlertDialog.Description>
+														</AlertDialog.Header>
+														<AlertDialog.Footer>
+															<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+															<AlertDialog.Action onclick={() => removeSemester(s._id)}>Remove</AlertDialog.Action>
+														</AlertDialog.Footer>
+													</AlertDialog.Content>
+												</AlertDialog.Root>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</details>
 						{/each}
-					</ul>
+					</div>
 				{/if}
 			</Card.Content>
 		</Card.Root>

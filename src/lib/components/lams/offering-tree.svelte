@@ -76,6 +76,15 @@
 	const semestersOrdered = $derived(
 		[...semesters].sort((a, b) => b.year - a.year || a.number - b.number)
 	);
+
+	const semestersByYear = $derived.by(() => {
+		const m = new Map<number, Semester[]>();
+		for (const s of semestersOrdered) {
+			if (!m.has(s.year)) m.set(s.year, []);
+			m.get(s.year)!.push(s);
+		}
+		return [...m.entries()].sort((a, b) => b[0] - a[0]);
+	});
 	const programsOrdered = $derived([...programs].sort((a, b) => a.name.localeCompare(b.name)));
 	const activeLecturers = $derived(lecturers.filter((l) => l.active));
 
@@ -665,14 +674,17 @@
 													<Select.Value placeholder="Semester" />
 												</Select.Trigger>
 												<Select.Content>
-													<Select.Group>
-														<Select.Item value={NO_SEMESTER} label="Semester">Semester</Select.Item>
-														{#each semestersOrdered as s (s._id)}
-															<Select.Item value={s._id} label={`${s.name} ${s.year}`}>
-																{s.name} {s.year}
-															</Select.Item>
-														{/each}
-													</Select.Group>
+													<Select.Item value={NO_SEMESTER} label="Semester">Semester</Select.Item>
+													{#each semestersByYear as [year, list] (year)}
+														<Select.Group>
+															<Select.GroupHeading>Academic year {year}</Select.GroupHeading>
+															{#each list as s (s._id)}
+																<Select.Item value={s._id} label={`${s.name} ${s.year}`}>
+																	{s.name} {s.year}
+																</Select.Item>
+															{/each}
+														</Select.Group>
+													{/each}
 												</Select.Content>
 											</Select.Root>
 											<Button
