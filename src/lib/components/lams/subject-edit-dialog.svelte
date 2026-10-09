@@ -107,9 +107,11 @@
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
-								<Select.Item value={NOT_SET}>Not set</Select.Item>
+								<Select.Item value={NOT_SET} label="Not set">Not set</Select.Item>
 								{#each staff as s (s._id)}
-									<Select.Item value={s._id}>{s.fullName} ({s.username})</Select.Item>
+									<Select.Item value={s._id} label={`${s.fullName} (${s.username})`}>
+										{s.fullName} ({s.username})
+									</Select.Item>
 								{/each}
 							</Select.Group>
 						</Select.Content>

@@ -153,7 +153,7 @@
 	}
 </script>
 
-<div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-6 lg:max-w-5xl">
 	<div class="flex items-center gap-3">
 		<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
 		<div>
@@ -330,9 +330,15 @@
 										</Select.Trigger>
 										<Select.Content>
 											<Select.Group>
-												<Select.Item value={NO_LECTURER}>Unassigned</Select.Item>
-												{#each lecturers.filter((l) => l.active) as l (l._id)}
-													<Select.Item value={l._id}>{l.fullName} ({l.username})</Select.Item>
+												<Select.Item value={NO_LECTURER} label="Unassigned">Unassigned</Select.Item>
+												{#each lecturers as l (l._id)}
+													<Select.Item
+														value={l._id}
+														label={`${l.fullName} (${l.username})`}
+														disabled={!l.active}
+													>
+														{l.fullName} ({l.username}){l.active ? '' : ' — switched off'}
+													</Select.Item>
 												{/each}
 											</Select.Group>
 										</Select.Content>

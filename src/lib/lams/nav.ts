@@ -53,13 +53,13 @@ export const LECTURER_NAV: StudentNavItem[] = [
 ];
 
 /**
- * Where an admin can go. Same destinations as a lecturer plus the admin
- * console, which is where lecturer accounts are created and assigned.
+ * Where an admin can go. The admin console plus the setup and records tools —
+ * deliberately no "Take attendance": admins manage accounts and assignments,
+ * lecturers and reps run lectures.
  */
 export const ADMIN_NAV: StudentNavItem[] = [
 	{ href: '/admin', label: 'Admin', icon: ShieldCheck },
 	{ href: '/manage', label: 'Set up', icon: Settings2 },
-	{ href: '/scan', label: 'Take attendance', icon: ScanLine },
 	{ href: '/records', label: 'Records', icon: BarChart3 },
 	{ href: '/settings', label: 'Settings', icon: Settings }
 ];

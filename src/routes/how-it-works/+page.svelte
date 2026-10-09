@@ -188,7 +188,7 @@
 	/>
 </svelte:head>
 
-<div class="mx-auto flex w-full max-w-3xl flex-col gap-8">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-8 lg:max-w-5xl">
 	<section class="flex flex-col items-start gap-3 pt-2">
 		<Badge class="gap-1.5 bg-lams-navy text-white"><MonitorSmartphone class="size-3.5" /> In plain language</Badge>
 		<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">How it works</h1>

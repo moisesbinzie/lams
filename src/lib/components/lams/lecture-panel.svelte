@@ -11,17 +11,16 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
-	import type { ClassRow, LectureSession, Offering } from '$lib/lams/types';
+	import type { LectureSession, Offering } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
 
 	let token = getToken();
-	let classes = $state<ClassRow[]>([]);
 	let offerings = $state<Offering[]>([]);
 	let sessions = $state<LectureSession[]>([]);
-	let classId = $state('');
 	let offeringId = $state('');
 	let busy = $state(false);
+	let loading = $state(true);
 	let now = $state(Date.now());
 
 	let lat = $state('');
@@ -48,6 +47,7 @@
 
 	async function load() {
 		if (!token) return;
+		loading = true;
 		try {
 			const client = requireConvexClient();
 			const me = (await client.query(api.staff.me, { token })) as {
@@ -63,29 +63,19 @@
 				toast.error('Only lecturers start lectures here. Class reps use “Take attendance”.');
 				return;
 			}
-			classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
-			if (!classId && classes.length > 0) classId = classes[0]._id;
-			await loadOfferings();
+			// Scoped server-side: lecturers get only their assigned offerings,
+			// admins get everything. No class picker needed — each offering
+			// already carries its class.
+			offerings = (await client.query(api.academics.listOfferings, { token })) as unknown as Offering[];
+			if (!offeringId || !offerings.some((o) => o._id === offeringId)) {
+				offeringId = offerings[0]?._id ?? '';
+			}
 			await loadSessions();
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
 			reportError(err, 'Could not load.');
-		}
-	}
-
-	async function loadOfferings() {
-		if (!classId) return;
-		try {
-			const client = requireConvexClient();
-			offerings = (await client.query(api.academics.listOfferings, {
-				token,
-				classId: classId as never
-			})) as unknown as Offering[];
-			if (!offeringId || !offerings.some((o) => o._id === offeringId)) {
-				offeringId = offerings[0]?._id ?? '';
-			}
-		} catch (err) {
-			reportError(err, 'Could not load subjects.');
+		} finally {
+			loading = false;
 		}
 	}
 
@@ -160,9 +150,6 @@
 		}
 	}
 
-	$effect(() => {
-		if (classId) void loadOfferings();
-	});
 </script>
 
 <div class="flex flex-col gap-4">
@@ -170,27 +157,17 @@
 		<Card.Header>
 			<Card.Title>Start a lecture</Card.Title>
 			<Card.Description>
-				Set where the lecture is, how far students may be from it, and how long they have to arrive. The
-				lecture closes itself.
+				Pick one of your assigned subjects, share your location, and start. The lecture closes itself.
 			</Card.Description>
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-4">
-			<div class="grid gap-3 sm:grid-cols-2">
-				<div class="flex flex-col gap-1.5">
-					<Label for="cls">Class</Label>
-					<Select.Root type="single" value={classId} onValueChange={(v) => (classId = v ?? '')}>
-						<Select.Trigger id="cls" class="w-full">
-							<Select.Value placeholder="Choose a class" />
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Group>
-								{#each classes as c (c._id)}
-									<Select.Item value={c._id}>{c.name}</Select.Item>
-								{/each}
-							</Select.Group>
-						</Select.Content>
-					</Select.Root>
-				</div>
+			{#if loading}
+				<div class="h-24 animate-pulse rounded-md bg-muted"></div>
+			{:else if offerings.length === 0}
+				<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+					No subjects assigned to you yet. Ask the admin to assign your subjects in the admin console.
+				</p>
+			{:else}
 				<div class="flex flex-col gap-1.5">
 					<Label for="off">Subject</Label>
 					<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
@@ -200,87 +177,101 @@
 						<Select.Content>
 							<Select.Group>
 								{#each offerings as o (o._id)}
-									<Select.Item value={o._id}>{o.subjectCode} — {o.subjectTitle}</Select.Item>
+									<Select.Item
+										value={o._id}
+										label={`${o.subjectCode} — ${o.subjectTitle} · ${o.className}`}
+									>
+										{o.subjectCode} — {o.subjectTitle} · {o.className}
+									</Select.Item>
 								{/each}
 							</Select.Group>
 						</Select.Content>
 					</Select.Root>
+					{#if selected}
+						<p class="text-xs text-muted-foreground">
+							{selected.className} · {selected.semesterName} · {selected.studentCount} student(s) enrolled
+						</p>
+					{/if}
 				</div>
-			</div>
 
-			<div class="rounded-md border border-border p-3">
-				<p class="mb-2 text-sm font-medium">Where is the lecture?</p>
-				<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-					<div class="flex flex-col gap-1">
-						<Label for="la">Latitude</Label>
-						<Input id="la" bind:value={lat} placeholder="-13.9626" required />
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="lo">Longitude</Label>
-						<Input id="lo" bind:value={lng} placeholder="33.7741" required />
-					</div>
-					<div class="flex items-end">
-						<Button type="button" variant="outline" onclick={useGps}>Use my location</Button>
+				<div class="rounded-md border border-border p-3">
+					<p class="mb-2 text-sm font-medium">Where is the lecture?</p>
+					<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+						<div class="flex flex-col gap-1">
+							<Label for="la">Latitude</Label>
+							<Input id="la" bind:value={lat} placeholder="-13.9626" required />
+						</div>
+						<div class="flex flex-col gap-1">
+							<Label for="lo">Longitude</Label>
+							<Input id="lo" bind:value={lng} placeholder="33.7741" required />
+						</div>
+						<div class="flex items-end">
+							<Button type="button" variant="outline" onclick={useGps}>Use my location</Button>
+						</div>
 					</div>
 				</div>
-			</div>
 
-			<div class="rounded-md border border-border p-3">
-				<p class="mb-2 text-sm font-medium">Where is the screen?</p>
-				<p class="mb-2 text-xs text-muted-foreground">
-					Leave empty when the screen stands where the lecture is. Fill it in when the screen sits elsewhere,
-					such as in a doorway.
-				</p>
-				<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-					<div class="flex flex-col gap-1">
-						<Label for="stla">Station latitude</Label>
-						<Input id="stla" bind:value={stationLat} placeholder="same as lecture" />
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="stlo">Station longitude</Label>
-						<Input id="stlo" bind:value={stationLng} placeholder="same as lecture" />
-					</div>
-					<div class="flex items-end">
-						<Button type="button" variant="outline" onclick={pinStationHere}>Screen is where I am</Button>
-					</div>
-				</div>
-				<div class="mt-2 flex flex-col gap-1 sm:max-w-40">
-					<Label for="tol">Screen may move (m)</Label>
-					<Input id="tol" type="number" min="1" max={radius} bind:value={tolerance} />
-				</div>
-				<p class="mt-2 text-xs text-muted-foreground">
-					The screen checks it is still in this room. If it is carried more than {tolerance} m away, scanning
-					stops until it is put back, and no student is marked absent because of it.
-				</p>
-			</div>
+				<details class="rounded-md border border-border p-3">
+					<summary class="cursor-pointer text-sm font-medium">Advanced: screen position and timing</summary>
+					<p class="mt-1 text-xs text-muted-foreground">
+						Defaults work for most halls (50 m radius, 5 min on time, 10 min late). Open only when the
+						screen sits away from you or you need a wider window.
+					</p>
+					<div class="mt-3 flex flex-col gap-3">
+						<div>
+							<p class="mb-2 text-sm font-medium">Where is the screen?</p>
+							<p class="mb-2 text-xs text-muted-foreground">
+								Leave empty when the screen stands where the lecture is.
+							</p>
+							<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+								<div class="flex flex-col gap-1">
+									<Label for="stla">Station latitude</Label>
+									<Input id="stla" bind:value={stationLat} placeholder="same as lecture" />
+								</div>
+								<div class="flex flex-col gap-1">
+									<Label for="stlo">Station longitude</Label>
+									<Input id="stlo" bind:value={stationLng} placeholder="same as lecture" />
+								</div>
+								<div class="flex items-end">
+									<Button type="button" variant="outline" onclick={pinStationHere}>Screen is where I am</Button>
+								</div>
+							</div>
+							<div class="mt-2 flex flex-col gap-1 sm:max-w-40">
+								<Label for="tol">Screen may move (m)</Label>
+								<Input id="tol" type="number" min="1" max={radius} bind:value={tolerance} />
+							</div>
+						</div>
 
-			<div class="rounded-md border border-border p-3">
-				<p class="mb-2 text-sm font-medium">Attendance rules</p>
-				<div class="grid gap-2 sm:grid-cols-3">
-					<div class="flex flex-col gap-1">
-						<Label for="rad">Allowed distance (m)</Label>
-						<Input id="rad" type="number" min="5" max="2000" bind:value={radius} />
+						<div>
+							<p class="mb-2 text-sm font-medium">Attendance rules</p>
+							<div class="grid gap-2 sm:grid-cols-3">
+								<div class="flex flex-col gap-1">
+									<Label for="rad">Allowed distance (m)</Label>
+									<Input id="rad" type="number" min="5" max="2000" bind:value={radius} />
+								</div>
+								<div class="flex flex-col gap-1">
+									<Label for="ont">On time for (min)</Label>
+									<Input id="ont" type="number" min="0.5" max="60" step="0.5" bind:value={onTimeMin} />
+								</div>
+								<div class="flex flex-col gap-1">
+									<Label for="lat2">Late until (min)</Label>
+									<Input id="lat2" type="number" min="1" max="120" step="0.5" bind:value={lateUntilMin} />
+								</div>
+							</div>
+							<p class="mt-2 text-xs text-muted-foreground">
+								On time for {onTimeMin} minute(s), then late until {lateUntilMin} minute(s). Anyone scanned
+								after that is recorded as absent.
+							</p>
+						</div>
 					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="ont">On time for (min)</Label>
-						<Input id="ont" type="number" min="0.5" max="60" step="0.5" bind:value={onTimeMin} />
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="lat2">Late until (min)</Label>
-						<Input id="lat2" type="number" min="1" max="120" step="0.5" bind:value={lateUntilMin} />
-					</div>
-				</div>
-				<p class="mt-2 text-xs text-muted-foreground">
-					On time for {onTimeMin} minute(s), then late until {lateUntilMin} minute(s). Anyone scanned after
-					that is recorded as absent. Students more than {radius} m from you are flagged for review.
-				</p>
-			</div>
+				</details>
 
-			<form onsubmit={start}>
-				<Button type="submit" disabled={busy || !offeringId || !lat || !lng}>
-					{busy ? 'Starting…' : 'Start lecture'}
-				</Button>
-			</form>
+				<form onsubmit={start}>
+					<Button type="submit" disabled={busy || !offeringId || !lat || !lng}>
+						{busy ? 'Starting…' : 'Start lecture'}
+					</Button>
+				</form>
+			{/if}
 		</Card.Content>
 	</Card.Root>
 
@@ -313,7 +304,7 @@
 		</Card.Header>
 		<Card.Content>
 			{#if sessions.length === 0}
-				<p class="text-sm text-muted-foreground">No lectures started yet.</p>
+				<p class="text-sm text-muted-foreground">No lectures started yet for your subjects.</p>
 			{:else}
 				<ul class="flex flex-col divide-y divide-border">
 					{#each sessions.slice(0, 15) as s (s._id)}

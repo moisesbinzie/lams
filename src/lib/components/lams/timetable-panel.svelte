@@ -180,35 +180,48 @@
 <div class="flex flex-col gap-4">
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="flex flex-col gap-1.5">
-			<Label for="cls">Class</Label>
-			<Select.Root type="single" value={classId} onValueChange={(v) => (classId = v ?? '')}>
-				<Select.Trigger id="cls" class="w-full">
-					<Select.Value placeholder="Choose a class" />
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#each classes as c (c._id)}
-							<Select.Item value={c._id}>{c.name}</Select.Item>
-						{/each}
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-		</div>
-		<div class="flex flex-col gap-1.5">
-			<Label for="off">Subject</Label>
-			<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
-				<Select.Trigger id="off" class="w-full">
-					<Select.Value placeholder="Choose a subject" />
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#each offerings as o (o._id)}
-							<Select.Item value={o._id}>{o.subjectCode} — {o.subjectTitle}</Select.Item>
-						{/each}
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-		</div>
+				<Label for="cls">Class</Label>
+				<Select.Root
+					type="single"
+					value={classId}
+					onValueChange={(v) => {
+						classId = v ?? '';
+						// Clear the subject immediately: the offerings list reloads
+						// async, and until it does the old subject id matches no
+						// item — the trigger would show the raw id instead.
+						offeringId = '';
+						meetings = [];
+					}}
+				>
+					<Select.Trigger id="cls" class="w-full">
+						<Select.Value placeholder="Choose a class" />
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each classes as c (c._id)}
+								<Select.Item value={c._id} label={c.name}>{c.name}</Select.Item>
+							{/each}
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+			</div>
+			<div class="flex flex-col gap-1.5">
+				<Label for="off">Subject</Label>
+				<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
+					<Select.Trigger id="off" class="w-full">
+						<Select.Value placeholder="Choose a subject" />
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each offerings as o (o._id)}
+								<Select.Item value={o._id} label={`${o.subjectCode} — ${o.subjectTitle}`}>
+									{o.subjectCode} — {o.subjectTitle}
+								</Select.Item>
+							{/each}
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+			</div>
 	</div>
 
 	{#if !offerings.length}

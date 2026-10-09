@@ -354,11 +354,11 @@
 								</Select.Trigger>
 								<Select.Content>
 									<Select.Group>
-										<Select.Item value={NO_SEMESTER}>
+										<Select.Item value={NO_SEMESTER} label="No semester">
 											{semesters.length === 0 ? 'Create a semester first' : 'No semester'}
 										</Select.Item>
 										{#each semesters as s (s._id)}
-											<Select.Item value={s._id}>{s.name}</Select.Item>
+											<Select.Item value={s._id} label={s.name}>{s.name}</Select.Item>
 										{/each}
 									</Select.Group>
 								</Select.Content>
@@ -402,12 +402,12 @@
 							<Select.Value placeholder="No semester" />
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Group>
-								<Select.Item value={NO_SEMESTER}>No semester</Select.Item>
-								{#each semesters as s (s._id)}
-									<Select.Item value={s._id}>{s.name}</Select.Item>
-								{/each}
-							</Select.Group>
+								<Select.Group>
+										<Select.Item value={NO_SEMESTER} label="No semester">No semester</Select.Item>
+										{#each semesters as s (s._id)}
+											<Select.Item value={s._id} label={s.name}>{s.name}</Select.Item>
+										{/each}
+									</Select.Group>
 						</Select.Content>
 					</Select.Root>
 				</div>

@@ -305,15 +305,15 @@
 														</Badge>
 													{/if}
 												</span>
-												{#if p.classIds.length > 1}
-													<span class="block text-xs text-muted-foreground">
-														Also in: {p.classIds
-															.filter((id) => id !== classId)
-															.map((id) => classes.find((c) => c._id === id)?.name)
-															.filter(Boolean)
-															.join(', ')}
-													</span>
-												{/if}
+											{@const otherNames = p.classIds
+												.filter((id) => id !== classId)
+												.map((id) => classes.find((c) => c._id === id)?.name)
+												.filter((n): n is string => Boolean(n))}
+											{#if otherNames.length > 0}
+												<span class="block text-xs text-muted-foreground">
+													Also in: {otherNames.join(', ')}
+												</span>
+											{/if}
 											</Table.Cell>
 											<Table.Cell class="text-xs">{p.regNumber}</Table.Cell>
 											<Table.Cell class="text-xs">{p.studentId}</Table.Cell>

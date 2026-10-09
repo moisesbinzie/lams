@@ -58,6 +58,14 @@
 		if (offeringId === '' || offeringId === appliedSuggestion) offeringId = suggested;
 		appliedSuggestion = suggested;
 	});
+	// The suggestion can arrive before the list (or name an offering this
+	// viewer may not record for). A value with no matching item would render
+	// as the raw id in the trigger, so drop it the moment the list is known.
+	$effect(() => {
+		if (offerings.length > 0 && offeringId && !offerings.some((o) => o._id === offeringId)) {
+			offeringId = '';
+		}
+	});
 	let lat = $state('');
 	let lng = $state('');
 	// Where the screen itself stands. Left blank it follows the lecture
@@ -183,7 +191,10 @@
 						<Select.Content>
 							<Select.Group>
 								{#each offerings as o (o._id)}
-									<Select.Item value={o._id}>
+									<Select.Item
+										value={o._id}
+										label={`${o.subjectCode} — ${o.subjectTitle} · ${o.className}`}
+									>
 										{o.subjectCode} — {o.subjectTitle} · {o.className}
 									</Select.Item>
 								{/each}

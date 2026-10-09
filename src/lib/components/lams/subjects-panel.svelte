@@ -93,6 +93,10 @@
 	}
 
 	$effect(() => {
+		// Clear the pending offer first: the offerings list reloads async, and
+		// until it does a stale subject id matches no item — the trigger would
+		// show the raw id instead of a name.
+		pickSubjectId = '';
 		if (classId) void load();
 	});
 
@@ -321,7 +325,9 @@
 										<Select.Group>
 											<Select.Item value={NO_SUBJECT}>Choose a subject</Select.Item>
 											{#each notOffered as s (s._id)}
-												<Select.Item value={s._id}>{s.code} — {s.title}</Select.Item>
+												<Select.Item value={s._id} label={`${s.code} — ${s.title}`}>
+													{s.code} — {s.title}
+												</Select.Item>
 											{/each}
 										</Select.Group>
 									</Select.Content>

@@ -32,16 +32,17 @@
 	 * they cannot use and nobody sees tools they should not:
 	 *
 	 *   anon     -> How it works
-	 *   admin    -> Admin console, Set up, Take attendance, Records, Settings, How
+	 *   admin    -> Admin console, Set up, Records, Settings, How
 	 *   lecturer -> Set up, Take attendance, Records, Settings, How
 	 *   rep      -> My account, Take attendance, How
 	 *   student  -> My account, How
 	 *
-	 * The header row is visible on all screen sizes and scrolls internally,
-	 * so a phone never grows a page-level scrollbar because of it. The page
-	 * body keeps its own in-page strip (`StudentNav` / `LecturerNav`) as the
-	 * primary section switcher; the header is the global way home plus auth.
+	 * The header pill row only renders on public pages (`/`, `/how-it-works`,
+	 * `/signin`), which have no in-page strip. Every other page carries its
+	 * own section strip in the body (`StudentNav` / `LecturerNav`), so a
+	 * second copy in the header would just be visual noise.
 	 */
+	const hasBodyNav = $derived(path !== '/' && path !== '/how-it-works' && !path.startsWith('/signin'));
 	const nav = $derived.by(() => {
 		const how = { href: '/how-it-works', label: 'How it works', icon: Info };
 		const dashboard = { href: '/home', label: 'My account', icon: House };
@@ -111,7 +112,7 @@
 
 <div class="flex min-h-screen flex-col bg-background text-foreground">
 	<header class="print-hide sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-		<div class="mx-auto flex max-w-3xl flex-col gap-2 px-4 py-2.5">
+		<div class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 py-2.5 lg:max-w-5xl">
 			<div class="flex items-center gap-x-3 gap-y-2">
 				<a href={homeHref} class="flex shrink-0 items-center gap-3" aria-label="LAMS home">
 					<img src="/lams-logo.png" alt="" class="size-10 rounded-lg" />
@@ -159,12 +160,11 @@
 				</div>
 			</div>
 
-			{#if status !== 'checking' && status !== 'unavailable'}
+			{#if status !== 'checking' && status !== 'unavailable' && !hasBodyNav}
 				<!--
-					Global nav, visible on all sizes. Scrolls internally so it can
-					never widen the page. The page body keeps its own section
-					strip (`StudentNav` / `LecturerNav`); this row is the global
-					way between areas plus auth state above.
+					Public pages only: every other page renders its own section
+					strip in the body, so this row would duplicate it. Scrolls
+					internally so it can never widen the page.
 				-->
 				<div class="relative min-w-0 max-w-full">
 					<nav
@@ -197,7 +197,7 @@
 			{/if}
 		</div>
 	</header>
-	<main class="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col gap-6 px-4 py-8">
+	<main class="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col gap-6 px-4 py-8 lg:max-w-5xl">
 		{#if me && path !== '/signin'}
 			<AccountStrip />
 		{/if}
@@ -205,7 +205,7 @@
 	</main>
 	<footer class="print-hide border-t border-border">
 		<div
-			class="mx-auto flex max-w-3xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left"
+			class="mx-auto flex w-full max-w-3xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left lg:max-w-5xl"
 		>
 			<p class="font-semibold text-lams-navy">Attend • Track • Succeed</p>
 			<p>Scan the screen at the front of the hall, and the rest is recorded for you.</p>

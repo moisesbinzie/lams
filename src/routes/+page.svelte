@@ -103,7 +103,7 @@
 	];
 </script>
 
-<div class="mx-auto flex w-full max-w-3xl flex-col gap-8">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-8 lg:max-w-5xl">
 	<section class="grid items-center gap-8 py-4 md:grid-cols-[1.15fr_1fr]">
 		<div class="flex flex-col items-start gap-4">
 			<div class="flex flex-wrap items-center gap-2">
