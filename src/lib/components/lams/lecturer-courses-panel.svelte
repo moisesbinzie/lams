@@ -67,8 +67,11 @@
 	let busyId = $state('');
 	let registering = $state(false);
 	let togglingOpen = $state(false);
+	let openingAll = $state(false);
 
 	const selected = $derived(offerings.find((o) => o._id === selectedId) ?? null);
+	/** Courses still closed to self-enrolment — one tap below opens all of them. */
+	const closedOfferings = $derived(offerings.filter((o) => !o.openForEnrolment));
 	const programNameById = $derived(new Map(programs.map((p) => [p._id, p.name])));
 	const enrolledIds = $derived(new Set(roster.map((r) => String(r.personId))));
 
@@ -319,6 +322,34 @@
 			togglingOpen = false;
 		}
 	}
+
+	/**
+	 * Bring older courses in line with the open-by-default rule: placements
+	 * made before the default flipped are still closed, so one tap opens
+	 * every course still waiting. Already-open courses are untouched.
+	 */
+	async function openAll() {
+		if (!token || closedOfferings.length === 0) return;
+		openingAll = true;
+		try {
+			const client = requireConvexClient();
+			for (const o of closedOfferings) {
+				await client.mutation(api.academics.setOfferingOpen, {
+					token,
+					id: o._id as never,
+					open: true
+				});
+			}
+			await refreshCounts();
+			reportSuccess(
+				`Self-enrolment is now open for all ${offerings.length} of your courses — students can join themselves.`
+			);
+		} catch (err) {
+			reportError(err, 'Could not open every course. Those already opened stay open — try again for the rest.');
+		} finally {
+			openingAll = false;
+		}
+	}
 </script>
 
 <div class="flex flex-col gap-4">
@@ -346,6 +377,17 @@
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-2">
+				{#if closedOfferings.length > 0}
+					<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2.5">
+						<p class="text-xs text-amber-900">
+							<strong>{closedOfferings.length} course{closedOfferings.length === 1 ? '' : 's'}</strong>
+							closed to self-enrolment — students in those courses can only be added by you.
+						</p>
+						<Button size="sm" disabled={openingAll} onclick={openAll}>
+							{openingAll ? 'Opening…' : `Open all ${closedOfferings.length}`}
+						</Button>
+					</div>
+				{/if}
 				{#each offerings as o (o._id)}
 					<button
 						type="button"
