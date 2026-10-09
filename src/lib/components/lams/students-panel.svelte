@@ -13,7 +13,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Table from '$lib/components/ui/table';
-	import { BookOpen, Plus, Search, UserRoundCheck } from '@lucide/svelte';
+	import { BookOpen, KeyRound, Pencil, Plus, Search, Smartphone, UserCheck, UserRoundCheck, UserX } from '@lucide/svelte';
 	import ProgramPicker from './program-picker.svelte';
 	import PersonEditDialog from './person-edit-dialog.svelte';
 	import StudentCoursesDialog from './student-courses-dialog.svelte';
@@ -184,32 +184,6 @@
 			reportError(err, 'Could not add those students.');
 		} finally {
 			busy = false;
-		}
-	}
-
-	async function toggleRep(p: PersonRow) {
-		const targetProgram = programId && programId !== '__none__' ? programId : p.programIds[0];
-		if (!targetProgram) {
-			reportError(new Error('No program.'), 'Put the student in a program before making them a rep.');
-			return;
-		}
-		const isRep = repIds.has(p._id);
-		try {
-			const client = requireConvexClient();
-			await client.mutation(api.reps.setRep, {
-				token,
-				programId: targetProgram as never,
-				personId: p._id as never,
-				isRep: !isRep
-			});
-			await loadPeople();
-			reportSuccess(
-				isRep
-					? `${p.fullName} is no longer a program rep.`
-					: `${p.fullName} can now take attendance for everything this program takes.`
-			);
-		} catch (err) {
-			reportError(err, 'Could not change that.');
 		}
 	}
 
@@ -395,44 +369,43 @@
 					<div class="overflow-x-auto rounded-md border">
 						<Table.Root>
 							<Table.Header>
-							<Table.Row>
-								<Table.Head>Name</Table.Head>
-								<Table.Head>Registration number</Table.Head>
-								<Table.Head>Program</Table.Head>
-								<Table.Head>Courses</Table.Head>
-								<Table.Head>Status</Table.Head>
-								<Table.Head class="text-right">Actions</Table.Head>
-							</Table.Row>
+						<Table.Row>
+							<Table.Head>Name</Table.Head>
+							<Table.Head>Program</Table.Head>
+							<Table.Head>Status</Table.Head>
+							<Table.Head class="text-right">Actions</Table.Head>
+						</Table.Row>
 							</Table.Header>
 							<Table.Body>
 								{#each filtered as p (p._id)}
 									<Table.Row>
-										<Table.Cell class="font-medium">
-											<span class="flex flex-wrap items-center gap-1.5">
-												{p.fullName}
-												{#if repIds.has(p._id)}
-													<Badge class="bg-lams-navy text-white">
-														<UserRoundCheck class="size-3" aria-hidden="true" /> Rep
-													</Badge>
-												{/if}
-											</span>
-											<span class="block text-xs text-muted-foreground">{p.studentId}</span>
-										</Table.Cell>
-										<Table.Cell class="font-mono text-xs">{p.regNumber}</Table.Cell>
-									<Table.Cell class="text-xs">
-										{#if programNamesOf(p)}
-											{programNamesOf(p)}
-										{:else}
-											<span class="font-semibold text-amber-700">No program</span>
-										{/if}
+									<Table.Cell class="font-medium whitespace-nowrap">
+										<span class="flex items-center gap-1.5">
+											{p.fullName}
+											{#if repIds.has(p._id)}
+												<Badge class="bg-lams-navy text-white">
+													<UserRoundCheck class="size-3" aria-hidden="true" /> Rep
+												</Badge>
+											{/if}
+										</span>
+										<span class="block font-mono text-xs font-normal text-muted-foreground">
+											{p.regNumber} · {p.studentId}
+										</span>
 									</Table.Cell>
-									<Table.Cell>
+								<Table.Cell class="text-xs">
+									{#if programNamesOf(p)}
+										{programNamesOf(p)}
+									{:else}
+										<span class="font-semibold text-amber-700">No program</span>
+									{/if}
+									<span class="block text-muted-foreground">
 										{#if (p.courseCount ?? 0) === 0}
-											<Badge variant="outline">None</Badge>
+											<span class="font-medium text-amber-700">No courses yet</span>
 										{:else}
-											<Badge variant="secondary">{p.courseCount} course{p.courseCount === 1 ? '' : 's'}</Badge>
+											{p.courseCount} course{p.courseCount === 1 ? '' : 's'}
 										{/if}
-									</Table.Cell>
+									</span>
+								</Table.Cell>
 										<Table.Cell>
 											{#if p.status === 'active'}
 												<Badge variant="secondary">Ready</Badge>
@@ -442,72 +415,84 @@
 												<Badge class="bg-red-600 text-white">Suspended</Badge>
 											{/if}
 										</Table.Cell>
-										<Table.Cell class="text-right">
-											<div class="flex flex-wrap justify-end gap-1">
-												<Button
-													variant="outline"
-													size="sm"
-													onclick={() => {
-														coursesFor = p;
-														coursesOpen = true;
-													}}
-												>
-													<BookOpen class="size-3.5" aria-hidden="true" /> Courses
-												</Button>
-												<Button
-													variant="ghost"
-													size="sm"
-													onclick={() => {
-														editing = p;
-														editOpen = true;
-													}}
-												>
-													Edit
-												</Button>
-												<Button
-													variant={repIds.has(p._id) ? 'secondary' : 'outline'}
-													size="sm"
-													disabled={p.status === 'blocked'}
-													onclick={() => toggleRep(p)}
-												>
-													{repIds.has(p._id) ? 'Remove rep' : 'Make rep'}
-												</Button>
-												{#if p.status === 'active'}
-													<Button
-														variant="ghost"
-														size="sm"
-														class="text-red-700"
-														onclick={() => {
-															suspendTarget = p;
-															suspendOpen = true;
-														}}
-													>
-														Suspend
-													</Button>
-												{:else if p.status === 'blocked'}
-													<Button
-														variant="ghost"
-														size="sm"
-														onclick={() => {
-															suspendTarget = p;
-															suspendOpen = true;
-														}}
-													>
-														Unblock
-													</Button>
-												{/if}
-												{#if p.status !== 'blocked'}
-													<Button variant="ghost" size="sm" onclick={() => resetPin(p._id)}>
-														Reset PIN
-													</Button>
-												{/if}
-												{#if p.hasDevice}
-													<Button variant="ghost" size="sm" onclick={() => newPhone(p._id)}>
-														New phone
-													</Button>
-												{/if}
-											</div>
-										</Table.Cell>
+								<Table.Cell class="text-right whitespace-nowrap">
+									<div class="flex items-center justify-end gap-0.5">
+										<Button
+											variant="outline"
+											size="icon-sm"
+											title={`Courses for ${p.fullName}`}
+											aria-label={`Courses for ${p.fullName}`}
+											onclick={() => {
+												coursesFor = p;
+												coursesOpen = true;
+											}}
+										>
+											<BookOpen class="size-3.5" aria-hidden="true" />
+										</Button>
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											title={`Edit ${p.fullName}`}
+											aria-label={`Edit ${p.fullName}`}
+											onclick={() => {
+												editing = p;
+												editOpen = true;
+											}}
+										>
+											<Pencil class="size-3.5" aria-hidden="true" />
+										</Button>
+										{#if p.status === 'active'}
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												class="text-red-700"
+												title={`Suspend ${p.fullName}`}
+												aria-label={`Suspend ${p.fullName}`}
+												onclick={() => {
+													suspendTarget = p;
+													suspendOpen = true;
+												}}
+											>
+												<UserX class="size-3.5" aria-hidden="true" />
+											</Button>
+										{:else if p.status === 'blocked'}
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												title={`Unblock ${p.fullName}`}
+												aria-label={`Unblock ${p.fullName}`}
+												onclick={() => {
+													suspendTarget = p;
+													suspendOpen = true;
+												}}
+											>
+												<UserCheck class="size-3.5" aria-hidden="true" />
+											</Button>
+										{/if}
+										{#if p.status !== 'blocked'}
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												title={`Reset PIN for ${p.fullName}`}
+												aria-label={`Reset PIN for ${p.fullName}`}
+												onclick={() => resetPin(p._id)}
+											>
+												<KeyRound class="size-3.5" aria-hidden="true" />
+											</Button>
+										{/if}
+										{#if p.hasDevice}
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												title={`Move ${p.fullName} to a new phone`}
+												aria-label={`Move ${p.fullName} to a new phone`}
+												onclick={() => newPhone(p._id)}
+											>
+												<Smartphone class="size-3.5" aria-hidden="true" />
+											</Button>
+										{/if}
+									</div>
+								</Table.Cell>
 									</Table.Row>
 								{/each}
 							</Table.Body>

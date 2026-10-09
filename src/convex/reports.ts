@@ -90,10 +90,11 @@ export const courseReport = query({
 			// An excused lecture leaves the denominator so a documented absence
 			// never counts against the student.
 			const counted = inScope.length - excused;
-			rows.push({
-				personId: person._id,
-				fullName: person.fullName,
-				regNumber: person.regNumber,
+		rows.push({
+			personId: person._id,
+			fullName: person.fullName,
+			regNumber: person.regNumber,
+			studentId: person.studentId,
 				present,
 				late,
 				outOfRange,

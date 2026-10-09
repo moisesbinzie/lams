@@ -452,37 +452,37 @@
 						<div class="overflow-x-auto rounded-md border">
 							<Table.Root>
 								<Table.Header>
-									<Table.Row>
-										<Table.Head>Name</Table.Head>
-										<Table.Head>Registration number</Table.Head>
-										<Table.Head>Added by</Table.Head>
-										<Table.Head class="text-right">Actions</Table.Head>
-									</Table.Row>
+							<Table.Row>
+									<Table.Head>Name</Table.Head>
+									<Table.Head>Added by</Table.Head>
+									<Table.Head class="text-right">Actions</Table.Head>
+								</Table.Row>
 								</Table.Header>
 								<Table.Body>
-									{#each filteredRoster as r (r.personId)}
-										<Table.Row>
-											<Table.Cell class="font-medium">
-												{r.fullName}
-												<span class="block text-xs font-normal text-muted-foreground">
-													{r.studentId}
-												</span>
-											</Table.Cell>
-											<Table.Cell class="font-mono text-xs">{r.regNumber}</Table.Cell>
-											<Table.Cell class="text-xs text-muted-foreground">{r.addedBy}</Table.Cell>
-											<Table.Cell class="text-right">
-												<Button
-													variant="ghost"
-													size="sm"
-													class="text-red-700"
-													disabled={busyId === r.personId}
-													onclick={() => withdraw(r.personId, r.fullName)}
-												>
-													<UserMinus class="size-3.5" aria-hidden="true" /> Withdraw
-												</Button>
-											</Table.Cell>
-										</Table.Row>
-									{/each}
+								{#each filteredRoster as r (r.personId)}
+									<Table.Row>
+										<Table.Cell class="font-medium whitespace-nowrap">
+											{r.fullName}
+											<span class="block font-mono text-xs font-normal text-muted-foreground">
+												{r.regNumber} · {r.studentId}
+											</span>
+										</Table.Cell>
+										<Table.Cell class="text-xs text-muted-foreground">{r.addedBy}</Table.Cell>
+										<Table.Cell class="text-right whitespace-nowrap">
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												class="text-red-700"
+												title={`Withdraw ${r.fullName} from this course`}
+												aria-label={`Withdraw ${r.fullName} from this course`}
+												disabled={busyId === r.personId}
+												onclick={() => withdraw(r.personId, r.fullName)}
+											>
+												<UserMinus class="size-3.5" aria-hidden="true" />
+											</Button>
+										</Table.Cell>
+									</Table.Row>
+								{/each}
 								</Table.Body>
 							</Table.Root>
 						</div>

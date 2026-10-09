@@ -437,6 +437,7 @@ export interface ReportRow {
 	personId?: string;
 	fullName: string;
 	regNumber: string;
+	studentId: string;
 	present: number;
 	late: number;
 	outOfRange: number;

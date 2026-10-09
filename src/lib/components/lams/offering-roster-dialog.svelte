@@ -5,6 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { UserMinus } from '@lucide/svelte';
 	import type { ProgramRow, Offering, PersonRow } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 
@@ -12,6 +13,7 @@
 		personId: string;
 		fullName: string;
 		regNumber: string;
+		studentId: string;
 		status: string;
 		addedBy: 'self' | 'rep' | 'lecturer';
 	}
@@ -136,25 +138,27 @@
 				<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 			{:else}
 				<ul class="flex flex-col divide-y divide-border rounded-md border">
-					{#each filteredRoster as r (r.personId)}
-						<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-							<span>
-								<strong>{r.fullName}</strong>
-								<span class="block text-xs text-muted-foreground">
-									{r.regNumber} · added by {r.addedBy}
-								</span>
+				{#each filteredRoster as r (r.personId)}
+					<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
+						<span>
+							<strong>{r.fullName}</strong>
+							<span class="block font-mono text-xs text-muted-foreground">
+								{r.regNumber} · {r.studentId} · added by {r.addedBy}
 							</span>
-							<Button
-								variant="ghost"
-								size="sm"
-								class="text-red-700"
-								disabled={busyId === r.personId}
-								onclick={() => assign(r.personId, false)}
-							>
-								Withdraw
-							</Button>
-						</li>
-					{:else}
+						</span>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							class="text-red-700"
+							title={`Withdraw ${r.fullName} from this course`}
+							aria-label={`Withdraw ${r.fullName} from this course`}
+							disabled={busyId === r.personId}
+							onclick={() => assign(r.personId, false)}
+						>
+							<UserMinus class="size-3.5" aria-hidden="true" />
+						</Button>
+					</li>
+				{:else}
 						<li class="p-4 text-center text-sm text-muted-foreground">Nobody is enrolled yet.</li>
 					{/each}
 				</ul>
@@ -164,15 +168,17 @@
 						<p class="mb-1 text-sm font-medium">In {programName}, not taking this course</p>
 						<ul class="flex flex-col divide-y divide-border rounded-md border">
 							{#each filteredProgramCandidates as c (c._id)}
-								<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-									<span>
-										{c.fullName}
-										<span class="block text-xs text-muted-foreground">{c.regNumber}</span>
+							<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
+								<span>
+									{c.fullName}
+									<span class="block font-mono text-xs text-muted-foreground">
+										{c.regNumber} · {c.studentId}
 									</span>
-									<Button variant="outline" size="sm" disabled={busyId === c._id} onclick={() => assign(c._id, true)}>
-										Add
-									</Button>
-								</li>
+								</span>
+								<Button variant="outline" size="sm" disabled={busyId === c._id} onclick={() => assign(c._id, true)}>
+									Add
+								</Button>
+							</li>
 							{/each}
 						</ul>
 					</div>
@@ -187,16 +193,16 @@
 						</p>
 						<ul class="flex flex-col divide-y divide-border rounded-md border">
 							{#each filteredOtherCandidates as c (c._id)}
-								<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-									<span>
-										{c.fullName}
-										<span class="block text-xs text-muted-foreground">
-											{c.regNumber}
-											{#if programNamesOf(c)}
-												· {programNamesOf(c)}
-											{/if}
-										</span>
+							<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
+								<span>
+									{c.fullName}
+									<span class="block text-xs text-muted-foreground">
+										<span class="font-mono">{c.regNumber} · {c.studentId}</span>
+										{#if programNamesOf(c)}
+											· {programNamesOf(c)}
+										{/if}
 									</span>
+								</span>
 									<Button variant="outline" size="sm" disabled={busyId === c._id} onclick={() => assign(c._id, true)}>
 										Add
 									</Button>

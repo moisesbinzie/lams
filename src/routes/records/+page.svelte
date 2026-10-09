@@ -13,7 +13,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
 	import * as Table from '$lib/components/ui/table';
-	import { Download, Printer } from '@lucide/svelte';
+	import { Download, History, Printer } from '@lucide/svelte';
 	import { printElement } from '$lib/lams/print';
 	import StudentRecordsDialog from '$lib/components/lams/student-records-dialog.svelte';
 	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
@@ -312,10 +312,9 @@
 				<div class="overflow-x-auto rounded-md border" id="report-table">
 					<Table.Root>
 						<Table.Header>
-							<Table.Row>
-								<Table.Head>Name</Table.Head>
-								<Table.Head>Registration number</Table.Head>
-								<Table.Head>On time</Table.Head>
+						<Table.Row>
+							<Table.Head>Name</Table.Head>
+							<Table.Head>On time</Table.Head>
 								<Table.Head>Late</Table.Head>
 								<Table.Head>Out of range</Table.Head>
 								<Table.Head>Absent</Table.Head>
@@ -327,8 +326,12 @@
 						<Table.Body>
 							{#each visible as r (r.regNumber)}
 								<Table.Row class={r.attendPct < 75 ? 'bg-amber-50' : ''}>
-									<Table.Cell class="font-medium">{r.fullName}</Table.Cell>
-									<Table.Cell class="text-xs">{r.regNumber}</Table.Cell>
+									<Table.Cell class="font-medium whitespace-nowrap">
+										{r.fullName}
+										<span class="block font-mono text-xs font-normal text-muted-foreground">
+											{r.regNumber} · {r.studentId}
+										</span>
+									</Table.Cell>
 									<Table.Cell class="text-xs">{r.present}</Table.Cell>
 									<Table.Cell class="text-xs">{r.late}</Table.Cell>
 									<Table.Cell class="text-xs">{r.outOfRange}</Table.Cell>
@@ -341,18 +344,20 @@
 											{r.attendPct}%
 										</span>
 									</Table.Cell>
-									<Table.Cell class="text-right">
-										<Button
-											variant="outline"
-											size="sm"
-											onclick={() => {
-												historyFor = r;
-												historyOpen = true;
-											}}
-										>
-											History
-										</Button>
-									</Table.Cell>
+								<Table.Cell class="text-right">
+									<Button
+										variant="outline"
+										size="icon-sm"
+										title={`Attendance history for ${r.fullName}`}
+										aria-label={`Attendance history for ${r.fullName}`}
+										onclick={() => {
+											historyFor = r;
+											historyOpen = true;
+										}}
+									>
+										<History class="size-3.5" aria-hidden="true" />
+									</Button>
+								</Table.Cell>
 								</Table.Row>
 							{/each}
 						</Table.Body>

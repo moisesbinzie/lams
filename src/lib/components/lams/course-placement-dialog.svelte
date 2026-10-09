@@ -56,7 +56,7 @@
 	let year = $state(1);
 	let semesterId = $state('');
 	let lecturerIds = $state<string[]>([]);
-	let openForEnrolment = $state(false);
+	let openForEnrolment = $state(true);
 	let busy = $state(false);
 
 	const years = $derived(
@@ -83,7 +83,7 @@
 		year = Math.min(Math.max(1, defaultYear), Math.max(1, program?.durationYears ?? 1));
 		semesterId = defaultSemesterId || (semestersOrdered[0]?._id ?? '');
 		lecturerIds = [];
-		openForEnrolment = false;
+		openForEnrolment = true;
 	});
 
 	function toggleLecturer(id: string) {
@@ -312,7 +312,8 @@
 				<span>
 					<strong>Let students join this course themselves</strong>
 					<span class="block text-xs text-muted-foreground">
-						Off by default. You can still assign students by hand from the Students tab.
+						On by default. Untick to close self-enrolment — you can still assign students by
+						hand from the Students tab or your Lectures tab.
 					</span>
 				</span>
 			</label>

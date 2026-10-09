@@ -706,7 +706,7 @@ export const createOffering = mutation({
 			programId: args.programId,
 			semesterId: args.semesterId,
 			yearOfStudy: args.yearOfStudy,
-			openForEnrolment: args.openForEnrolment ?? false,
+			openForEnrolment: args.openForEnrolment ?? true,
 			...(lecturerIds.length > 0 ? { lecturerIds, lecturerId: lecturerIds[0] } : {}),
 			createdAt: Date.now()
 		});
@@ -782,7 +782,7 @@ export const createOfferingsBulk = mutation({
 				programId: program._id,
 				semesterId: args.semesterId,
 				yearOfStudy: args.yearOfStudy,
-				openForEnrolment: args.openForEnrolment ?? false,
+				openForEnrolment: args.openForEnrolment ?? true,
 				...(uniqueLecturers.length > 0
 					? { lecturerIds: uniqueLecturers, lecturerId: uniqueLecturers[0] }
 					: {}),

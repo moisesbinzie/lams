@@ -8,6 +8,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
+	import { Search } from '@lucide/svelte';
 	import type {
 		MyEnrolment,
 		Offering,
@@ -165,6 +166,37 @@
 			.sort((a, b) => a.programName.localeCompare(b.programName) || a.courseCode.localeCompare(b.courseCode))
 	);
 
+	/** Student search across their own courses and what is open to join. */
+	let studentSearch = $state('');
+
+	function matchesStudentQuery(o: {
+		courseCode: string;
+		courseTitle: string;
+		programName: string;
+		semesterName: string;
+	}): boolean {
+		const q = studentSearch.trim().toLowerCase();
+		if (!q) return true;
+		return (
+			o.courseCode.toLowerCase().includes(q) ||
+			o.courseTitle.toLowerCase().includes(q) ||
+			o.programName.toLowerCase().includes(q) ||
+			o.semesterName.toLowerCase().includes(q)
+		);
+	}
+
+	const visibleEnrolledByProgram = $derived.by(() => {
+		if (!studentSearch.trim()) return enrolledByProgram;
+		return enrolledByProgram
+			.map(
+				([name, list]) =>
+					[name, list.filter(matchesStudentQuery)] as [string, typeof list]
+			)
+			.filter(([, list]) => list.length > 0);
+	});
+
+	const visibleJoinable = $derived(joinable.filter(matchesStudentQuery));
+
 	async function load() {
 		try {
 			const client = requireConvexClient();
@@ -242,7 +274,7 @@
 			offerLecturers[key] = [];
 			showOffer[key] = false;
 			await load();
-			reportSuccess('Course offered. Set its timetable, then open enrolment or assign students.');
+			reportSuccess('Course offered and open for students to join themselves. Set its timetable next.');
 		} catch (err) {
 			reportError(err, 'Could not offer that course.');
 		} finally {
@@ -379,7 +411,24 @@
 				No courses yet. Ask your program rep or lecturer to add you to your program.
 			</p>
 		{:else}
-			{#each enrolledByProgram as [programName, list] (programName)}
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+					aria-hidden="true"
+				/>
+				<Input
+					class="pl-9"
+					bind:value={studentSearch}
+					placeholder="Search your courses or find one to join"
+					aria-label="Search courses"
+				/>
+			</div>
+			{#if visibleEnrolledByProgram.length === 0 && visibleJoinable.length === 0}
+				<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+					No course matches that search.
+				</p>
+			{/if}
+			{#each visibleEnrolledByProgram as [programName, list] (programName)}
 				<details open class="rounded-lg border border-border">
 					<summary class="cursor-pointer list-none px-4 py-3 [&::-webkit-details-marker]:hidden">
 						<span class="flex flex-wrap items-center gap-2">
@@ -414,14 +463,14 @@
 				</details>
 			{/each}
 
-			{#if joinable.length > 0}
+			{#if visibleJoinable.length > 0}
 				<div class="rounded-lg border border-lams-green/40">
 					<p class="px-4 pt-3 text-sm font-bold text-lams-navy">Open to join</p>
 					<p class="px-4 text-xs text-muted-foreground">
-						Your lecturer opened these for self-enrolment — including repeats from earlier semesters.
+						Courses open for self-enrolment — including repeats from earlier semesters.
 					</p>
 					<ul class="flex flex-col divide-y divide-border px-4 pb-2">
-						{#each joinable as o (o._id)}
+						{#each visibleJoinable as o (o._id)}
 							<li class="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
 								<div>
 									<p class="text-sm font-semibold">{o.courseCode} — {o.courseTitle}</p>
