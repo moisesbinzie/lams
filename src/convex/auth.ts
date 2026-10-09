@@ -79,7 +79,34 @@ export function normalizeUsername(value: string): string {
 
 // ------------------------------------------------------------------- actors
 
-export type Role = 'student' | 'rep' | 'lecturer';
+export type Role = 'student' | 'rep' | 'lecturer' | 'admin';
+
+/** Staff roles. Admins manage everything; lecturers only see assigned offerings. */
+export type StaffRole = 'admin' | 'lecturer';
+
+/** Backwards-compatible read: old staff rows have no `role` column yet. */
+export function staffRoleOf(staff: any): StaffRole {
+	if (staff?.role === 'admin') return 'admin';
+	if (staff?.role === 'lecturer') return 'lecturer';
+	// Migration fallback: the seeded default account is the admin.
+	const norm = String(staff?.usernameNorm ?? staff?.username ?? '')
+		.trim()
+		.toLowerCase();
+	if (norm === normalizeUsername(DEFAULT_STAFF_USERNAME)) return 'admin';
+	return 'lecturer';
+}
+
+export function isAdminStaff(staff: any): boolean {
+	return staffRoleOf(staff) === 'admin';
+}
+
+/** A password the admin can read out once — 10 chars, no ambiguous glyphs. */
+export function generateTempPassword(length = 10): string {
+	const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+	const bytes = new Uint8Array(length);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+}
 
 export interface PersonDoc {
 	_id: GenericId<'people'>;
@@ -99,8 +126,10 @@ export type Actor =
 			id: GenericId<'staff'>;
 			name: string;
 			username: string;
-			/** Lecturer accounts are not device-bound; they use a shared password. */
-			role: 'lecturer';
+			/** Lecturer accounts are not device-bound; they use a username + password. */
+			role: 'lecturer' | 'admin';
+			staffRole: StaffRole;
+			isAdmin: boolean;
 	  }
 	| {
 			kind: 'person';
@@ -122,12 +151,15 @@ export async function resolveActor(ctx: any, token: string): Promise<Actor | nul
 	if (staffSess && staffSess.expiresAt >= Date.now()) {
 		const staff = await ctx.db.get('staff', staffSess.staffId);
 		if (staff && staff.active) {
+			const staffRole = staffRoleOf(staff);
 			return {
 				kind: 'staff',
 				id: staff._id,
 				name: staff.fullName,
 				username: staff.username,
-				role: 'lecturer'
+				role: staffRole,
+				staffRole,
+				isAdmin: staffRole === 'admin'
 			};
 		}
 	}
@@ -158,11 +190,20 @@ export async function requireActor(ctx: any, token: string): Promise<Actor> {
 	return actor;
 }
 
-/** Lecturers only. */
+/** Lecturers and admins. */
 export async function requireStaff(ctx: any, token: string): Promise<Extract<Actor, { kind: 'staff' }>> {
 	const actor = await requireActor(ctx, token);
 	if (actor.kind !== 'staff') {
 		throw new Error('This is a lecturer-only action. Please sign in with a lecturer account.');
+	}
+	return actor;
+}
+
+/** Admins only — managing accounts and the catalogue. */
+export async function requireAdmin(ctx: any, token: string): Promise<Extract<Actor, { kind: 'staff' }>> {
+	const actor = await requireStaff(ctx, token);
+	if (!actor.isAdmin) {
+		throw new Error('This is an admin-only action. Please sign in with an admin account.');
 	}
 	return actor;
 }
@@ -266,12 +307,57 @@ export async function isRepFor(ctx: any, personId: unknown, classId: unknown): P
 	return rows.some((r: any) => r.classId === classId);
 }
 
+/** Offering ids assigned to one lecturer. */
+export async function lecturerOfferingIds(ctx: any, staffId: unknown): Promise<string[]> {
+	const rows = await ctx.db
+		.query('offerings')
+		.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', staffId))
+		.take(500);
+	return rows.map((r: any) => String(r._id));
+}
+
+/** Class ids a lecturer teaches (via their assigned offerings). */
+export async function lecturerClassIds(ctx: any, staffId: unknown): Promise<string[]> {
+	const rows = (await ctx.db
+		.query('offerings')
+		.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', staffId))
+		.take(500)) as any[];
+	return [...new Set(rows.map((r: any) => String(r.classId)))];
+}
+
 /**
- * True when the actor may record attendance for this class. Lecturers may do
- * so for anything; reps only for classes they represent.
+ * True when the actor may touch this offering. Admins may touch anything;
+ * lecturers only offerings assigned to them; reps never (they are class-scoped).
+ */
+export async function canAccessOffering(ctx: any, actor: Actor, offering: any): Promise<boolean> {
+	if (actor.kind === 'staff' && actor.isAdmin) return true;
+	if (actor.kind === 'staff') {
+		return String(offering?.lecturerId ?? '') === String(actor.id);
+	}
+	return false;
+}
+
+/** Throws unless the actor may touch the offering. */
+export async function assertCanAccessOffering(ctx: any, actor: Actor, offering: any): Promise<void> {
+	if (await canAccessOffering(ctx, actor, offering)) return;
+	throw new Error(
+		actor.kind === 'staff'
+			? 'This subject is not assigned to you. Ask the admin to assign it.'
+			: 'You are only a class representative for your own class.'
+	);
+}
+
+/**
+ * True when the actor may record attendance for this class. Admins may do so
+ * for anything; lecturers only for classes they teach; reps only for classes
+ * they represent.
  */
 export async function canRecordFor(ctx: any, actor: Actor, classId: unknown): Promise<boolean> {
-	if (actor.kind === 'staff') return true;
+	if (actor.kind === 'staff' && actor.isAdmin) return true;
+	if (actor.kind === 'staff') {
+		const classes = await lecturerClassIds(ctx, actor.id);
+		return classes.includes(String(classId));
+	}
 	if (actor.role !== 'rep') return false;
 	return await isRepFor(ctx, actor.id, classId);
 }

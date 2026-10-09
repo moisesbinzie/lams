@@ -50,12 +50,16 @@
 		if (!token) return;
 		try {
 			const client = requireConvexClient();
-			const me = (await client.query(api.staff.me, { token })) as { role: string } | null;
-			if (!me) {
-				endSession();
+			const me = (await client.query(api.staff.me, { token })) as {
+				kind: string;
+				role: string;
+			} | null;
+			if (!me || me.kind !== 'staff') {
+				if (!me) endSession();
+				else toast.error('Only lecturers start lectures here. Class reps use “Take attendance”.');
 				return;
 			}
-			if (me.role !== 'lecturer') {
+			if (me.role !== 'lecturer' && me.role !== 'admin') {
 				toast.error('Only lecturers start lectures here. Class reps use “Take attendance”.');
 				return;
 			}

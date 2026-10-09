@@ -86,6 +86,14 @@ export default defineSchema({
 			scheme: v.optional(v.string()),
 			iterations: v.optional(v.number()),
 			fullName: v.string(),
+			/**
+			 * 'admin' sees everything and manages lecturer accounts.
+			 * 'lecturer' only sees the offerings assigned to them.
+			 * Optional until existing deployments are backfilled (see
+			 * `staff.ensureSeed`); missing reads as admin for the default
+			 * account and lecturer for everyone else.
+			 */
+			role: v.optional(v.union(v.literal('admin'), v.literal('lecturer'))),
 			/** Revoked accounts cannot sign in but keep their past records. */
 			active: v.boolean(),
 			lastLoginAt: v.optional(v.number()),
@@ -151,6 +159,7 @@ export default defineSchema({
 		subjectId: v.id('subjects'),
 		classId: v.id('classes'),
 		semesterId: v.id('semesters'),
+		/** The lecturer teaching this offering. One offering has one lecturer; a lecturer may teach many. */
 		lecturerId: v.optional(v.id('staff')),
 		openForEnrolment: v.boolean(),
 		createdAt: v.number()
@@ -158,6 +167,7 @@ export default defineSchema({
 		.index('by_subject', ['subjectId'])
 		.index('by_class', ['classId'])
 		.index('by_semester', ['semesterId'])
+		.index('by_lecturer', ['lecturerId'])
 		.index('by_class_and_semester', ['classId', 'semesterId']),
 
 	/** A person's place in one offering. The many-to-many heart of the system. */

@@ -48,7 +48,16 @@
 		await ensureSession();
 		if (sessionStatus() === 'authed') {
 			const who = sessionMe();
-			await goto(who && who.role === 'lecturer' ? '/manage' : '/home');
+			if (!who) {
+				await goto('/home');
+				return;
+			}
+			if (who.kind === 'staff') {
+				const isAdmin = (who as { isAdmin?: boolean }).isAdmin === true || who.role === 'admin';
+				await goto(isAdmin ? '/admin' : '/manage');
+				return;
+			}
+			await goto('/home');
 			return;
 		}
 		checking = false;
@@ -85,9 +94,16 @@
 				return;
 			}
 			// Record the token in the shared session so the navbar is already
-			// signed in when the target page renders.
+			// signed in when the target page renders. Admins land on the admin
+			// console; lecturers land on their (scoped) console.
 			await beginSession(res.token);
-			await goto('/manage');
+			const who = sessionMe();
+			const isAdmin =
+				(res as { isAdmin?: boolean }).isAdmin === true ||
+				(res as { role?: string }).role === 'admin' ||
+				(who?.kind === 'staff' &&
+					((who as { isAdmin?: boolean }).isAdmin === true || who.role === 'admin'));
+			await goto(isAdmin ? '/admin' : '/manage');
 		} catch (err) {
 			reportError(err, 'Could not sign you in.');
 		} finally {

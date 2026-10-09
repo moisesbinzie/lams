@@ -1,6 +1,6 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
-import { requireActor, requireStaff } from './auth';
+import { lecturerClassIds, requireAdmin, requireActor } from './auth';
 
 // ---------------------------------------------------------------- semesters
 
@@ -22,7 +22,7 @@ export const createSemester = mutation({
 		endDate: v.string()
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const name = args.name.trim();
 		if (!name) throw new Error('Give the semester a name.');
 		if (!Number.isInteger(args.year) || args.year < 2000 || args.year > 2100) throw new Error('Enter a valid year.');
@@ -45,7 +45,7 @@ export const createSemester = mutation({
 export const removeSemester = mutation({
 	args: { token: v.string(), id: v.id('semesters') },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const offerings = await ctx.db
 			.query('offerings')
 			.withIndex('by_semester', (q) => q.eq('semesterId', args.id))
@@ -63,10 +63,16 @@ export const removeSemester = mutation({
 export const listClasses = query({
 	args: { token: v.string(), semesterId: v.optional(v.id('semesters')) },
 	handler: async (ctx, args) => {
-		await requireActor(ctx, args.token);
-		const rows = args.semesterId
-			? await ctx.db.query('classes').withIndex('by_semester', (q) => q.eq('semesterId', args.semesterId!)).take(200)
-			: await ctx.db.query('classes').order('desc').take(200);
+		const actor = await requireActor(ctx, args.token);
+		let rows =
+			args.semesterId
+				? await ctx.db.query('classes').withIndex('by_semester', (q) => q.eq('semesterId', args.semesterId!)).take(200)
+				: await ctx.db.query('classes').order('desc').take(200);
+		// Lecturers only see cohorts they actually teach.
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = new Set(await lecturerClassIds(ctx, actor.id));
+			rows = rows.filter((c: any) => mine.has(String(c._id)));
+		}
 		return Promise.all(
 			rows.map(async (c: any) => {
 				const memberships = await ctx.db
@@ -95,7 +101,7 @@ export const createClass = mutation({
 		semesterId: v.optional(v.id('semesters'))
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const name = args.name.trim();
 		if (!name) throw new Error('Give the class a name.');
 		if (args.yearOfStudy < 1 || args.yearOfStudy > 10) throw new Error('Year of study must be 1 to 10.');
@@ -117,7 +123,7 @@ export const updateClass = mutation({
 		semesterId: v.optional(v.id('semesters'))
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const cls = await ctx.db.get('classes', args.id);
 		if (!cls) throw new Error('Class not found.');
 		const patch: Record<string, unknown> = {};
@@ -137,7 +143,7 @@ export const updateClass = mutation({
 export const removeClass = mutation({
 	args: { token: v.string(), id: v.id('classes') },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const offerings = await ctx.db.query('offerings').withIndex('by_class', (q) => q.eq('classId', args.id)).take(1);
 		if (offerings.length > 0) throw new Error('This class still has subjects. Remove them first.');
 		await ctx.db.delete('classes', args.id);
@@ -147,12 +153,21 @@ export const removeClass = mutation({
 
 // ----------------------------------------------------------------- subjects
 
-/** The course catalogue — independent of any class or semester. */
+/** The course catalogue — lecturers only see subjects they teach. */
 export const listSubjects = query({
 	args: { token: v.string() },
 	handler: async (ctx, args) => {
-		await requireActor(ctx, args.token);
-		return await ctx.db.query('subjects').order('asc').take(500);
+		const actor = await requireActor(ctx, args.token);
+		const all = await ctx.db.query('subjects').order('asc').take(500);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = await ctx.db
+				.query('offerings')
+				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
+				.take(500);
+			const subjectIds = new Set(mine.map((o: any) => String(o.subjectId)));
+			return all.filter((s: any) => subjectIds.has(String(s._id)));
+		}
+		return all;
 	}
 });
 
@@ -165,7 +180,7 @@ export const createSubject = mutation({
 		lecturerId: v.optional(v.id('staff'))
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const code = args.code.trim().toUpperCase();
 		const title = args.title.trim();
 		if (!code) throw new Error('Enter a subject code.');
@@ -195,7 +210,7 @@ export const updateSubject = mutation({
 		lecturerId: v.optional(v.id('staff'))
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const patch: Record<string, unknown> = {};
 		if (args.title?.trim()) patch.title = args.title.trim();
 		if (args.hoursPerWeek !== undefined) patch.hoursPerWeek = args.hoursPerWeek;
@@ -209,7 +224,7 @@ export const updateSubject = mutation({
 export const removeSubject = mutation({
 	args: { token: v.string(), id: v.id('subjects') },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const offerings = await ctx.db
 			.query('offerings')
 			.withIndex('by_subject', (q) => q.eq('subjectId', args.id))
@@ -222,7 +237,7 @@ export const removeSubject = mutation({
 
 // ---------------------------------------------------------------- offerings
 
-/** A subject offered to a class in a semester. */
+/** A subject offered to a class in a semester. Lecturers only see their own. */
 export const listOfferings = query({
 	args: {
 		token: v.string(),
@@ -230,9 +245,16 @@ export const listOfferings = query({
 		semesterId: v.optional(v.id('semesters'))
 	},
 	handler: async (ctx, args) => {
-		await requireActor(ctx, args.token);
+		const actor = await requireActor(ctx, args.token);
 		let rows: any[];
-		if (args.classId && args.semesterId) {
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			rows = await ctx.db
+				.query('offerings')
+				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
+				.take(500);
+			if (args.classId) rows = rows.filter((o: any) => String(o.classId) === String(args.classId));
+			if (args.semesterId) rows = rows.filter((o: any) => String(o.semesterId) === String(args.semesterId));
+		} else if (args.classId && args.semesterId) {
 			rows = await ctx.db
 				.query('offerings')
 				.withIndex('by_class_and_semester', (q) =>
@@ -254,6 +276,7 @@ export const listOfferings = query({
 				const subject = await ctx.db.get('subjects', o.subjectId);
 				const classDoc = await ctx.db.get('classes', o.classId);
 				const semester = await ctx.db.get('semesters', o.semesterId);
+				const lecturer = o.lecturerId ? await ctx.db.get('staff', o.lecturerId) : null;
 				const count = await ctx.db
 					.query('enrolments')
 					.withIndex('by_offering', (q) => q.eq('offeringId', o._id))
@@ -269,6 +292,9 @@ export const listOfferings = query({
 					semesterId: o.semesterId,
 					semesterName: semester?.name ?? '',
 					openForEnrolment: o.openForEnrolment,
+					lecturerId: o.lecturerId ?? null,
+					lecturerName: lecturer?.fullName ?? null,
+					lecturerUsername: lecturer?.username ?? null,
 					studentCount: count.filter((e: any) => e.status === 'active').length
 				};
 			})
@@ -282,10 +308,11 @@ export const createOffering = mutation({
 		subjectId: v.id('subjects'),
 		classId: v.id('classes'),
 		semesterId: v.id('semesters'),
-		openForEnrolment: v.optional(v.boolean())
+		openForEnrolment: v.optional(v.boolean()),
+		lecturerId: v.optional(v.id('staff'))
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const existing = await ctx.db
 			.query('offerings')
 			.withIndex('by_class_and_semester', (q) =>
@@ -295,20 +322,43 @@ export const createOffering = mutation({
 		if (existing.some((o: any) => o.subjectId === args.subjectId)) {
 			throw new Error('That subject is already offered to this class this semester.');
 		}
+		if (args.lecturerId) {
+			const lecturer = await ctx.db.get('staff', args.lecturerId);
+			if (!lecturer || !lecturer.active) throw new Error('That lecturer account is not active.');
+		}
 		return await ctx.db.insert('offerings', {
 			subjectId: args.subjectId,
 			classId: args.classId,
 			semesterId: args.semesterId,
 			openForEnrolment: args.openForEnrolment ?? false,
+			...(args.lecturerId ? { lecturerId: args.lecturerId } : {}),
 			createdAt: Date.now()
 		});
+	}
+});
+
+/** Admin assigns (or unassigns) the lecturer teaching one offering. */
+export const setOfferingLecturer = mutation({
+	args: { token: v.string(), id: v.id('offerings'), lecturerId: v.optional(v.union(v.id('staff'), v.null())) },
+	handler: async (ctx, args) => {
+		await requireAdmin(ctx, args.token);
+		const offering = await ctx.db.get('offerings', args.id);
+		if (!offering) throw new Error('Subject offering not found.');
+		if (args.lecturerId) {
+			const lecturer = await ctx.db.get('staff', args.lecturerId);
+			if (!lecturer || !lecturer.active) throw new Error('That lecturer account is not active.');
+			await ctx.db.patch(args.id, { lecturerId: args.lecturerId });
+		} else {
+			await ctx.db.patch(args.id, { lecturerId: undefined });
+		}
+		return { ok: true };
 	}
 });
 
 export const setOfferingOpen = mutation({
 	args: { token: v.string(), id: v.id('offerings'), open: v.boolean() },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		await ctx.db.patch(args.id, { openForEnrolment: args.open });
 		return { ok: true };
 	}
@@ -317,7 +367,7 @@ export const setOfferingOpen = mutation({
 export const removeOffering = mutation({
 	args: { token: v.string(), id: v.id('offerings') },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const enrolments = await ctx.db
 			.query('enrolments')
 			.withIndex('by_offering', (q) => q.eq('offeringId', args.id))

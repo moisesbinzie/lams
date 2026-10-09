@@ -640,7 +640,7 @@ export const undoOwnScan = mutation({
 	}
 });
 
-/** Only lecturers may override a settled record. Keeps the audit trail. */
+/** Lecturers may override settled records for their own offerings; admins for any. */
 export const override = mutation({
 	args: {
 		token: v.string(),
@@ -657,6 +657,12 @@ export const override = mutation({
 		const actor = await requireStaff(ctx, args.token);
 		const record = await ctx.db.get('attendance', args.attendanceId);
 		if (!record) throw new Error('Record not found.');
+		if (!actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', record.offeringId);
+			if (!offering || String(offering.lecturerId ?? '') !== String(actor.id)) {
+				throw new Error('This record is not in a subject assigned to you.');
+			}
+		}
 		await ctx.db.patch(args.attendanceId, {
 			prevStatus: record.status,
 			status: args.status,
@@ -730,9 +736,15 @@ export const overrideDuringSession = mutation({
 export const removeRecord = mutation({
 	args: { token: v.string(), attendanceId: v.id('attendance') },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		const actor = await requireStaff(ctx, args.token);
 		const record = await ctx.db.get('attendance', args.attendanceId);
 		if (!record) throw new Error('Record not found.');
+		if (!actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', record.offeringId);
+			if (!offering || String(offering.lecturerId ?? '') !== String(actor.id)) {
+				throw new Error('This record is not in a subject assigned to you.');
+			}
+		}
 		await ctx.db.delete('attendance', args.attendanceId);
 		return { ok: true };
 	}
@@ -810,15 +822,24 @@ export const listBySession = query({
 	}
 });
 
-/** Lectures a rep or lecturer can act on right now. */
+/** Lectures a rep or lecturer can act on right now. Lecturers only see their own. */
 export const listForRecordKeeper = query({
 	args: { token: v.string(), offeringId: v.optional(v.id('offerings')) },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		let classIds: string[];
-		if (actor.kind === 'staff') {
+		if (actor.kind === 'staff' && actor.isAdmin) {
 			const classes = await ctx.db.query('classes').take(200);
 			classIds = classes.map((c: any) => String(c._id));
+		} else if (actor.kind === 'staff') {
+			const offerings = await ctx.db
+				.query('offerings')
+				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
+				.take(500);
+			classIds = [...new Set(offerings.map((o: any) => String(o.classId)))];
+			if (args.offeringId && !offerings.some((o: any) => String(o._id) === String(args.offeringId))) {
+				throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
+			}
 		} else {
 			const rows = await ctx.db
 				.query('classReps')
@@ -961,8 +982,13 @@ export const listRecordableOfferings = query({
 			throw new Error('Only class representatives and lecturers can do this.');
 		}
 		let offerings: any[];
-		if (actor.kind === 'staff') {
+		if (actor.kind === 'staff' && actor.isAdmin) {
 			offerings = await ctx.db.query('offerings').take(500);
+		} else if (actor.kind === 'staff') {
+			offerings = await ctx.db
+				.query('offerings')
+				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
+				.take(500);
 		} else {
 			const repClasses = await ctx.db
 				.query('classReps')

@@ -12,6 +12,7 @@ import {
 	ScanLine,
 	Settings,
 	Settings2,
+	ShieldCheck,
 	UserRound
 } from '@lucide/svelte';
 
@@ -45,6 +46,18 @@ export const STUDENT_NAV: StudentNavItem[] = [
  * everywhere), exactly like the student strip.
  */
 export const LECTURER_NAV: StudentNavItem[] = [
+	{ href: '/manage', label: 'Set up', icon: Settings2 },
+	{ href: '/scan', label: 'Take attendance', icon: ScanLine },
+	{ href: '/records', label: 'Records', icon: BarChart3 },
+	{ href: '/settings', label: 'Settings', icon: Settings }
+];
+
+/**
+ * Where an admin can go. Same destinations as a lecturer plus the admin
+ * console, which is where lecturer accounts are created and assigned.
+ */
+export const ADMIN_NAV: StudentNavItem[] = [
+	{ href: '/admin', label: 'Admin', icon: ShieldCheck },
 	{ href: '/manage', label: 'Set up', icon: Settings2 },
 	{ href: '/scan', label: 'Take attendance', icon: ScanLine },
 	{ href: '/records', label: 'Records', icon: BarChart3 },

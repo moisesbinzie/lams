@@ -471,7 +471,7 @@
 </script>
 
 <div class="flex flex-col gap-6">
-	{#if viewer?.role === 'lecturer'}
+	{#if viewer?.kind === 'staff'}
 		<LecturerNav />
 	{:else if viewer?.kind === 'person'}
 		<StudentNav />

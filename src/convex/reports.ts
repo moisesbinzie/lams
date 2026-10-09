@@ -9,13 +9,18 @@ import { requireActor, requirePerson, requireRecorder, requireStaff } from './au
  * or a week from the same records.
  */
 
-/** Per-student summary for one subject. */
+/** Per-student summary for one subject. Lecturers only see assigned offerings. */
 export const subjectReport = query({
 	args: { token: v.string(), offeringId: v.id('offerings') },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
 		if (!offering) throw new Error('Subject not found.');
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			if (String(offering.lecturerId ?? '') !== String(actor.id)) {
+				throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
+			}
+		}
 		if (actor.role === 'rep') {
 			const repRows = await ctx.db
 				.query('classReps')
@@ -206,14 +211,25 @@ export const mySummary = query({
 export const personRecords = query({
 	args: { token: v.string(), personId: v.id('people'), limit: v.optional(v.number()) },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		const actor = await requireStaff(ctx, args.token);
 		const person = await ctx.db.get('people', args.personId);
 		if (!person) return [];
+		let allowedOfferingIds: Set<string> | null = null;
+		if (!actor.isAdmin) {
+			const mine = await ctx.db
+				.query('offerings')
+				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
+				.take(500);
+			allowedOfferingIds = new Set(mine.map((o: any) => String(o._id)));
+		}
 		const records = await ctx.db
 			.query('attendance')
 			.withIndex('by_person', (q) => q.eq('personId', args.personId))
 			.take(1000);
-		const recent = records.sort((a, b) => b.submittedAt - a.submittedAt).slice(0, args.limit ?? 100);
+		const recent = records
+			.filter((r: any) => !allowedOfferingIds || allowedOfferingIds.has(String(r.offeringId)))
+			.sort((a, b) => b.submittedAt - a.submittedAt)
+			.slice(0, args.limit ?? 100);
 		const out: any[] = [];
 		for (const r of recent) {
 			const subject = await ctx.db.get('subjects', r.subjectId);
@@ -251,6 +267,12 @@ export const excuseRange = mutation({
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireStaff(ctx, args.token);
+		if (!actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', args.offeringId);
+			if (!offering || String(offering.lecturerId ?? '') !== String(actor.id)) {
+				throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
+			}
+		}
 		const sessions = await ctx.db
 			.query('sessions')
 			.withIndex('by_offering', (q) => q.eq('offeringId', args.offeringId))

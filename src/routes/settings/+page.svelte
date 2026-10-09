@@ -11,25 +11,20 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
-	import * as Table from '$lib/components/ui/table';
-	import type { StaffRow } from '$lib/lams/types';
+	import type { Offering } from '$lib/lams/types';
 	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = getToken();
-	let me = $state<{ role: string; username?: string; fullName?: string } | null>(null);
-	let staff = $state<StaffRow[]>([]);
+	let me = $state<{ role: string; isAdmin?: boolean; username?: string; fullName?: string } | null>(null);
+	let offerings = $state<Offering[]>([]);
 	let currentPassword = $state('');
 	let newPassword = $state('');
 	let confirmPassword = $state('');
 	let busy = $state(false);
 	let loading = $state(true);
 
-	// Fields for adding another lecturer.
-	let showAdd = $state(false);
-	let newUsername = $state('');
-	let newStaffPassword = $state('');
-	let newStaffName = $state('');
+	const isAdmin = $derived(me?.isAdmin === true || me?.role === 'admin');
 
 	onMount(async () => {
 		if (!token) {
@@ -39,21 +34,25 @@
 		try {
 			const client = requireConvexClient();
 			const profile = (await client.query(api.staff.me, { token })) as {
+				kind: string;
 				role: string;
+				isAdmin?: boolean;
 				username?: string;
 				fullName?: string;
 			} | null;
-			if (!profile) {
+			if (!profile || profile.kind !== 'staff') {
 				endSession();
 				void goto('/signin');
 				return;
 			}
-			if (profile.role !== 'lecturer') {
+			if (profile.role !== 'lecturer' && profile.role !== 'admin') {
 				void goto('/home');
 				return;
 			}
 			me = profile;
-			staff = (await client.query(api.staff.listStaff, { token })) as unknown as StaffRow[];
+			if (!isAdmin) {
+				offerings = (await client.query(api.academics.listOfferings, { token })) as unknown as Offering[];
+			}
 		} catch (err) {
 			reportError(err, 'Could not load your settings.');
 		} finally {
@@ -85,59 +84,29 @@
 			busy = false;
 		}
 	}
-
-	async function addStaff(e: SubmitEvent) {
-		e.preventDefault();
-		busy = true;
-		try {
-			const client = requireConvexClient();
-			await client.mutation(api.staff.createStaff, {
-				token,
-				username: newUsername.trim(),
-				password: newStaffPassword,
-				fullName: newStaffName.trim()
-			});
-			newUsername = '';
-			newStaffPassword = '';
-			newStaffName = '';
-			showAdd = false;
-			staff = (await client.query(api.staff.listStaff, { token })) as unknown as StaffRow[];
-			reportSuccess('Lecturer account created.');
-		} catch (err) {
-			reportError(err, 'Could not create that account.');
-		} finally {
-			busy = false;
-		}
-	}
-
-	async function toggleActive(id: string, active: boolean) {
-		try {
-			const client = requireConvexClient();
-			await client.mutation(api.staff.setActive, { token, staffId: id as never, active });
-			staff = (await client.query(api.staff.listStaff, { token })) as unknown as StaffRow[];
-			reportSuccess(active ? 'Account re-enabled.' : 'Account switched off.');
-		} catch (err) {
-			reportError(err, 'Could not change that account.');
-		}
-	}
 </script>
 
 <div class="flex flex-col gap-6">
 	<div class="text-center">
-		<h1 class="text-2xl font-bold text-lams-navy">Lecturer settings</h1>
-		<p class="text-sm text-muted-foreground">Your sign-in details and other lecturer accounts.</p>
+		<h1 class="text-2xl font-bold text-lams-navy">{isAdmin ? 'Admin settings' : 'Lecturer settings'}</h1>
+		<p class="text-sm text-muted-foreground">Your sign-in details.</p>
 	</div>
 
 	{#if loading}
 		<p class="text-sm text-muted-foreground">Loading…</p>
-	{:else if me?.role === 'lecturer'}
+	{:else if me}
 		<LecturerNav />
 		<Card.Root>
 			<Card.Header>
 				<Card.Title>Change your password</Card.Title>
 				<Card.Description>
-					You are signed in as <strong>{me.username}</strong> ({me.fullName}). Anyone who knows this
-					password can manage classes and change any record, so keep it private.
+					You are signed in as <strong>{me.username}</strong> ({me.fullName}).
+					{#if isAdmin}
+						<span class="ml-1"><Badge variant="secondary">Admin</Badge></span>
+					{:else}
+						<span class="ml-1"><Badge variant="secondary">Lecturer</Badge></span>
+					{/if}
+					Anyone who knows this password can act as you, so keep it private.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
@@ -159,79 +128,41 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header>
-				<Card.Title class="flex items-center justify-between gap-2">
-					<span>Lecturer accounts ({staff.length})</span>
-					<Button size="sm" onclick={() => (showAdd = !showAdd)}>
-						{showAdd ? 'Close' : 'Add a lecturer'}
-					</Button>
-				</Card.Title>
-				<Card.Description>
-					Add one if more than one person uses this system. Each has their own username so you can tell who
-					was working.
-				</Card.Description>
-			</Card.Header>
-			<Card.Content class="flex flex-col gap-3">
-				{#if showAdd}
-					<form class="grid gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_1fr_2fr_auto]" onsubmit={addStaff}>
-						<div class="flex flex-col gap-1">
-							<Label for="nu">Username</Label>
-							<Input id="nu" bind:value={newUsername} required />
-						</div>
-						<div class="flex flex-col gap-1">
-							<Label for="nsp">Password</Label>
-							<Input id="nsp" type="password" bind:value={newStaffPassword} required />
-						</div>
-						<div class="flex flex-col gap-1">
-							<Label for="nn">Full name</Label>
-							<Input id="nn" bind:value={newStaffName} required />
-						</div>
-						<div class="flex items-end">
-							<Button type="submit" disabled={busy}>Create</Button>
-						</div>
-					</form>
-				{/if}
-
-				<div class="overflow-x-auto rounded-md border">
-					<Table.Root>
-						<Table.Header>
-							<Table.Row>
-								<Table.Head>Username</Table.Head>
-								<Table.Head>Name</Table.Head>
-								<Table.Head>Status</Table.Head>
-								<Table.Head class="text-right">Actions</Table.Head>
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each staff as s (s._id)}
-								<Table.Row>
-									<Table.Cell class="font-medium">{s.username}</Table.Cell>
-									<Table.Cell class="text-xs">{s.fullName}</Table.Cell>
-									<Table.Cell>
-										{#if !s.active}
-											<Badge class="bg-red-600 text-white">Switched off</Badge>
-										{:else if s.isDefault}
-											<Badge variant="secondary">Default</Badge>
-										{:else}
-											<Badge variant="secondary">Active</Badge>
-										{/if}
-									</Table.Cell>
-									<Table.Cell class="text-right">
-										{#if s.username !== me.username}
-											<Button variant="outline" size="sm" onclick={() => toggleActive(s._id, !s.active)}>
-												{s.active ? 'Switch off' : 'Switch on'}
-											</Button>
-										{:else}
-											<span class="text-xs text-muted-foreground">This is you</span>
-										{/if}
-									</Table.Cell>
-								</Table.Row>
+		{#if isAdmin}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>Lecturer accounts</Card.Title>
+					<Card.Description>
+						Lecturer accounts now live in the admin console, where you can create accounts and assign subjects.
+					</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					<Button href="/admin">Open the admin console</Button>
+				</Card.Content>
+			</Card.Root>
+		{:else}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>My subjects ({offerings.length})</Card.Title>
+					<Card.Description>
+						Subjects assigned to you by the admin. If one is missing, ask the admin to assign it.
+					</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					{#if offerings.length === 0}
+						<p class="text-sm text-muted-foreground">No subjects assigned yet.</p>
+					{:else}
+						<ul class="flex flex-col divide-y divide-border">
+							{#each offerings as o (o._id)}
+								<li class="py-2 text-sm">
+									<strong>{o.subjectCode}</strong> — {o.subjectTitle}
+									<span class="text-xs text-muted-foreground">· {o.className} · {o.semesterName}</span>
+								</li>
 							{/each}
-						</Table.Body>
-					</Table.Root>
-				</div>
-			</Card.Content>
-		</Card.Root>
+						</ul>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		{/if}
 	{/if}
 </div>

@@ -1,6 +1,6 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
-import { requirePerson, requireRecorder, requireStaff } from './auth';
+import { assertCanAccessOffering, requirePerson, requireRecorder, requireStaff } from './auth';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -24,9 +24,12 @@ export const createWeekly = mutation({
 		room: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
 		if (!offering) throw new Error('Subject offering not found.');
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
 		if (args.dayOfWeek < 0 || args.dayOfWeek > 6) throw new Error('Choose a day of the week.');
 		const start = validateTime(args.startTime, 'Start time');
 		const end = validateTime(args.endTime, 'End time');
@@ -55,9 +58,12 @@ export const createMakeup = mutation({
 		note: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		const actor = await requireStaff(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
 		if (!offering) throw new Error('Subject offering not found.');
+		if (!actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new Error('Enter the date as YYYY-MM-DD.');
 		const start = validateTime(args.startTime, 'Start time');
 		const end = validateTime(args.endTime, 'End time');
@@ -88,9 +94,13 @@ export const updateMeeting = mutation({
 		note: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
 		const meeting = await ctx.db.get('meetings', args.id);
 		if (!meeting) throw new Error('Meeting not found.');
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', meeting.offeringId);
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
 		const start = args.startTime ? validateTime(args.startTime, 'Start time') : meeting.startTime;
 		const end = args.endTime ? validateTime(args.endTime, 'End time') : meeting.endTime;
 		if (end <= start) throw new Error('The end time must be after the start time.');
@@ -112,9 +122,13 @@ export const updateMeeting = mutation({
 export const removeMeeting = mutation({
 	args: { token: v.string(), id: v.id('meetings') },
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
 		const meeting = await ctx.db.get('meetings', args.id);
 		if (!meeting) throw new Error('Meeting not found.');
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', meeting.offeringId);
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
 		// Refuse to drop a slot that already has attendance recorded against it.
 		const sessions = await ctx.db
 			.query('sessions')
@@ -134,7 +148,11 @@ export const removeMeeting = mutation({
 export const listForOffering = query({
 	args: { token: v.string(), offeringId: v.id('offerings') },
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', args.offeringId);
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
 		const rows = await ctx.db
 			.query('meetings')
 			.withIndex('by_offering', (q) => q.eq('offeringId', args.offeringId))
@@ -202,15 +220,18 @@ export const myTimetable = query({
 					}
 				});
 
-				/** The timetable for a whole class — for lecturers and reps. */
+				/** The timetable for a whole class — lecturers only see their own offerings. */
 export const listForClass = query({
 	args: { token: v.string(), classId: v.id('classes') },
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
-		const offerings = await ctx.db
+		const actor = await requireRecorder(ctx, args.token);
+		let offerings = await ctx.db
 			.query('offerings')
 			.withIndex('by_class', (q) => q.eq('classId', args.classId))
 			.take(200);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			offerings = offerings.filter((o: any) => String(o.lecturerId ?? '') === String(actor.id));
+		}
 		const weekly: any[] = [];
 		const makeups: any[] = [];
 		for (const o of offerings) {
@@ -250,11 +271,14 @@ export const listForClass = query({
 export const listTodayForClass = query({
 	args: { token: v.string(), classId: v.id('classes'), dayOfWeek: v.number() },
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
-		const offerings = await ctx.db
+		const actor = await requireRecorder(ctx, args.token);
+		let offerings = await ctx.db
 			.query('offerings')
 			.withIndex('by_class', (q) => q.eq('classId', args.classId))
 			.take(200);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			offerings = offerings.filter((o: any) => String(o.lecturerId ?? '') === String(actor.id));
+		}
 		const out: any[] = [];
 		for (const o of offerings) {
 			const subject = await ctx.db.get('subjects', o.subjectId);

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { cn } from '$lib/utils';
-	import { LECTURER_NAV } from '$lib/lams/nav';
+	import { ADMIN_NAV, LECTURER_NAV } from '$lib/lams/nav';
+	import { sessionMe } from '$lib/lams/session.svelte';
 
 	/**
 	 * The lecturer's navigation, rendered inside the page rather than only in
@@ -21,6 +22,10 @@
 	let { class: className = '' }: { class?: string } = $props();
 
 	const path = $derived(page.url.pathname);
+	const me = $derived(sessionMe());
+	const items = $derived(
+		me?.kind === 'staff' && (me.isAdmin === true || me.role === 'admin') ? ADMIN_NAV : LECTURER_NAV
+	);
 
 	function isActive(href: string): boolean {
 		return path === href || path.startsWith(`${href}/`);
@@ -29,7 +34,7 @@
 
 <nav aria-label="Lecturer console" class={cn('py-0.5', className)}>
 	<ul class="flex max-w-full flex-wrap items-center gap-0.5 rounded-3xl bg-muted p-1">
-		{#each LECTURER_NAV as item (item.href)}
+		{#each items as item (item.href)}
 			{@const active = isActive(item.href)}
 			<li class="shrink-0">
 				<a

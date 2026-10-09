@@ -7,11 +7,15 @@ import {
 	ITERATIONS,
 	SCHEME,
 	SESSION_TTL_MS,
+	generateTempPassword,
 	hashSecret,
+	isAdminStaff,
 	normalizeUsername,
 	randomSalt,
+	requireAdmin,
 	requireStaff,
 	resolveActor,
+	staffRoleOf,
 	verifySecret
 } from './auth';
 import { isBlocked, noteFailure, noteSuccess } from './ratelimit';
@@ -33,14 +37,26 @@ export const setupState = query({
 });
 
 /**
- * Creates the default `admin` account if none exists. Safe to call repeatedly;
+ * Creates the default `admin` account if none exists, and backfills the `role`
+ * column on deployments created before roles existed. Safe to call repeatedly;
  * it never overwrites an existing password.
+ *
+ * Migration rule: the default username becomes the admin, everyone else
+ * becomes a lecturer.
  */
 export const ensureSeed = mutation({
 	args: {},
 	handler: async (ctx) => {
-		const existing = await ctx.db.query('staff').take(1);
-		if (existing.length > 0) return { seeded: false };
+		let migrated = 0;
+		const all = await ctx.db.query('staff').take(200);
+		for (const s of all as any[]) {
+			if (s.role === 'admin' || s.role === 'lecturer') continue;
+			const role =
+				s.usernameNorm === normalizeUsername(DEFAULT_STAFF_USERNAME) ? ('admin' as const) : ('lecturer' as const);
+			await ctx.db.patch(s._id, { role });
+			migrated += 1;
+		}
+		if (all.length > 0) return { seeded: false, migrated };
 		const salt = randomSalt();
 		const passwordHash = await hashSecret(DEFAULT_STAFF_PASSWORD, salt);
 		await ctx.db.insert('staff', {
@@ -50,11 +66,12 @@ export const ensureSeed = mutation({
 			salt,
 			scheme: SCHEME,
 			iterations: ITERATIONS,
-			fullName: DEFAULT_STAFF_NAME,
+			fullName: 'Administrator',
+			role: 'admin' as const,
 			active: true,
 			createdAt: Date.now()
 		});
-		return { seeded: true };
+		return { seeded: true, migrated };
 	}
 });
 
@@ -107,7 +124,14 @@ export const login = mutation({
 		});
 		await ctx.db.patch(staff._id, { lastLoginAt: Date.now() });
 		await noteSuccess(ctx, `staff:${usernameNorm}`);
-		return { ok: true as const, token, fullName: staff.fullName, username: staff.username };
+		return {
+			ok: true as const,
+			token,
+			fullName: staff.fullName,
+			username: staff.username,
+			role: staffRoleOf(staff),
+			isAdmin: isAdminStaff(staff)
+		};
 	}
 });
 
@@ -121,7 +145,9 @@ export const me = query({
 			return {
 				kind: 'staff' as const,
 				id: String(actor.id),
-				role: 'lecturer' as const,
+				role: actor.staffRole,
+				staffRole: actor.staffRole,
+				isAdmin: actor.isAdmin,
 				fullName: actor.name,
 				username: actor.username
 			};
@@ -173,11 +199,15 @@ export const changePassword = mutation({
 	}
 });
 
-/** Add another lecturer, for institutions with more than one. */
+/**
+ * Legacy manual creation (username + chosen password). Kept for compatibility;
+ * admin-only. New lecturers should use `createLecturer`, which generates the
+ * initial password so the admin never invents a weak one.
+ */
 export const createStaff = mutation({
 	args: { token: v.string(), username: v.string(), password: v.string(), fullName: v.string() },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const usernameNorm = normalizeUsername(args.username);
 		if (!usernameNorm) throw new Error('Enter a username.');
 		if (args.password.length < 6) throw new Error('Choose a password of at least 6 characters.');
@@ -199,23 +229,104 @@ export const createStaff = mutation({
 			scheme: SCHEME,
 			iterations: ITERATIONS,
 			fullName: name,
+			role: 'lecturer' as const,
 			active: true,
 			createdAt: Date.now()
 		});
 	}
 });
 
+/**
+ * Admin creates a lecturer. The initial password is generated server-side and
+ * returned once — the admin reads it out to the lecturer, who changes it in
+ * Settings. Lecturers always sign in with username + password.
+ */
+export const createLecturer = mutation({
+	args: { token: v.string(), username: v.string(), fullName: v.string() },
+	handler: async (ctx, args) => {
+		await requireAdmin(ctx, args.token);
+		const usernameNorm = normalizeUsername(args.username);
+		if (!usernameNorm) throw new Error('Enter a username.');
+		if (!/^[a-z0-9._-]{3,32}$/.test(usernameNorm)) {
+			throw new Error('Usernames are 3–32 characters: letters, numbers, dot, dash or underscore.');
+		}
+		const name = args.fullName.trim();
+		if (name.length < 2) throw new Error("Enter the lecturer's name.");
+		const clash = await ctx.db
+			.query('staff')
+			.withIndex('by_username', (q) => q.eq('usernameNorm', usernameNorm))
+			.unique();
+		if (clash) throw new Error('That username is already taken.');
+
+		const tempPassword = generateTempPassword(10);
+		const salt = randomSalt();
+		const passwordHash = await hashSecret(tempPassword, salt);
+		const id = await ctx.db.insert('staff', {
+			username: args.username.trim(),
+			usernameNorm,
+			passwordHash,
+			salt,
+			scheme: SCHEME,
+			iterations: ITERATIONS,
+			fullName: name,
+			role: 'lecturer' as const,
+			active: true,
+			createdAt: Date.now()
+		});
+		return { id, username: args.username.trim(), tempPassword };
+	}
+});
+
+/**
+ * Admin resets a lecturer's password. Generates a fresh temporary password,
+ * signs the lecturer out everywhere, and returns the password once.
+ */
+export const resetLecturerPassword = mutation({
+	args: { token: v.string(), staffId: v.id('staff') },
+	handler: async (ctx, args) => {
+		const actor = await requireAdmin(ctx, args.token);
+		if (actor.id === args.staffId) {
+			throw new Error('Use “Change your password” for your own account instead.');
+		}
+		const staff = await ctx.db.get('staff', args.staffId);
+		if (!staff) throw new Error('Account not found.');
+		if (isAdminStaff(staff)) {
+			throw new Error('Admin passwords cannot be reset this way.');
+		}
+		const tempPassword = generateTempPassword(10);
+		const salt = randomSalt();
+		const passwordHash = await hashSecret(tempPassword, salt);
+		const sessions = await ctx.db
+			.query('staffSessions')
+			.withIndex('by_staff', (q) => q.eq('staffId', args.staffId))
+			.take(50);
+		for (const s of sessions) await ctx.db.delete('staffSessions', s._id);
+		await ctx.db.patch(args.staffId, { passwordHash, salt, scheme: SCHEME, iterations: ITERATIONS });
+		return { ok: true as const, tempPassword };
+	}
+});
+
 export const listStaff = query({
 	args: { token: v.string() },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		await requireAdmin(ctx, args.token);
 		const rows = await ctx.db.query('staff').order('asc').take(200);
+		const offerings = await ctx.db.query('offerings').take(500);
+		const countByLecturer = new Map<string, number>();
+		for (const o of offerings as any[]) {
+			if (!o.lecturerId) continue;
+			const key = String(o.lecturerId);
+			countByLecturer.set(key, (countByLecturer.get(key) ?? 0) + 1);
+		}
 		return rows.map((s: any) => ({
 			_id: s._id,
 			username: s.username,
 			fullName: s.fullName,
+			role: staffRoleOf(s),
+			isAdmin: isAdminStaff(s),
 			active: s.active,
 			lastLoginAt: s.lastLoginAt ?? null,
+			assignmentCount: countByLecturer.get(String(s._id)) ?? 0,
 			isDefault: s.usernameNorm === normalizeUsername(DEFAULT_STAFF_USERNAME)
 		}));
 	}
@@ -224,12 +335,21 @@ export const listStaff = query({
 export const setActive = mutation({
 	args: { token: v.string(), staffId: v.id('staff'), active: v.boolean() },
 	handler: async (ctx, args) => {
-		const actor = await requireStaff(ctx, args.token);
+		const actor = await requireAdmin(ctx, args.token);
 		if (actor.id === args.staffId) {
 			throw new Error('You cannot switch off the account you are signed in with.');
 		}
 		const staff = await ctx.db.get('staff', args.staffId);
 		if (!staff) throw new Error('Account not found.');
+		if (!args.active && isAdminStaff(staff)) {
+			const all = await ctx.db.query('staff').take(200);
+			const otherAdmins = (all as any[]).filter(
+				(s) => s.active && isAdminStaff(s) && String(s._id) !== String(args.staffId)
+			);
+			if (otherAdmins.length === 0) {
+				throw new Error('You cannot switch off the last admin account.');
+			}
+		}
 		if (!args.active) {
 			const sessions = await ctx.db
 				.query('staffSessions')

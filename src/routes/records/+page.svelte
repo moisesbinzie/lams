@@ -55,13 +55,23 @@
 		}
 		try {
 			const client = requireConvexClient();
-			const me = (await client.query(api.staff.me, { token })) as { role: string } | null;
-			if (!me) {
-				endSession();
-				void goto('/signin');
+			const me = (await client.query(api.staff.me, { token })) as {
+				kind: string;
+				role: string;
+			} | null;
+			if (!me || me.kind !== 'staff') {
+				if (!me) {
+					endSession();
+					void goto('/signin');
+					return;
+				}
+				toast.error(
+					'Only lecturers can review records here. Your own attendance is on your account page.'
+				);
+				loading = false;
 				return;
 			}
-			if (me.role !== 'lecturer') {
+			if (me.role !== 'lecturer' && me.role !== 'admin') {
 				toast.error(
 					'Only lecturers can review records here. Your own attendance is on your account page.'
 				);
@@ -171,7 +181,7 @@
 </script>
 
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
-	{#if role === 'lecturer'}
+	{#if role === 'lecturer' || role === 'admin'}
 		<LecturerNav />
 	{/if}
 	<div class="flex items-center gap-3">

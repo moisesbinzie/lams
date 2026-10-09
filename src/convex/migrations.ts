@@ -8,6 +8,8 @@
 
 import { internalMutation } from './_generated/server';
 import { DEFAULT_STATION_RADIUS_M, DEFAULT_STATION_TOLERANCE_M } from './helpers';
+import { normalizeUsername } from './auth';
+import { DEFAULT_STAFF_USERNAME } from './auth';
 import { v } from 'convex/values';
 
 /**
@@ -50,6 +52,26 @@ export const backfillSessionStations = internalMutation({
 			cursor: page.continueCursor,
 			isDone: page.isDone
 		};
+	}
+});
+
+/**
+ * Staff rows created before roles existed have no `role`. The default account
+ * becomes the admin, everyone else becomes a lecturer. Idempotent.
+ */
+export const backfillStaffRoles = internalMutation({
+	args: { cursor: v.optional(v.union(v.string(), v.null())) },
+	handler: async (ctx, args) => {
+		const page = await ctx.db.query('staff').paginate({ cursor: args.cursor ?? null, numItems: 100 });
+		let patched = 0;
+		for (const s of page.page as any[]) {
+			if (s.role === 'admin' || s.role === 'lecturer') continue;
+			const role =
+				s.usernameNorm === normalizeUsername(DEFAULT_STAFF_USERNAME) ? ('admin' as const) : ('lecturer' as const);
+			await ctx.db.patch(s._id, { role });
+			patched += 1;
+		}
+		return { scanned: page.page.length, patched, cursor: page.continueCursor, isDone: page.isDone };
 	}
 });
 

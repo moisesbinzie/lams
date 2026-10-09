@@ -16,6 +16,7 @@
 
 	let token = getToken();
 	let role = $state('');
+	let isAdmin = $state(false);
 
 	onMount(async () => {
 		if (!token) {
@@ -24,17 +25,22 @@
 		}
 		try {
 			const client = requireConvexClient();
-			const me = (await client.query(api.staff.me, { token })) as { role: string } | null;
+			const me = (await client.query(api.staff.me, { token })) as {
+				kind: string;
+				role: string;
+				isAdmin?: boolean;
+			} | null;
 			if (!me) {
 				endSession();
 				void goto('/signin');
 				return;
 			}
-			if (me.role !== 'lecturer') {
+			if (me.kind !== 'staff' || (me.role !== 'lecturer' && me.role !== 'admin')) {
 				void goto('/home');
 				return;
 			}
 			role = me.role;
+			isAdmin = me.isAdmin === true || me.role === 'admin';
 		} catch {
 			// Network trouble — keep the token and let the sign-in page re-check.
 			void goto('/signin');
@@ -61,8 +67,13 @@
 		</div>
 	</div>
 
-	{#if role === 'lecturer'}
+	{#if role === 'lecturer' || role === 'admin'}
 		<LecturerNav />
+		{#if !isAdmin}
+			<p class="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground" role="status">
+				You only see the subjects assigned to you. Ask the admin if a subject is missing.
+			</p>
+		{/if}
 		<Tabs.Root value="setup">
 			<Tabs.List class="h-auto flex-wrap justify-start gap-1">
 				{#each tabs as t (t.key)}

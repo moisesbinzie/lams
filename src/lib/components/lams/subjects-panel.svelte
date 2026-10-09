@@ -19,6 +19,7 @@
 	import type { ClassRow, Offering, Subject } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
+	import { sessionMe } from '$lib/lams/session.svelte';
 
 	let token = getToken();
 	let classes = $state<ClassRow[]>([]);
@@ -50,6 +51,9 @@
 	let removeOpen = $state(false);
 	let rosterFor = $state<Offering | null>(null);
 	let rosterOpen = $state(false);
+
+	const me = $derived(sessionMe());
+	const isAdmin = $derived(me?.kind === 'staff' && (me.isAdmin === true || me.role === 'admin'));
 
 	const notOffered = $derived(subjects.filter((s) => !offerings.some((o) => o.subjectId === s._id)));
 	const selectedClass = $derived(classes.find((c) => c._id === classId) ?? null);
@@ -188,34 +192,38 @@
 		<Card.Root>
 			<Card.Header>
 				<Card.Title class="flex flex-wrap items-center justify-between gap-2">
-					<span>Subject catalogue</span>
+					<span>{isAdmin ? 'Subject catalogue' : 'My subjects'}</span>
 				</Card.Title>
 				<Card.Description>
-					A subject is saved once with its code — e.g. BIT 221 — and can then be offered to any class.
+					{isAdmin
+						? 'A subject is saved once with its code — e.g. BIT 221 — and can then be offered to any class.'
+						: 'Subjects assigned to you by the admin.'}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
-				<form class="grid gap-2 sm:grid-cols-[1fr_2fr_1fr_auto]" onsubmit={createSubject}>
-					<div class="flex flex-col gap-1">
-						<Label for="sc">Code</Label>
-						<Input id="sc" bind:value={code} placeholder="e.g. BIT 221" required />
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="st">Title</Label>
-						<Input id="st" bind:value={title} placeholder="e.g. Database Systems" required />
-					</div>
-					<div class="flex flex-col gap-1">
-						<Label for="sh">Hours/week</Label>
-						<Input id="sh" type="number" min="1" max="20" bind:value={hours} />
-					</div>
-					<div class="flex items-end">
-						<Button type="submit" disabled={busy}>Add subject</Button>
-					</div>
-				</form>
+				{#if isAdmin}
+					<form class="grid gap-2 sm:grid-cols-[1fr_2fr_1fr_auto]" onsubmit={createSubject}>
+						<div class="flex flex-col gap-1">
+							<Label for="sc">Code</Label>
+							<Input id="sc" bind:value={code} placeholder="e.g. BIT 221" required />
+						</div>
+						<div class="flex flex-col gap-1">
+							<Label for="st">Title</Label>
+							<Input id="st" bind:value={title} placeholder="e.g. Database Systems" required />
+						</div>
+						<div class="flex flex-col gap-1">
+							<Label for="sh">Hours/week</Label>
+							<Input id="sh" type="number" min="1" max="20" bind:value={hours} />
+						</div>
+						<div class="flex items-end">
+							<Button type="submit" disabled={busy}>Add subject</Button>
+						</div>
+					</form>
+				{/if}
 
 				{#if subjects.length === 0}
 					<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-						The catalogue is empty. Add the first subject above.
+						{isAdmin ? 'The catalogue is empty. Add the first subject above.' : 'No subjects assigned to you yet.'}
 					</p>
 				{:else}
 					<div class="overflow-x-auto rounded-md border">
@@ -235,29 +243,33 @@
 										<Table.Cell>{s.title}</Table.Cell>
 										<Table.Cell class="text-muted-foreground">{s.hoursPerWeek ?? '—'}</Table.Cell>
 										<Table.Cell class="text-right">
-											<div class="flex justify-end gap-1">
-												<Button
-													variant="ghost"
-													size="sm"
-													onclick={() => {
-														editing = s;
-														editOpen = true;
-													}}
-												>
-													Edit
-												</Button>
-												<Button
-													variant="ghost"
-													size="sm"
-													class="text-red-700"
-													onclick={() => {
-														removing = s;
-														removeOpen = true;
-													}}
-												>
-													Remove
-												</Button>
-											</div>
+											{#if isAdmin}
+												<div class="flex justify-end gap-1">
+													<Button
+														variant="ghost"
+														size="sm"
+														onclick={() => {
+															editing = s;
+															editOpen = true;
+														}}
+													>
+														Edit
+													</Button>
+													<Button
+														variant="ghost"
+														size="sm"
+														class="text-red-700"
+														onclick={() => {
+															removing = s;
+															removeOpen = true;
+														}}
+													>
+														Remove
+													</Button>
+												</div>
+											{:else}
+												<span class="text-xs text-muted-foreground">Assigned</span>
+											{/if}
 										</Table.Cell>
 									</Table.Row>
 								{/each}
@@ -272,11 +284,13 @@
 			<Card.Header>
 				<Card.Title>Subjects this class is taking</Card.Title>
 				<Card.Description>
-					Offer a catalogue subject to the selected class, then decide who takes it.
+					{isAdmin
+						? 'Offer a catalogue subject to the selected class, then decide who takes it.'
+						: 'Subjects you teach in the selected class.'}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
-				<ClassPicker {classes} bind:classId emptyHint="No classes yet — add one in “Classes & semesters”." />
+				<ClassPicker {classes} bind:classId emptyHint={isAdmin ? 'No classes yet — add one in “Classes & semesters”.' : 'No classes assigned to you yet.'} />
 
 				{#if !classId}
 					<p class="text-sm text-muted-foreground">Choose a class to see its subjects.</p>
@@ -288,7 +302,7 @@
 							per semester.
 						</span>
 					</p>
-				{:else}
+				{:else if isAdmin}
 					{#if notOffered.length > 0}
 						<div class="flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-end">
 							<div class="flex-1">
@@ -336,6 +350,9 @@
 										</p>
 										<p class="text-xs text-muted-foreground">
 											{o.studentCount} student(s) enrolled · {o.semesterName}
+											{#if isAdmin && o.lecturerName}
+												· {o.lecturerName}
+											{/if}
 										</p>
 									</div>
 									<div class="flex flex-wrap items-center gap-2">
@@ -343,20 +360,55 @@
 											rosterFor = o;
 											rosterOpen = true;
 										}}>Roster ({o.studentCount})</Button>
-										{#if o.openForEnrolment}
-											<Badge class="bg-emerald-600 text-white">Open to students</Badge>
-											<Button variant="outline" size="sm" onclick={() => toggleOpen(o._id, false)}>
-												Close enrolment
+										{#if isAdmin}
+											{#if o.openForEnrolment}
+												<Badge class="bg-emerald-600 text-white">Open to students</Badge>
+												<Button variant="outline" size="sm" onclick={() => toggleOpen(o._id, false)}>
+													Close enrolment
+												</Button>
+											{:else}
+												<Badge variant="secondary">Closed</Badge>
+												<Button variant="secondary" size="sm" onclick={() => toggleOpen(o._id, true)}>
+													Let students join
+												</Button>
+											{/if}
+											<Button variant="ghost" size="sm" class="text-red-700" onclick={() => removeOffering(o._id)}>
+												Remove
 											</Button>
 										{:else}
-											<Badge variant="secondary">Closed</Badge>
-											<Button variant="secondary" size="sm" onclick={() => toggleOpen(o._id, true)}>
-												Let students join
-											</Button>
+											<Badge variant="secondary">{o.openForEnrolment ? 'Open to students' : 'Closed'}</Badge>
 										{/if}
-										<Button variant="ghost" size="sm" class="text-red-700" onclick={() => removeOffering(o._id)}>
-											Remove
-										</Button>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				{:else}
+					{#if offerings.length === 0}
+						<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+							No subjects assigned to you in this class yet.
+						</p>
+					{:else}
+						<ul class="flex flex-col divide-y divide-border">
+							{#each offerings as o (o._id)}
+								<li class="flex flex-wrap items-center justify-between gap-2 py-3">
+									<div>
+										<p class="text-sm font-semibold">
+											{o.subjectCode} — {o.subjectTitle}
+											{#if o.hoursPerWeek}
+												<span class="font-normal text-muted-foreground">· {o.hoursPerWeek} h/week</span>
+											{/if}
+										</p>
+										<p class="text-xs text-muted-foreground">
+											{o.studentCount} student(s) enrolled · {o.semesterName}
+										</p>
+									</div>
+									<div class="flex flex-wrap items-center gap-2">
+										<Button variant="outline" size="sm" onclick={() => {
+											rosterFor = o;
+											rosterOpen = true;
+										}}>Roster ({o.studentCount})</Button>
+										<Badge variant="secondary">{o.openForEnrolment ? 'Open to students' : 'Closed'}</Badge>
 									</div>
 								</li>
 							{/each}

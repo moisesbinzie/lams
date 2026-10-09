@@ -1,6 +1,6 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
-import { requireActor, requireRecorder, requireStaff } from './auth';
+import { lecturerClassIds, requireActor, requireRecorder, requireStaff } from './auth';
 
 /**
  * Class-rep rights are scoped to a class, not a subject or person. A rep of a
@@ -9,15 +9,27 @@ import { requireActor, requireRecorder, requireStaff } from './auth';
  * table is what keeps that flexible without over-granting.
  */
 
-/** The classes a person represents — for their home screen and scanner. */
+/** The classes a person represents — lecturers only see classes they teach. */
 export const listForPerson = query({
 	args: { token: v.string() },
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx, args.token);
-		if (actor.kind === 'staff') {
-			// Lecturers can record for everything; report all classes.
+		if (actor.kind === 'staff' && actor.isAdmin) {
 			const classes = await ctx.db.query('classes').order('asc').take(200);
 			return classes.map((c: any) => ({ classId: c._id, className: c.name }));
+		}
+		if (actor.kind === 'staff') {
+			const mine = await ctx.db
+				.query('offerings')
+				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
+				.take(500);
+			const classIds = [...new Set(mine.map((o: any) => String(o.classId)))];
+			const out: any[] = [];
+			for (const id of classIds) {
+				const cls = await ctx.db.get('classes', id as never);
+				if (cls) out.push({ classId: cls._id, className: (cls as any).name });
+			}
+			return out;
 		}
 		if (actor.role !== 'rep') return [];
 		const rows = await ctx.db
@@ -59,7 +71,13 @@ export const listForClass = query({
 export const setRep = mutation({
 	args: { token: v.string(), classId: v.id('classes'), personId: v.id('people'), isRep: v.boolean() },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		const actor = await requireStaff(ctx, args.token);
+		if (!actor.isAdmin) {
+			const mine = await lecturerClassIds(ctx, actor.id);
+			if (!mine.includes(String(args.classId))) {
+				throw new Error('That class is not assigned to you.');
+			}
+		}
 		const person = await ctx.db.get('people', args.personId);
 		if (!person) throw new Error('Person not found.');
 		const cls = await ctx.db.get('classes', args.classId);

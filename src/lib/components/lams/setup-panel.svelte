@@ -17,6 +17,7 @@
 	import ClassPicker from './class-picker.svelte';
 	import type { ClassRow, Semester } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import { sessionMe } from '$lib/lams/session.svelte';
 
 	let token = getToken();
 	let semesters = $state<Semester[]>([]);
@@ -47,6 +48,9 @@
 	let editName = $state('');
 	let editYear = $state('1');
 	let editSemester = $state('');
+
+	const me = $derived(sessionMe());
+	const isAdmin = $derived(me?.kind === 'staff' && (me.isAdmin === true || me.role === 'admin'));
 
 	const yearOptions = $derived.by(() => {
 		const y = Number(semYear) || new Date().getFullYear();
@@ -196,13 +200,15 @@
 			<Card.Header>
 				<Card.Title>Semesters</Card.Title>
 				<Card.Description>
-					Subjects are offered per semester, so create the current one first.
+					{isAdmin
+						? 'Subjects are offered per semester, so create the current one first.'
+						: 'Semesters for the classes you teach. Only the admin can create them.'}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
 				{#if semesters.length === 0}
 					<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-						No semesters yet. Create the first one below.
+						No semesters yet. {isAdmin ? 'Create the first one below.' : 'Ask the admin to create one.'}
 					</p>
 				{:else}
 					<ul class="flex flex-col divide-y divide-border">
@@ -214,32 +220,35 @@
 										· {s.startDate} to {s.endDate}
 									</span>
 								</span>
-								<AlertDialog.Root>
-									<AlertDialog.Trigger
-										class="text-xs text-red-700 underline"
-										disabled={busy}
-									>
-										Remove
-									</AlertDialog.Trigger>
-									<AlertDialog.Content>
-										<AlertDialog.Header>
-											<AlertDialog.Title>Remove {s.name}?</AlertDialog.Title>
-											<AlertDialog.Description>
-												This only works while no class or subject uses the semester.
-											</AlertDialog.Description>
-										</AlertDialog.Header>
-										<AlertDialog.Footer>
-											<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-											<AlertDialog.Action onclick={() => removeSemester(s._id)}>Remove</AlertDialog.Action>
-										</AlertDialog.Footer>
-									</AlertDialog.Content>
-								</AlertDialog.Root>
+								{#if isAdmin}
+									<AlertDialog.Root>
+										<AlertDialog.Trigger
+											class="text-xs text-red-700 underline"
+											disabled={busy}
+										>
+											Remove
+										</AlertDialog.Trigger>
+										<AlertDialog.Content>
+											<AlertDialog.Header>
+												<AlertDialog.Title>Remove {s.name}?</AlertDialog.Title>
+												<AlertDialog.Description>
+													This only works while no class or subject uses the semester.
+												</AlertDialog.Description>
+											</AlertDialog.Header>
+											<AlertDialog.Footer>
+												<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+												<AlertDialog.Action onclick={() => removeSemester(s._id)}>Remove</AlertDialog.Action>
+											</AlertDialog.Footer>
+										</AlertDialog.Content>
+									</AlertDialog.Root>
+								{/if}
 							</li>
 						{/each}
 					</ul>
 				{/if}
 
-				<form class="grid gap-2 sm:grid-cols-[1.5fr_1fr_1fr_1.2fr_1.2fr_auto]" onsubmit={createSemester}>
+				{#if isAdmin}
+					<form class="grid gap-2 sm:grid-cols-[1.5fr_1fr_1fr_1.2fr_1.2fr_auto]" onsubmit={createSemester}>
 					<div class="flex flex-col gap-1">
 						<Label for="semn">Name</Label>
 						<Input id="semn" bind:value={semName} placeholder="Semester" required />
@@ -276,13 +285,14 @@
 					</div>
 					<DatePicker id="sems" label="Starts" bind:value={semStart} />
 					<DatePicker id="seme" label="Ends" bind:value={semEnd} />
-					<div class="flex items-end">
-						<Button type="submit" disabled={busy || !semStart || !semEnd}>Add semester</Button>
-					</div>
-				</form>
-				<p class="text-xs text-muted-foreground">
-					A year normally holds two semesters; use 3 only for a summer session.
-				</p>
+						<div class="flex items-end">
+							<Button type="submit" disabled={busy || !semStart || !semEnd}>Add semester</Button>
+						</div>
+					</form>
+					<p class="text-xs text-muted-foreground">
+						A year normally holds two semesters; use 3 only for a summer session.
+					</p>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 
@@ -290,12 +300,13 @@
 			<Card.Header>
 				<Card.Title>Classes</Card.Title>
 				<Card.Description>
-					A class is a cohort, e.g. “BSc Computer Science”. Its year of study is set separately below.
-					Subjects are offered to classes, and students belong to one or more of them.
+					{isAdmin
+						? 'A class is a cohort, e.g. “BSc Computer Science”. Its year of study is set separately below. Subjects are offered to classes, and students belong to one or more of them.'
+						: 'The classes you teach. Only the admin can create or edit them.'}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
-				<ClassPicker {classes} bind:classId emptyHint="No classes yet — add one below." />
+				<ClassPicker {classes} bind:classId emptyHint={isAdmin ? 'No classes yet — add one below.' : 'No classes assigned to you yet.'} />
 
 				{#if classId}
 					{@const selected = classes.find((c) => c._id === classId)}
@@ -308,14 +319,17 @@
 							{:else}
 								<Badge class="bg-amber-600 text-white">No semester — subjects cannot be offered</Badge>
 							{/if}
-							<Button variant="outline" size="sm" class="ml-auto" onclick={() => openEdit(selected)}>
-								<Pencil class="size-3.5" /> Edit class
-							</Button>
+							{#if isAdmin}
+								<Button variant="outline" size="sm" class="ml-auto" onclick={() => openEdit(selected)}>
+									<Pencil class="size-3.5" /> Edit class
+								</Button>
+							{/if}
 						</div>
 					{/if}
 				{/if}
 
-				<details class="rounded-md border border-border p-3">
+				{#if isAdmin}
+					<details class="rounded-md border border-border p-3">
 					<summary class="cursor-pointer text-sm font-medium">Add a class</summary>
 					<form class="mt-3 grid gap-2 sm:grid-cols-[2fr_1fr_1.5fr_auto]" onsubmit={createClass}>
 						<div class="flex flex-col gap-1">
@@ -351,10 +365,11 @@
 							</Select.Root>
 						</div>
 						<div class="flex items-end">
-							<Button type="submit" disabled={busy}>Add class</Button>
-						</div>
-					</form>
-				</details>
+								<Button type="submit" disabled={busy}>Add class</Button>
+							</div>
+						</form>
+					</details>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 	{/if}

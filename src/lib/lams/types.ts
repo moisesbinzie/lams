@@ -1,13 +1,16 @@
 export type AttendanceStatus = 'Present' | 'Late' | 'Out_of_Range' | 'Absent' | 'Excused';
-export type Role = 'student' | 'rep' | 'lecturer';
+export type Role = 'student' | 'rep' | 'lecturer' | 'admin';
+export type StaffRole = 'admin' | 'lecturer';
 export type PersonStatus = 'invited' | 'active' | 'blocked';
 
-/** Who the current token belongs to — either a lecturer account or a person. */
+/** Who the current token belongs to — either a staff account or a person. */
 export type Me =
 	| {
 			kind: 'staff';
 			id: string;
-			role: 'lecturer';
+			role: 'lecturer' | 'admin';
+			staffRole?: 'lecturer' | 'admin';
+			isAdmin?: boolean;
 			fullName: string;
 			username: string;
 	  }
@@ -28,8 +31,11 @@ export interface StaffRow {
 	_id: string;
 	username: string;
 	fullName: string;
+	role: 'admin' | 'lecturer';
+	isAdmin: boolean;
 	active: boolean;
 	lastLoginAt: number | null;
+	assignmentCount: number;
 	isDefault: boolean;
 }
 
@@ -93,6 +99,9 @@ export interface Offering {
 	semesterId: string;
 	semesterName: string;
 	openForEnrolment: boolean;
+	lecturerId?: string | null;
+	lecturerName?: string | null;
+	lecturerUsername?: string | null;
 	studentCount: number;
 }
 

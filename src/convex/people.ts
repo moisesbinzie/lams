@@ -7,7 +7,9 @@ import {
 	SCHEME,
 	SESSION_TTL_MS,
 	hashPin,
+	lecturerClassIds,
 	randomSalt,
+	requireAdmin,
 	requirePerson,
 	requireRecorder,
 	requireStaff,
@@ -82,7 +84,13 @@ export const createPerson = mutation({
 		phone: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin && args.classId) {
+			const mine = await lecturerClassIds(ctx, actor.id);
+			if (!mine.includes(String(args.classId))) {
+				throw new Error('You can only add students to classes you teach.');
+			}
+		}
 		const fullName = args.fullName.trim();
 		const regNorm = normalizeReg(args.regNumber);
 		const idNorm = normalizeId(args.studentId);
@@ -118,7 +126,13 @@ export const importPeople = mutation({
 		rows: v.array(v.object({ fullName: v.string(), regNumber: v.string(), studentId: v.string() }))
 	},
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = await lecturerClassIds(ctx, actor.id);
+			if (!mine.includes(String(args.classId))) {
+				throw new Error('You can only add students to classes you teach.');
+			}
+		}
 		let added = 0;
 		let skipped = 0;
 		for (const row of args.rows.slice(0, 500)) {
@@ -407,7 +421,7 @@ export const resetPin = mutation({
 			}
 		});
 
-/** Staff change a person's identifiers, role or classes. */
+/** Admins change anyone; lecturers only people in classes they teach. */
 export const updatePerson = mutation({
 	args: {
 		token: v.string(),
@@ -420,7 +434,22 @@ export const updatePerson = mutation({
 		role: v.optional(v.union(v.literal('student'), v.literal('rep'))),
 	},
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		const actor = await requireStaff(ctx, args.token);
+		if (!actor.isAdmin) {
+			const memberships = await ctx.db
+				.query('classMembers')
+				.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
+				.take(100);
+			const mine = await lecturerClassIds(ctx, actor.id);
+			const overlap = memberships.some((m: any) => mine.includes(String(m.classId)));
+			if (!overlap) throw new Error('That student is not in a class you teach.');
+			if (args.classIds !== undefined) {
+				const wanted = args.classIds.map(String);
+				if (!wanted.every((c) => mine.includes(c))) {
+					throw new Error('You can only move students within classes you teach.');
+				}
+			}
+		}
 		const person = await ctx.db.get('people', args.personId);
 		if (!person) throw new Error('Person not found.');
 		const patch: Record<string, unknown> = {};
@@ -452,7 +481,17 @@ export const updatePerson = mutation({
 export const setBlocked = mutation({
 	args: { token: v.string(), personId: v.id('people'), blocked: v.boolean() },
 	handler: async (ctx, args) => {
-		await requireStaff(ctx, args.token);
+		const actor = await requireStaff(ctx, args.token);
+		if (!actor.isAdmin) {
+			const memberships = await ctx.db
+				.query('classMembers')
+				.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
+				.take(100);
+			const mine = await lecturerClassIds(ctx, actor.id);
+			if (!memberships.some((m: any) => mine.includes(String(m.classId)))) {
+				throw new Error('That student is not in a class you teach.');
+			}
+		}
 		const person = await ctx.db.get('people', args.personId);
 		if (!person) throw new Error('Person not found.');
 		if (args.blocked) {
@@ -467,11 +506,17 @@ export const setBlocked = mutation({
 	}
 });
 
-/** People list for staff screens, scoped to a class when given. */
+/** People list — lecturers only see students in classes they teach. */
 export const listPeople = query({
 	args: { token: v.string(), classId: v.optional(v.id('classes')), status: v.optional(v.string()) },
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = await lecturerClassIds(ctx, actor.id);
+			if (args.classId && !mine.includes(String(args.classId))) {
+				throw new Error('That class is not assigned to you.');
+			}
+		}
 		let rows: any[];
 		if (args.classId) {
 			const memberships = await ctx.db
@@ -481,6 +526,14 @@ export const listPeople = query({
 			rows = (await Promise.all(memberships.map((m: any) => ctx.db.get('people', m.personId)))).filter(
 				Boolean
 			);
+		} else if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = new Set(await lecturerClassIds(ctx, actor.id));
+			const memberships = await ctx.db.query('classMembers').take(2000);
+			const personIds = new Set(
+				memberships.filter((m: any) => mine.has(String(m.classId))).map((m: any) => String(m.personId))
+			);
+			const all = await ctx.db.query('people').take(1000);
+			rows = all.filter((p: any) => personIds.has(String(p._id)));
 		} else {
 			rows = await ctx.db.query('people').take(1000);
 		}

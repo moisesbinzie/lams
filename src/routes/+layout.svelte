@@ -56,7 +56,18 @@
 	const nav = $derived.by(() => {
 		const how = { href: '/how-it-works', label: 'How it works', icon: Info };
 		if (!me) return [how];
-		if (me.role === 'lecturer') {
+		if (me.kind === 'staff') {
+			const isAdmin = (me as { isAdmin?: boolean }).isAdmin === true || me.role === 'admin';
+			if (isAdmin) {
+				return [
+					{ href: '/admin', label: 'Admin', icon: Settings },
+					{ href: '/manage', label: 'Set up', icon: Settings2 },
+					{ href: '/scan', label: 'Take attendance', icon: ScanLine },
+					{ href: '/records', label: 'Records', icon: BarChart3 },
+					how,
+					{ href: '/settings', label: 'Settings', icon: Settings }
+				];
+			}
 			return [
 				{ href: '/manage', label: 'Set up', icon: Settings2 },
 				{ href: '/scan', label: 'Take attendance', icon: ScanLine },
