@@ -12,31 +12,35 @@ import {
 
 /**
  * Attendance reporting. Records live across a student's whole time at the
- * school, so every view is scoped by one of: a single subject, a semester, or
+ * school, so every view is scoped by one of: a single course, a semester, or
  * an arbitrary date range. That is what lets someone check a semester, a month
  * or a week from the same records.
  */
 
-/** Per-student summary for one subject. Lecturers only see assigned offerings. */
-export const subjectReport = query({
+/** Per-student summary for one course. Lecturers only see assigned offerings. */
+export const courseReport = query({
 	args: { token: v.string(), offeringId: v.id('offerings') },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
-		if (!offering) throw new Error('Subject not found.');
+		if (!offering) throw new Error('Course not found.');
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			await assertCanAccessOffering(ctx, actor, offering);
 		}
 		if (actor.role === 'rep') {
 			const repRows = await ctx.db
-				.query('classReps')
+				.query('programReps')
 				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
 				.take(200);
-			if (!repRows.some((r: any) => r.classId === offering.classId)) {
-				throw new Error('You are only a class rep for your own class.');
+			if (
+				!repRows.some(
+					(r: any) => String(r.programId) === String(offering.programId ?? offering.classId)
+				)
+			) {
+				throw new Error('You are only a program rep for your own program.');
 			}
 		}
-		const subject = await ctx.db.get('subjects', offering.subjectId);
+		const course = offering.courseId ? await ctx.db.get('courses', offering.courseId) : null;
 		const sessions = await ctx.db
 			.query('sessions')
 			.withIndex('by_offering', (q) => q.eq('offeringId', args.offeringId))
@@ -101,8 +105,8 @@ export const subjectReport = query({
 		}
 		rows.sort((a, b) => a.fullName.localeCompare(b.fullName));
 		return {
-			subjectCode: subject?.code ?? '',
-			subjectTitle: subject?.title ?? '',
+			courseCode: course?.code ?? '',
+			courseTitle: course?.title ?? '',
 			totalLectures: closed.length,
 			rows
 		};
@@ -110,7 +114,7 @@ export const subjectReport = query({
 });
 
 /**
- * A person's full record, grouped by subject across the whole programme.
+ * A person's full record, grouped by course across the whole programme.
  * `semesterId` narrows to one semester; omitting it covers their entire time
  * at the school.
  */
@@ -122,7 +126,7 @@ export const personReport = query({
 		if (!person) throw new Error('Person not found.');
 
 		// Lecturers only see records from their own offerings — never another
-		// lecturer's subjects, even for a shared student.
+		// lecturer's courses, even for a shared student.
 		let allowedOfferingIds: Set<string> | null = null;
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			allowedOfferingIds = await lecturerAccessibleOfferingIds(ctx, actor.id);
@@ -157,18 +161,18 @@ export const personReport = query({
 		);
 		const sessionById = new Map(sessions.map((s: any) => [String(s._id), s]));
 
-		const bySubject = new Map<string, any>();
+		const byCourse = new Map<string, any>();
 		for (const r of records) {
 			if (args.semesterId && r.semesterId !== args.semesterId) continue;
 			const session = sessionById.get(String(r.sessionId));
 			if (session && !inScope(session)) continue;
-			const key = String(r.subjectId);
-			if (!bySubject.has(key)) {
-				const subject = await ctx.db.get('subjects', r.subjectId);
-				bySubject.set(key, {
-					subjectId: r.subjectId,
-					subjectCode: subject?.code ?? '',
-					subjectTitle: subject?.title ?? '',
+			const key = String(r.courseId);
+			if (!byCourse.has(key)) {
+				const course = r.courseId ? await ctx.db.get('courses', r.courseId) : null;
+				byCourse.set(key, {
+					courseId: r.courseId,
+					courseCode: course?.code ?? '',
+					courseTitle: course?.title ?? '',
 					present: 0,
 					late: 0,
 					outOfRange: 0,
@@ -177,7 +181,7 @@ export const personReport = query({
 					lectures: 0
 				});
 			}
-			const bucket = bySubject.get(key);
+			const bucket = byCourse.get(key);
 			if (r.status === 'Present') bucket.present += 1;
 			else if (r.status === 'Late') bucket.late += 1;
 			else if (r.status === 'Out_of_Range') bucket.outOfRange += 1;
@@ -192,18 +196,18 @@ export const personReport = query({
 			if (s.status !== 'closed') continue;
 			if (args.semesterId && s.semesterId !== args.semesterId) continue;
 			if (!inScope(s)) continue;
-			const bucket = bySubject.get(String(s.subjectId));
+			const bucket = byCourse.get(String(s.courseId));
 			if (bucket) bucket.lectures += 1;
 		}
 
-		const rows = Array.from(bySubject.values()).map((b) => {
+		const rows = Array.from(byCourse.values()).map((b) => {
 			const counted = b.lectures - b.excused;
 			return {
 				...b,
 				attendPct: counted > 0 ? Math.round(((b.present + b.late) / counted) * 100) : 0
 			};
 		});
-		rows.sort((a, b) => a.subjectCode.localeCompare(b.subjectCode));
+		rows.sort((a, b) => a.courseCode.localeCompare(b.courseCode));
 		return { fullName: person.fullName, regNumber: person.regNumber, rows };
 	}
 });
@@ -296,12 +300,12 @@ export const personRecords = query({
 			.slice(0, args.limit ?? 100);
 		const out: any[] = [];
 		for (const r of recent) {
-			const subject = await ctx.db.get('subjects', r.subjectId);
+			const course = r.courseId ? await ctx.db.get('courses', r.courseId) : null;
 			const session = await ctx.db.get('sessions', r.sessionId);
 			out.push({
 				_id: r._id,
-				subjectCode: subject?.code ?? '',
-				subjectTitle: subject?.title ?? '',
+				courseCode: course?.code ?? '',
+				courseTitle: course?.title ?? '',
 				startedAt: session?.startedAt ?? r.submittedAt,
 				status: r.status,
 				method: r.method,
@@ -320,7 +324,7 @@ export const personRecords = query({
 });
 
 /**
- * Sets a bulk excused window for a subject — the "I was away for two weeks"
+ * Sets a bulk excused window for a course — the "I was away for two weeks"
  * case. Lecturer-only, and every change is written to the record.
  */
 export const excuseRange = mutation({
@@ -361,14 +365,14 @@ export const excuseRange = mutation({
 			}
 		}
 		const excusedOffering = await ctx.db.get('offerings', args.offeringId);
-		const excusedSubject = excusedOffering ? await ctx.db.get('subjects', excusedOffering.subjectId) : null;
+		const excusedCourse = excusedOffering?.courseId ? await ctx.db.get('courses', excusedOffering.courseId) : null;
 		await logAudit(ctx, {
 			actorName: actor.name,
 			actorId: actor.id,
 			action: 'attendance.excuse-range',
 			targetKind: 'offering',
 			targetId: args.offeringId,
-			targetName: excusedSubject?.code ?? '',
+			targetName: excusedCourse?.code ?? '',
 			detail: `${changed} record(s) set to ${args.status}`
 		});
 		return { changed };

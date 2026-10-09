@@ -5,17 +5,17 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import type { Subject } from '$lib/lams/types';
+	import type { Course } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 
-	/** Edit a catalogue subject: title and weekly hours. */
+	/** Edit a catalogue course: title and weekly hours. */
 	let {
-		subject,
+		course,
 		token,
 		open = $bindable(false),
 		onsaved
 	}: {
-		subject: Subject | null;
+		course: Course | null;
 		token: string;
 		open?: boolean;
 		onsaved?: () => void | Promise<void>;
@@ -26,21 +26,21 @@
 	let busy = $state(false);
 
 	$effect(() => {
-		if (open && subject) {
-			title = subject.title;
-			hours = subject.hoursPerWeek ? String(subject.hoursPerWeek) : '';
+		if (open && course) {
+			title = course.title;
+			hours = course.hoursPerWeek ? String(course.hoursPerWeek) : '';
 		}
 	});
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
-		if (!subject) return;
+		if (!course) return;
 		busy = true;
 		try {
 			const client = requireConvexClient();
-			await client.mutation(api.academics.updateSubject, {
+			await client.mutation(api.academics.updateCourse, {
 				token,
-				id: subject._id as never,
+				id: course._id as never,
 				title: title.trim(),
 				hoursPerWeek: Number(hours) || undefined
 			});
@@ -57,7 +57,7 @@
 <Dialog.Root bind:open>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>Edit {subject?.code}</Dialog.Title>
+			<Dialog.Title>Edit {course?.code}</Dialog.Title>
 			<Dialog.Description>
 				The code is fixed once created; everything else can change. Who teaches it is decided
 				where the subject is offered, not here.

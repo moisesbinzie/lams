@@ -45,7 +45,7 @@ export const reportStationPosition = mutation({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('This lecture could not be found.');
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this class.');
 		}
 		if (session.status !== 'open') return { ok: false as const, reason: 'closed' as const };
 
@@ -110,7 +110,7 @@ export const pinStation = mutation({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('This lecture could not be found.');
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this class.');
 		}
 		if (args.latitude < -90 || args.latitude > 90) throw new Error('Invalid latitude.');
 		if (args.longitude < -180 || args.longitude > 180) throw new Error('Invalid longitude.');
@@ -154,7 +154,7 @@ export const stationPlacement = query({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this class.');
 		}
 		return {
 			stationLat: session.stationLat,

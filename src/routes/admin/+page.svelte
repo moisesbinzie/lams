@@ -11,9 +11,9 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
-	import * as Select from '$lib/components/ui/select';
 	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
-	import type { ClassRow, Offering, StaffRow, Subject } from '$lib/lams/types';
+	import OfferingTree from '$lib/components/lams/offering-tree.svelte';
+	import type { ProgramRow, Offering, StaffRow, Course } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	interface LecturerStat {
@@ -34,6 +34,22 @@
 		createdAt: number;
 	}
 
+	interface RenameStatus {
+		classes: number;
+		subjects: number;
+		programs: number;
+		courses: number;
+		offeringsTotal: number;
+		offeringsMigrated: number;
+		offeringsTruncated: boolean;
+		membersOld: number;
+		membersNew: number;
+		membersTruncated: boolean;
+		repsOld: number;
+		repsNew: number;
+		needsMigration: boolean;
+	}
+
 	const AUDIT_LABELS: Record<string, string> = {
 		'staff.create-lecturer': 'Created lecturer',
 		'staff.create-admin': 'Created admin',
@@ -42,9 +58,9 @@
 		'staff.set-active': 'Re-enabled account',
 		'staff.set-inactive': 'Switched off account',
 		'staff.update': 'Updated account',
-		'offering.assign-lecturer': 'Assigned subject',
-		'rep.grant': 'Made class rep',
-		'rep.revoke': 'Removed class rep',
+		'offering.assign-lecturer': 'Assigned course',
+		'rep.grant': 'Made program rep',
+		'rep.revoke': 'Removed program rep',
 		'person.set-blocked': 'Suspended student',
 		'person.set-active': 'Unsuspended student',
 		'person.reset-pin': 'Reset student PIN',
@@ -56,10 +72,13 @@
 	let me = $state<{ username?: string; fullName?: string } | null>(null);
 	let staff = $state<StaffRow[]>([]);
 	let offerings = $state<Offering[]>([]);
-	let subjects = $state<Subject[]>([]);
-	let classes = $state<ClassRow[]>([]);
+	let courses = $state<Course[]>([]);
+	let programs = $state<ProgramRow[]>([]);
 	let lectureStats = $state<LecturerStat[]>([]);
 	let audit = $state<AuditRow[]>([]);
+	let rename = $state<RenameStatus | null>(null);
+	let migrating = $state(false);
+	let migrationStep = $state('');
 	let loading = $state(true);
 	let busy = $state(false);
 
@@ -87,26 +106,27 @@
 	const unassigned = $derived(offerings.filter((o) => !o.lecturerId));
 	const assignedCount = $derived(offerings.length - unassigned.length);
 
-	const NO_LECTURER = 'unassigned';
-
 	const statById = $derived(new Map(lectureStats.map((s) => [String(s._id), s])));
 
 	async function load() {
 		const client = requireConvexClient();
-		const [staffRows, offeringRows, subjectRows, classRows, statRows, auditRows] = (await Promise.all([
-			client.query(api.staff.listStaff, { token }),
-			client.query(api.academics.listOfferings, { token }),
-			client.query(api.academics.listSubjects, { token }),
-			client.query(api.academics.listClasses, { token }),
-			client.query(api.staff.lecturerStats, { token }),
-			client.query(api.staff.listAudit, { token, limit: 50 })
-		])) as [StaffRow[], Offering[], Subject[], ClassRow[], LecturerStat[], AuditRow[]];
+		const [staffRows, offeringRows, courseRows, programRows, statRows, auditRows, renameRows] =
+			(await Promise.all([
+				client.query(api.staff.listStaff, { token }),
+				client.query(api.academics.listOfferings, { token }),
+				client.query(api.academics.listCourses, { token }),
+				client.query(api.academics.listPrograms, { token }),
+				client.query(api.staff.lecturerStats, { token }),
+				client.query(api.staff.listAudit, { token, limit: 50 }),
+				client.query(api.migrations.renameStatus, { token })
+			])) as [StaffRow[], Offering[], Course[], ProgramRow[], LecturerStat[], AuditRow[], RenameStatus];
 		staff = staffRows;
 		offerings = offeringRows;
-		subjects = subjectRows;
-		classes = classRows;
+		courses = courseRows;
+		programs = programRows;
 		lectureStats = statRows;
 		audit = auditRows;
+		rename = renameRows;
 	}
 
 	onMount(async () => {
@@ -186,7 +206,7 @@
 			!confirm(
 				`Switch off ${username}? They will be signed out immediately.` +
 					(assignments > 0
-						? ` Their ${assignments} subject(s) will become unassigned — reassign them below.`
+						? ` Their ${assignments} course(s) will become unassigned — reassign them below.`
 						: '')
 			)
 		)
@@ -201,26 +221,11 @@
 				active
 					? 'Account re-enabled.'
 					: res.released > 0
-						? `Account switched off. ${res.released} subject(s) unassigned below.`
+						? `Account switched off. ${res.released} course(s) unassigned below.`
 						: 'Account switched off.'
 			);
 		} catch (err) {
 			reportError(err, 'Could not change that account.');
-		}
-	}
-
-	async function assignLecturer(offeringId: string, value: string) {
-		try {
-			const client = requireConvexClient();
-			await client.mutation(api.academics.setOfferingLecturer, {
-				token,
-				id: offeringId as never,
-				lecturerId: value === NO_LECTURER ? null : (value as never)
-			});
-			await load();
-			reportSuccess(value === NO_LECTURER ? 'Offering unassigned.' : 'Lecturer assigned.');
-		} catch (err) {
-			reportError(err, 'Could not assign that offering.');
 		}
 	}
 
@@ -279,6 +284,39 @@
 		}
 	}
 
+	async function runMigration() {
+		if (
+			!confirm(
+				'Copy Classes/Subjects into Programs/Courses now? Back up the deployment first (Convex dashboard → Export). Nothing old is deleted.'
+			)
+		)
+			return;
+		migrating = true;
+		try {
+			const client = requireConvexClient();
+			let phase: string | undefined = undefined;
+			let cursor: string | null = null;
+			for (let i = 0; i < 500; i += 1) {
+				const res = (await client.mutation(api.migrations.migrateToProgramsAndCourses, {
+					token,
+					...(phase ? { phase } : {}),
+					...(cursor ? { cursor } : {})
+				})) as { phase: string; next: { phase: string; cursor: string | null } | null };
+				migrationStep = `Migrating ${res.phase}…`;
+				if (!res.next || res.next.phase === 'done') break;
+				phase = res.next.phase;
+				cursor = res.next.cursor;
+			}
+			migrationStep = '';
+			await load();
+			reportSuccess('Rename migration finished. Check the counts: programs/courses should mirror the old data.', 9000);
+		} catch (err) {
+			reportError(err, 'Migration stopped with an error. It is safe to run again — finished phases are skipped.');
+		} finally {
+			migrating = false;
+		}
+	}
+
 	function copyPassword(pw: string) {
 		void navigator.clipboard?.writeText(pw).then(
 			() => reportSuccess('Copied.'),
@@ -296,7 +334,7 @@
 			</h1>
 			<p class="text-xs text-muted-foreground">
 				Signed in as <strong>{me?.username ?? '…'}</strong>. Work through the setup below: create
-				lecturer accounts, offer subjects to classes in Set up, then assign each offering to its
+				lecturer accounts, offer courses to programs in Set up, then assign each offering to its
 				lecturer. Lecturers sign in with their username and the temporary password you give them.
 			</p>
 		</div>
@@ -321,14 +359,14 @@
 			</Card.Root>
 			<Card.Root>
 				<Card.Content class="pt-5 text-center">
-					<p class="text-3xl font-extrabold text-lams-navy">{subjects.length}</p>
-					<p class="text-xs text-muted-foreground">Subject{subjects.length === 1 ? '' : 's'} in catalogue</p>
+					<p class="text-3xl font-extrabold text-lams-navy">{courses.length}</p>
+					<p class="text-xs text-muted-foreground">Course{courses.length === 1 ? '' : 's'} in catalogue</p>
 				</Card.Content>
 			</Card.Root>
 			<Card.Root>
 				<Card.Content class="pt-5 text-center">
-					<p class="text-3xl font-extrabold text-lams-navy">{classes.length}</p>
-					<p class="text-xs text-muted-foreground">Class{classes.length === 1 ? '' : 'es'}</p>
+					<p class="text-3xl font-extrabold text-lams-navy">{programs.length}</p>
+					<p class="text-xs text-muted-foreground">Program{programs.length === 1 ? '' : 's'}</p>
 				</Card.Content>
 			</Card.Root>
 			<Card.Root class={unassigned.length > 0 ? 'border-amber-300' : ''}>
@@ -371,8 +409,8 @@
 					</li>
 					<li class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm">
 						<span>
-							<strong>2. Set up semesters, classes and subjects</strong>
-							<span class="block text-xs text-muted-foreground">Offer catalogue subjects to classes for a semester.</span>
+							<strong>2. Set up semesters, programs and courses</strong>
+							<span class="block text-xs text-muted-foreground">Offer catalogue courses to programs for a semester.</span>
 						</span>
 						<span class="flex items-center gap-2">
 							{#if offerings.length > 0}
@@ -386,7 +424,7 @@
 					<li class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm">
 						<span>
 							<strong>3. Assign every offering a lecturer</strong>
-							<span class="block text-xs text-muted-foreground">A lecturer only sees their own subjects.</span>
+							<span class="block text-xs text-muted-foreground">A lecturer only sees their own courses.</span>
 						</span>
 						<span class="flex items-center gap-2">
 							{#if offerings.length > 0 && unassigned.length === 0}
@@ -394,7 +432,7 @@
 							{:else}
 								<Badge variant="secondary">To do</Badge>
 							{/if}
-							<Button size="sm" variant="outline" href="#assignments">Review below</Button>
+							<Button size="sm" variant="outline" href="#structure">Review below</Button>
 						</span>
 					</li>
 				</ol>
@@ -435,12 +473,37 @@
 			</div>
 		{/if}
 
+		{#if rename?.needsMigration}
+			<Card.Root class="border-amber-300">
+				<Card.Header>
+					<Card.Title>Finish the Program/Course move</Card.Title>
+					<Card.Description>
+						Old data found: {rename.classes} classes and {rename.subjects} subjects, with
+						{rename.programs} programs and {rename.courses} courses so far. Run the migration to
+						copy everything across — old tables stay untouched as a backup.
+					</Card.Description>
+				</Card.Header>
+				<Card.Content class="flex flex-col gap-3">
+					<p class="text-xs text-muted-foreground">
+						Back up first (Convex dashboard → Export). The move runs in small pages and skips
+						anything already copied, so it is safe to re-run. Afterwards the old tables can be
+						dropped in a follow-up schema edit.
+					</p>
+					<div>
+						<Button disabled={migrating} onclick={runMigration}>
+							{migrating ? (migrationStep || 'Migrating…') : 'Run migration'}
+						</Button>
+					</div>
+				</Card.Content>
+			</Card.Root>
+		{/if}
+
 		<Card.Root>
 			<Card.Header>
 				<Card.Title>Lecturers ({lecturers.length})</Card.Title>
 				<Card.Description>
-					Each lecturer gets their own username and temporary password, and only sees the subjects assigned
-					to them. Lectures taken counts their attendance sessions across those subjects.
+					Each lecturer gets their own username and temporary password, and only sees the courses assigned
+					to them. Lectures taken counts their attendance sessions across those courses.
 					Admins ({admins.length}) see everything.
 				</Card.Description>
 			</Card.Header>
@@ -494,7 +557,7 @@
 								<Table.Row>
 									<Table.Head>Username</Table.Head>
 									<Table.Head>Name</Table.Head>
-									<Table.Head>Subjects</Table.Head>
+									<Table.Head>Courses</Table.Head>
 									<Table.Head>Lectures taken</Table.Head>
 									<Table.Head>Status</Table.Head>
 									<Table.Head class="text-right">Actions</Table.Head>
@@ -667,65 +730,21 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root id="assignments" class="scroll-mt-24">
+		<Card.Root id="structure" class="scroll-mt-24">
 			<Card.Header>
-				<Card.Title>Subject assignments ({offerings.length})</Card.Title>
+				<Card.Title>Teaching structure</Card.Title>
 				<Card.Description>
-					A lecturer may teach one or more subjects. Assign each offered subject to its lecturer — a
-					lecturer only sees their own.
+					Semester → class → offered course, with its lecturer. Add programs, offer courses
+					and assign lecturers right here.
 					{#if unassigned.length > 0}
 						<span class="font-semibold text-amber-700">{unassigned.length} unassigned.</span>
-					{:else}
-						Every subject has a lecturer.
+					{:else if offerings.length > 0}
+						Every course has a lecturer.
 					{/if}
 				</Card.Description>
 			</Card.Header>
-			<Card.Content class="flex flex-col gap-3">
-				{#if offerings.length === 0}
-					<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-						No subjects offered yet. Offer subjects to classes in “Set up”, then assign them here.
-					</p>
-				{:else}
-					<ul class="flex flex-col divide-y divide-border">
-						{#each offerings as o (o._id)}
-							<li class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-								<div>
-									<p class="text-sm font-semibold">{o.subjectCode} — {o.subjectTitle}</p>
-									<p class="text-xs text-muted-foreground">
-										{o.className} · {o.semesterName} · {o.studentCount} student(s)
-									</p>
-								</div>
-								<div class="w-full sm:w-56">
-									<Select.Root
-										type="single"
-										value={o.lecturerId ?? NO_LECTURER}
-										onValueChange={(v) => {
-											if (v) void assignLecturer(o._id, v);
-										}}
-									>
-										<Select.Trigger class="w-full">
-											<Select.Value placeholder="Assign a lecturer" />
-										</Select.Trigger>
-										<Select.Content>
-											<Select.Group>
-												<Select.Item value={NO_LECTURER} label="Unassigned">Unassigned</Select.Item>
-												{#each lecturers as l (l._id)}
-													<Select.Item
-														value={l._id}
-														label={`${l.fullName} (${l.username})`}
-														disabled={!l.active}
-													>
-														{l.fullName} ({l.username}){l.active ? '' : ' — switched off'}
-													</Select.Item>
-												{/each}
-											</Select.Group>
-										</Select.Content>
-									</Select.Root>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				{/if}
+			<Card.Content>
+				<OfferingTree {token} mode="admin" />
 			</Card.Content>
 		</Card.Root>
 	{/if}

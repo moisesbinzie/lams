@@ -13,14 +13,14 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
-	import type { ClassRow, Meeting, Offering } from '$lib/lams/types';
+	import type { ProgramRow, Meeting, Offering } from '$lib/lams/types';
 
 	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 	let token = getToken();
-	let classes = $state<ClassRow[]>([]);
+	let programs = $state<ProgramRow[]>([]);
 	let offerings = $state<Offering[]>([]);
-	let classId = $state('');
+	let programId = $state('');
 	let offeringId = $state('');
 	let meetings = $state<Meeting[]>([]);
 	let clashes = $state<string[]>([]);
@@ -54,8 +54,8 @@
 				toast.error('Only lecturers can edit timetables.');
 				return;
 			}
-			classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
-			if (!classId && classes.length > 0) classId = classes[0]._id;
+			programs = (await client.query(api.academics.listPrograms, { token })) as unknown as ProgramRow[];
+			if (!programId && programs.length > 0) programId = programs[0]._id;
 			await loadOfferings();
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
@@ -64,12 +64,12 @@
 	});
 
 	async function loadOfferings() {
-		if (!classId) return;
+		if (!programId) return;
 		try {
 			const client = requireConvexClient();
 			offerings = (await client.query(api.academics.listOfferings, {
 				token,
-				classId: classId as never
+				programId: programId as never
 			})) as unknown as Offering[];
 			if (!offeringId || !offerings.some((o) => o._id === offeringId)) {
 				offeringId = offerings[0]?._id ?? '';
@@ -98,12 +98,12 @@
 
 	async function checkClashes() {
 		clashes = [];
-		if (!classId) return;
+		if (!programId) return;
 		try {
 			const client = requireConvexClient();
 			clashes = (await client.query(api.timetable.findClashes, {
 				token,
-				classId: classId as never,
+				programId: programId as never,
 				dayOfWeek: Number(dayOfWeek),
 				startTime,
 				endTime
@@ -170,7 +170,7 @@
 	}
 
 	$effect(() => {
-		if (classId) void loadOfferings();
+		if (programId) void loadOfferings();
 	});
 	$effect(() => {
 		if (offeringId) void loadMeetings();
@@ -180,12 +180,12 @@
 <div class="flex flex-col gap-4">
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="flex flex-col gap-1.5">
-				<Label for="cls">Class</Label>
+				<Label for="cls">Program</Label>
 				<Select.Root
 					type="single"
-					value={classId}
+					value={programId}
 					onValueChange={(v) => {
-						classId = v ?? '';
+						programId = v ?? '';
 						// Clear the subject immediately: the offerings list reloads
 						// async, and until it does the old subject id matches no
 						// item — the trigger would show the raw id instead.
@@ -194,11 +194,11 @@
 					}}
 				>
 					<Select.Trigger id="cls" class="w-full">
-						<Select.Value placeholder="Choose a class" />
+						<Select.Value placeholder="Choose a program" />
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
-							{#each classes as c (c._id)}
+							{#each programs as c (c._id)}
 								<Select.Item value={c._id} label={c.name}>{c.name}</Select.Item>
 							{/each}
 						</Select.Group>
@@ -206,16 +206,16 @@
 				</Select.Root>
 			</div>
 			<div class="flex flex-col gap-1.5">
-				<Label for="off">Subject</Label>
+				<Label for="off">Course</Label>
 				<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
 					<Select.Trigger id="off" class="w-full">
-						<Select.Value placeholder="Choose a subject" />
+						<Select.Value placeholder="Choose a course" />
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
 							{#each offerings as o (o._id)}
-								<Select.Item value={o._id} label={`${o.subjectCode} — ${o.subjectTitle}`}>
-									{o.subjectCode} — {o.subjectTitle}
+								<Select.Item value={o._id} label={`${o.courseCode} — ${o.courseTitle}`}>
+									{o.courseCode} — {o.courseTitle}
 								</Select.Item>
 							{/each}
 						</Select.Group>
@@ -226,14 +226,14 @@
 
 	{#if !offerings.length}
 		<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-			Offer this class a subject first, then set when it meets.
+			Offer this program a course first, then set when it meets.
 		</p>
 	{:else if selected}
 		<Card.Root>
 			<Card.Header>
-				<Card.Title>{selected.subjectCode} — {selected.subjectTitle}</Card.Title>
+				<Card.Title>{selected.courseCode} — {selected.courseTitle}</Card.Title>
 				<Card.Description>
-					When this subject meets each week. Students see these times on their own timetable.
+					When this course meets each week. Students see these times on their own timetable.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">

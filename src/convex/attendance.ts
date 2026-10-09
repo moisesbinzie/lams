@@ -5,7 +5,7 @@ import {
 	canAccessOffering,
 	canRecordFor,
 	canRecordSession,
-	lecturerClassIds,
+	lecturerProgramIds,
 	recorderFields,
 	requireActor,
 	requirePerson,
@@ -59,7 +59,7 @@ async function closeWithAbsents(ctx: any, session: any, now = Date.now()): Promi
 			sessionId: session._id,
 			personId: person._id,
 			offeringId: session.offeringId,
-			subjectId: session.subjectId,
+			courseId: session.courseId,
 			semesterId: session.semesterId,
 			fullName: person.fullName,
 			regNumber: person.regNumber,
@@ -102,11 +102,11 @@ export const startSession = mutation({
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
-		if (!offering) throw new Error('Subject not found.');
+		if (!offering) throw new Error('Course not found.');
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			await assertCanAccessOffering(ctx, actor, offering);
-		} else if (!(await canRecordFor(ctx, actor, offering.classId))) {
-			throw new Error('You are not a class rep for this class.');
+		} else if (!(await canRecordFor(ctx, actor, offering.programId))) {
+			throw new Error('You are not a program rep for this program.');
 		}
 		if (args.lectureLat < -90 || args.lectureLat > 90) throw new Error('Invalid latitude.');
 		if (args.lectureLng < -180 || args.lectureLng > 180) throw new Error('Invalid longitude.');
@@ -140,7 +140,7 @@ export const startSession = mutation({
 		if (lateUntilSec < 60 || lateUntilSec > 7200) throw new Error('The late window must be between 1 and 120 minutes.');
 		if (onTimeSec >= lateUntilSec) throw new Error('The late window must be longer than the on-time window.');
 
-		// One open session per offering, so two classes of the same subject can
+		// One open session per offering, so two programs of the same course can
 		// run side by side without one closing the other.
 		const open = await ctx.db
 			.query('sessions')
@@ -156,9 +156,9 @@ export const startSession = mutation({
 		const now = Date.now();
 		const id = await ctx.db.insert('sessions', {
 			offeringId: offering._id,
-			subjectId: offering.subjectId,
+			courseId: offering.courseId,
 			semesterId: offering.semesterId,
-			classId: offering.classId,
+			programId: offering.programId,
 			...(actor.kind === 'staff'
 				? { startedByStaffId: actor.id, startedByName: actor.name }
 				: {}),
@@ -242,18 +242,18 @@ export const getSession = query({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this program.');
 		}
-		const subject = await ctx.db.get('subjects', session.subjectId);
-		const classDoc = await ctx.db.get('classes', session.classId);
+		const course = session.courseId ? await ctx.db.get('courses', session.courseId) : null;
+		const programDoc = session.programId ? await ctx.db.get('programs', session.programId) : null;
 		const now = Date.now();
 		return {
 			_id: session._id,
 			offeringId: session.offeringId,
-			subjectId: session.subjectId,
-			subjectCode: subject?.code ?? '',
-			subjectTitle: subject?.title ?? '',
-			className: classDoc?.name ?? '',
+			courseId: session.courseId,
+			courseCode: course?.code ?? '',
+			courseTitle: course?.title ?? '',
+			programName: programDoc?.name ?? '',
 			status: session.status === 'open' && now < session.closesAt ? 'open' : 'closed',
 			startedAt: session.startedAt,
 			closesAt: session.closesAt,
@@ -266,12 +266,12 @@ export const getSession = query({
  * What the station screen needs to render itself: the rotating code's secret
  * plus the countdown and title around it.
  *
- * Only a recorder who may take this class's attendance can call it. The secret
+ * Only a recorder who may take this program's attendance can call it. The secret
  * is deliberately returned rather than the code itself — the display derives
  * each code locally so the screen keeps refreshing on a timer with no network
  * round trip, and in a hall with poor signal that is the difference between a
  * working station and a frozen one. A rep is already fully trusted over their
- * own class's attendance, so the secret adds no exposure they did not have.
+ * own program's attendance, so the secret adds no exposure they did not have.
  */
 export const stationFeed = query({
 	args: { token: v.string(), sessionId: v.id('sessions') },
@@ -280,16 +280,16 @@ export const stationFeed = query({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this program.');
 		}
-		const subject = await ctx.db.get('subjects', session.subjectId);
-		const classDoc = await ctx.db.get('classes', session.classId);
+		const course = session.courseId ? await ctx.db.get('courses', session.courseId) : null;
+		const programDoc = session.programId ? await ctx.db.get('programs', session.programId) : null;
 		return {
 			_id: session._id,
 			secret: session.stationSecret ?? null,
-			subjectCode: subject?.code ?? '',
-			subjectTitle: subject?.title ?? '',
-			className: classDoc?.name ?? '',
+			courseCode: course?.code ?? '',
+			courseTitle: course?.title ?? '',
+			programName: programDoc?.name ?? '',
 			status: session.status,
 			startedAt: session.startedAt,
 			closesAt: session.closesAt,
@@ -315,9 +315,9 @@ export const stationFeed = query({
  * it has to render before the scan is submitted.
  *
  * It also answers one question about the caller: are they enrolled in this
- * subject? The scan is refused either way — `submitStationScan` re-checks and
+ * course? The scan is refused either way — `submitStationScan` re-checks and
  * is the authority — but knowing early is what lets the page say "add this
- * subject first" instead of asking for a location fix and *then* refusing.
+ * course first" instead of asking for a location fix and *then* refusing.
  * Only the caller's own enrolment is reported, so no information about anyone
  * else is exposed.
  */
@@ -327,8 +327,8 @@ export const stationPreview = query({
 		const actor = await requireActor(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
-		const subject = await ctx.db.get('subjects', session.subjectId);
-		const classDoc = await ctx.db.get('classes', session.classId);
+		const course = session.courseId ? await ctx.db.get('courses', session.courseId) : null;
+		const programDoc = session.programId ? await ctx.db.get('programs', session.programId) : null;
 
 		// A lecturer is not enrolled in anything and cannot scan as a student, so
 		// the flag is only meaningful for a person.
@@ -344,9 +344,9 @@ export const stationPreview = query({
 		}
 
 		return {
-			subjectCode: subject?.code ?? '',
-			subjectTitle: subject?.title ?? '',
-			className: classDoc?.name ?? '',
+			courseCode: course?.code ?? '',
+			courseTitle: course?.title ?? '',
+			programName: programDoc?.name ?? '',
 			status: session.status,
 			startedAt: session.startedAt,
 			closesAt: session.closesAt,
@@ -363,7 +363,7 @@ export const stationPreview = query({
  * A student scans the station with their own phone.
  *
  * This is the new front door for attendance and it inverts the old flow: the
- * device that proves presence is the student's, not the class rep's, so the
+ * device that proves presence is the student's, not the program rep's, so the
  * record carries a first-party position fix instead of a proxy. That is what
  * makes "in range" mean something — it is the student's own phone reporting,
  * at the moment of scanning, how far it is from the code it just read.
@@ -386,7 +386,7 @@ export const submitStationScan = mutation({
 	handler: async (ctx, args) => {
 		const person = await requirePersonOnDevice(ctx, args.token, args.deviceId);
 		if (person.status === 'blocked') {
-			throw new Error('Your account is suspended. Speak to your class rep.');
+			throw new Error('Your account is suspended. Speak to your program rep.');
 		}
 
 		// The code is six digits, so cap how fast one account can guess at it. A
@@ -419,7 +419,7 @@ export const submitStationScan = mutation({
 		// not made to guess from a generic "expired code".
 		if (session.stationMoved) {
 			throw new Error(
-				'The station has been moved out of its room, so it is not accepting attendance right now. Tell your class rep, then scan again.'
+				'The station has been moved out of its room, so it is not accepting attendance right now. Tell your program rep, then scan again.'
 			);
 		}
 
@@ -439,7 +439,7 @@ export const submitStationScan = mutation({
 			(e: any) => e.offeringId === session.offeringId && e.status === 'active'
 		);
 		if (!enrolled) {
-			throw new Error('You are not enrolled in this subject.');
+			throw new Error('You are not enrolled in this course.');
 		}
 
 		const dup = await ctx.db
@@ -497,7 +497,7 @@ export const submitStationScan = mutation({
 			sessionId: session._id,
 			personId: person._id,
 			offeringId: session.offeringId,
-			subjectId: session.subjectId,
+			courseId: session.courseId,
 			semesterId: session.semesterId,
 			fullName: person.fullName,
 			regNumber: person.regNumber,
@@ -522,12 +522,12 @@ export const submitStationScan = mutation({
 			submittedAt: Date.now()
 		});
 
-		const subject = await ctx.db.get('subjects', session.subjectId);
+		const course = session.courseId ? await ctx.db.get('courses', session.courseId) : null;
 		return {
 			ok: true as const,
 			fullName: person.fullName,
-			subjectCode: subject?.code ?? '',
-			subjectTitle: subject?.title ?? '',
+			courseCode: course?.code ?? '',
+			courseTitle: course?.title ?? '',
 			status,
 			distanceM: distanceM ?? null,
 			positionUsable,
@@ -564,7 +564,7 @@ export const addManually = mutation({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('This lecture could not be found.');
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this program.');
 		}
 		if (session.status !== 'open') throw new Error('This lecture is closed.');
 		const regNorm = normalizeReg(args.regNumber);
@@ -582,7 +582,7 @@ export const addManually = mutation({
 			.withIndex('by_person', (q) => q.eq('personId', person._id))
 			.take(300);
 		if (!enrolments.some((e: any) => e.offeringId === session.offeringId && e.status === 'active')) {
-			throw new Error(`${person.fullName} is not enrolled in this subject.`);
+			throw new Error(`${person.fullName} is not enrolled in this course.`);
 		}
 		const dup = await ctx.db
 			.query('attendance')
@@ -602,7 +602,7 @@ export const addManually = mutation({
 			sessionId: session._id,
 			personId: person._id,
 			offeringId: session.offeringId,
-			subjectId: session.subjectId,
+			courseId: session.courseId,
 			semesterId: session.semesterId,
 			fullName: person.fullName,
 			regNumber: person.regNumber,
@@ -673,7 +673,7 @@ export const override = mutation({
 		if (!actor.isAdmin) {
 			const offering = await ctx.db.get('offerings', record.offeringId);
 			if (!(await canAccessOffering(ctx, actor, offering))) {
-				throw new Error('This record is not in a subject assigned to you.');
+				throw new Error('This record is not in a course assigned to you.');
 			}
 		}
 		await ctx.db.patch(args.attendanceId, {
@@ -690,7 +690,7 @@ export const override = mutation({
  * Override a record while the lecture is still open.
  *
  * `override` above is lecturer-only because it settles a finished lecture. This
- * is the one a class rep can reach, and it exists for the cases the new station
+ * is the one a program rep can reach, and it exists for the cases the new station
  * flow creates rather than replaces:
  *
  *   - a phone-less student, added by hand, who needs a status changed;
@@ -698,7 +698,7 @@ export const override = mutation({
  *   - a student whose phone refused to give a location, so their record came
  *     through unconfirmed and the rep knows they were sitting right there.
  *
- * A rep may only touch records for a class they represent, and only while the
+ * A rep may only touch records for a program they represent, and only while the
  * lecture is open. Everything it does is written to the audit trail, so a
  * lecturer reviewing the session afterwards can see whose word it was.
  */
@@ -726,7 +726,7 @@ export const overrideDuringSession = mutation({
 		const session = await ctx.db.get('sessions', record.sessionId);
 		if (!session) throw new Error('That lecture could not be found.');
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are only a class representative for your own class.');
+			throw new Error('You are only a program representative for your own program.');
 		}
 		if (session.status !== 'open') {
 			throw new Error('This lecture is closed. Ask your lecturer to change the record.');
@@ -755,7 +755,7 @@ export const removeRecord = mutation({
 		if (!actor.isAdmin) {
 			const offering = await ctx.db.get('offerings', record.offeringId);
 			if (!(await canAccessOffering(ctx, actor, offering))) {
-				throw new Error('This record is not in a subject assigned to you.');
+				throw new Error('This record is not in a course assigned to you.');
 			}
 		}
 		await ctx.db.delete('attendance', args.attendanceId);
@@ -770,7 +770,7 @@ export const closeSession = mutation({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('Lecture not found.');
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this program.');
 		}
 		if (session.status === 'closed') return { ok: true, absentAdded: 0 };
 		const absentAdded = await closeWithAbsents(ctx, session);
@@ -785,7 +785,7 @@ export const extendSession = mutation({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('Lecture not found.');
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this program.');
 		}
 		if (session.status !== 'open') throw new Error('This lecture is already closed.');
 		if (args.extraSec < 60 || args.extraSec > 3600) throw new Error('You can add between 1 and 60 minutes.');
@@ -802,7 +802,7 @@ export const listBySession = query({
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return [];
 		if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are not a class rep for this class.');
+			throw new Error('You are not a program rep for this program.');
 		}
 		const rows = await ctx.db
 			.query('attendance')
@@ -840,34 +840,34 @@ export const listForRecordKeeper = query({
 	args: { token: v.string(), offeringId: v.optional(v.id('offerings')) },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
-		let classIds: string[];
+		let programIds: string[];
 		let ownOfferingIds: Set<string> | null = null;
 		if (actor.kind === 'staff' && actor.isAdmin) {
-			const classes = await ctx.db.query('classes').take(200);
-			classIds = classes.map((c: any) => String(c._id));
+			const programs = await ctx.db.query('programs').take(200);
+			programIds = programs.map((c: any) => String(c._id));
 		} else if (actor.kind === 'staff') {
-			// Own offerings plus unassigned ones in classes already taught
+			// Own offerings plus unassigned ones in programs already taught
 			// (substitute cover) — mirroring `canAccessOffering`.
-			const mine = new Set(await lecturerClassIds(ctx, actor.id));
+			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
 			const all = await ctx.db.query('offerings').take(500);
 			const offerings = all.filter(
 				(o: any) =>
 					String(o.lecturerId ?? '') === String(actor.id) ||
-					(!o.lecturerId && mine.has(String(o.classId)))
+					(!o.lecturerId && mine.has(String(o.programId)))
 			);
-			classIds = [...new Set(offerings.map((o: any) => String(o.classId)))];
+			programIds = [...new Set(offerings.map((o: any) => String(o.programId)))];
 			ownOfferingIds = new Set(offerings.map((o: any) => String(o._id)));
 			if (args.offeringId && !ownOfferingIds.has(String(args.offeringId))) {
-				throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
+				throw new Error('This course is not assigned to you. Ask the admin to assign it.');
 			}
 		} else {
 			const rows = await ctx.db
-				.query('classReps')
+				.query('programReps')
 				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
 				.take(200);
-			classIds = rows.map((r: any) => String(r.classId));
+			programIds = rows.map((r: any) => String(r.programId));
 		}
-		if (classIds.length === 0) return [];
+		if (programIds.length === 0) return [];
 
 		const sessions = args.offeringId
 			? await ctx.db
@@ -880,7 +880,7 @@ export const listForRecordKeeper = query({
 		const now = Date.now();
 		const out: any[] = [];
 		for (const s of sessions) {
-			if (!classIds.includes(String(s.classId))) continue;
+			if (!programIds.includes(String(s.programId))) continue;
 			if (ownOfferingIds && !ownOfferingIds.has(String(s.offeringId))) continue;
 			const isOpen = s.status === 'open' && now < s.closesAt;
 			// Review counts only for live lectures — those are the ones
@@ -897,16 +897,16 @@ export const listForRecordKeeper = query({
 					if (r.disputed) disputedCount += 1;
 				}
 			}
-			const subject = await ctx.db.get('subjects', s.subjectId);
-			const classDoc = await ctx.db.get('classes', s.classId);
+			const course = s.courseId ? await ctx.db.get('courses', s.courseId) : null;
+			const programDoc = s.programId ? await ctx.db.get('programs', s.programId) : null;
 			const offering = await ctx.db.get('offerings', s.offeringId);
 			out.push({
 				_id: s._id,
 				offeringId: s.offeringId,
-				subjectId: s.subjectId,
-				subjectCode: subject?.code ?? '',
-				subjectTitle: subject?.title ?? '',
-				className: classDoc?.name ?? '',
+				courseId: s.courseId,
+				courseCode: course?.code ?? '',
+				courseTitle: course?.title ?? '',
+				programName: programDoc?.name ?? '',
 				openForEnrolment: offering?.openForEnrolment ?? false,
 				status: isOpen ? 'open' : 'closed',
 				flaggedCount,
@@ -945,13 +945,13 @@ export const myAttendance = query({
 			const iso = date.toISOString().slice(0, 10);
 			if (args.from && iso < args.from) continue;
 			if (args.to && iso > args.to) continue;
-			const subject = await ctx.db.get('subjects', r.subjectId);
+			const course = r.courseId ? await ctx.db.get('courses', r.courseId) : null;
 			out.push({
 				_id: r._id,
 				date: session.startedAt,
 				isoDate: iso,
-				subjectCode: subject?.code ?? '',
-				subjectTitle: subject?.title ?? '',
+				courseCode: course?.code ?? '',
+				courseTitle: course?.title ?? '',
 				status: r.status,
 				method: r.method,
 				recordedBy: r.recordedBy ?? null,
@@ -1005,7 +1005,7 @@ export const resolveDispute = mutation({
 				await assertCanAccessOffering(ctx, staff, offering);
 			}
 		} else if (!(await canRecordSession(ctx, actor, session))) {
-			throw new Error('You are only a class representative for your own class.');
+			throw new Error('You are only a program representative for your own program.');
 		}
 		await ctx.db.patch(args.attendanceId, {
 			disputed: false,
@@ -1034,7 +1034,7 @@ export const resolveDispute = mutation({
 
 /**
  * Offerings the signed-in rep or lecturer may start a lecture for: everything
- * for staff, only their classes' offerings for a rep. Powers the "start a
+ * for staff, only their programs' offerings for a rep. Powers the "start a
  * lecture" form on the scanning screen.
  *
  * A token that is no longer accepted answers `null` instead of throwing. The
@@ -1053,45 +1053,45 @@ export const listRecordableOfferings = query({
 		const actor = await resolveActor(ctx, args.token);
 		if (!actor) return null;
 		if (actor.kind !== 'staff' && actor.role !== 'rep') {
-			throw new Error('Only class representatives and lecturers can do this.');
+			throw new Error('Only program representatives and lecturers can do this.');
 		}
 		let offerings: any[];
 		if (actor.kind === 'staff' && actor.isAdmin) {
 			offerings = await ctx.db.query('offerings').take(500);
 		} else if (actor.kind === 'staff') {
-			// Own offerings plus unassigned ones in classes already taught
+			// Own offerings plus unassigned ones in programs already taught
 			// (substitute cover) — mirroring `canAccessOffering`.
 			const all = await ctx.db.query('offerings').take(500);
-			const mine = new Set(await lecturerClassIds(ctx, actor.id));
+			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
 			offerings = all.filter(
 				(o: any) =>
 					String(o.lecturerId ?? '') === String(actor.id) ||
-					(!o.lecturerId && mine.has(String(o.classId)))
+					(!o.lecturerId && mine.has(String(o.programId)))
 			);
 		} else {
 			const repClasses = await ctx.db
-				.query('classReps')
+				.query('programReps')
 				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
 				.take(200);
-			const classIdSet = new Set(repClasses.map((r: any) => String(r.classId)));
+			const programIdSet = new Set(repClasses.map((r: any) => String(r.programId)));
 			const all = await ctx.db.query('offerings').take(500);
-			offerings = all.filter((o: any) => classIdSet.has(String(o.classId)));
+			offerings = all.filter((o: any) => programIdSet.has(String(o.programId)));
 		}
 		const out: any[] = [];
 		for (const o of offerings) {
-			const subject = await ctx.db.get('subjects', o.subjectId);
-			const classDoc = await ctx.db.get('classes', o.classId);
-			if (!subject || !classDoc) continue;
+			const course = await ctx.db.get('courses', o.courseId);
+			const programDoc = await ctx.db.get('programs', o.programId);
+			if (!course || !programDoc) continue;
 			out.push({
 				_id: o._id,
-				subjectCode: subject.code,
-				subjectTitle: subject.title,
-				className: classDoc.name
+				courseCode: course.code,
+				courseTitle: course.title,
+				programName: programDoc.name
 			});
 		}
 		out.sort(
 			(a: any, b: any) =>
-				a.className.localeCompare(b.className) || a.subjectCode.localeCompare(b.subjectCode)
+				a.programName.localeCompare(b.programName) || a.courseCode.localeCompare(b.courseCode)
 		);
 		return out;
 	}

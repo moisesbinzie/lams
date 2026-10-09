@@ -24,8 +24,8 @@ export type Me =
 			studentId: string;
 			email: string;
 			phone: string;
-			/** Every class the person belongs to — a repeating student sits in several. */
-			classNames: string[];
+	/** Every program the person belongs to — a repeating student sits in several. */
+		programNames: string[];
 	  };
 
 export interface StaffRow {
@@ -47,8 +47,8 @@ export interface PersonRow {
 	regNumber: string;
 	studentId: string;
 	status: PersonStatus;
-	/** Every class the person belongs to (ids into `classes`). */
-	classIds: string[];
+	/** Every program the person belongs to (ids into `programs`). */
+	programIds: string[];
 	email: string;
 	phone: string;
 	hasDevice: boolean;
@@ -64,23 +64,21 @@ export interface Semester {
 	endDate: string;
 }
 
-export interface ClassRow {
+export interface ProgramRow {
 	_id: string;
 	name: string;
-	yearOfStudy: number;
-	semesterId?: string;
-	/** Joined by listClasses. */
+	durationYears: number;
+	/** Joined by listPrograms. */
 	studentCount?: number;
-	semesterName?: string;
 }
 
-/** What reps.listForPerson returns — the classes a person represents. */
-export interface RepClass {
-	classId: string;
-	className: string;
+/** What reps.listForPerson returns — the programs a person represents. */
+export interface ProgramRep {
+	programId: string;
+	programName: string;
 }
 
-export interface Subject {
+export interface Course {
 	_id: string;
 	code: string;
 	title: string;
@@ -90,12 +88,13 @@ export interface Subject {
 
 export interface Offering {
 	_id: string;
-	subjectId: string;
-	subjectCode: string;
-	subjectTitle: string;
+	courseId: string | null;
+	courseCode: string;
+	courseTitle: string;
 	hoursPerWeek: number | null;
-	classId: string;
-	className: string;
+	programId: string | null;
+	programName: string;
+	yearOfStudy: number | null;
 	semesterId: string;
 	semesterName: string;
 	openForEnrolment: boolean;
@@ -120,8 +119,8 @@ export interface Meeting {
 export interface TimetableEntry {
 	meetingId: string;
 	offeringId: string;
-	subjectCode: string;
-	subjectTitle: string;
+	courseCode: string;
+	courseTitle: string;
 	room: string;
 	startTime: string;
 	endTime: string;
@@ -141,9 +140,9 @@ export interface TimetableMakeup extends TimetableEntry {
 export interface StationFeed {
 	_id: string;
 	secret: string | null;
-	subjectCode: string;
-	subjectTitle: string;
-	className: string;
+	courseCode: string;
+	courseTitle: string;
+	programName: string;
 	status: 'open' | 'closed';
 	startedAt: number;
 	closesAt: number;
@@ -166,16 +165,16 @@ export interface StationFeed {
 
 /** What a student sees on the page the QR opened, before and after scanning. */
 export interface StationPreview {
-	subjectCode: string;
-	subjectTitle: string;
-	className: string;
+	courseCode: string;
+	courseTitle: string;
+	programName: string;
 	status: 'open' | 'closed';
 	startedAt: number;
 	closesAt: number;
 	/** The screen is out of its room, so scanning is being refused. */
 	stationMoved: boolean;
 	/**
-	 * Whether the person asking holds an active enrolment in this subject. The
+	 * Whether the person asking holds an active enrolment in this course. The
 	 * scan is refused regardless; this only lets the page say so before asking
 	 * for a location fix.
 	 */
@@ -185,8 +184,8 @@ export interface StationPreview {
 export interface StationScanResult {
 	ok: true;
 	fullName: string;
-	subjectCode: string;
-	subjectTitle: string;
+	courseCode: string;
+	courseTitle: string;
 	status: AttendanceStatus;
 	distanceM: number | null;
 	/** False when the fix was missing or too coarse to judge. */
@@ -195,14 +194,26 @@ export interface StationScanResult {
 	lateByMinutes: number | null;
 }
 
+/** A course offering open to a student, from `enrolments.listOpenForStudent`. */
+export interface OpenCourse {
+	_id: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
+	hoursPerWeek: number | null;
+	semesterName: string;
+	programName: string;
+	alreadyEnrolled: boolean;
+}
+
 export interface MyEnrolment {
 	_id: string;
 	offeringId: string;
-	subjectId: string;
-	subjectCode: string;
-	subjectTitle: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
 	semesterName: string;
-	className: string;
+	programName: string;
 	addedBy: 'self' | 'rep' | 'lecturer';
 	meetings: {
 		_id: string;
@@ -255,10 +266,10 @@ export interface AttendanceRecord {
 export interface LectureSession {
 	_id: string;
 	offeringId: string;
-	subjectId: string;
-	subjectCode: string;
-	subjectTitle: string;
-	className: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
+	programName: string;
 	openForEnrolment: boolean;
 	status: 'open' | 'closed';
 	flaggedCount?: number;
@@ -270,10 +281,10 @@ export interface LectureSession {
 export interface ScanSession {
 	_id: string;
 	offeringId: string;
-	subjectId: string;
-	subjectCode: string;
-	subjectTitle: string;
-	className: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
+	programName: string;
 	status: 'open' | 'closed';
 	startedAt: number;
 	closesAt: number;
@@ -284,8 +295,8 @@ export interface MyAttendanceRow {
 	_id: string;
 	date: number;
 	isoDate: string;
-	subjectCode: string;
-	subjectTitle: string;
+	courseCode: string;
+	courseTitle: string;
 	status: AttendanceStatus;
 		method: AttendanceMethod;
 		recordedBy: string | null;
@@ -293,10 +304,10 @@ export interface MyAttendanceRow {
 		disputeNote: string | null;
 	}
 
-export interface SubjectSummary {
-	subjectId: string;
-	subjectCode: string;
-	subjectTitle: string;
+export interface CourseSummary {
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
 }
 
 export interface ReportRow {

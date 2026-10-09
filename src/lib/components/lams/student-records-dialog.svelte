@@ -12,10 +12,10 @@
 	import type { AttendanceStatus } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 
-	interface SubjectBucket {
-		subjectId: string;
-		subjectCode: string;
-		subjectTitle: string;
+	interface CourseBucket {
+		courseId: string;
+		courseCode: string;
+		courseTitle: string;
 		lectures: number;
 		present: number;
 		late: number;
@@ -27,8 +27,8 @@
 
 	interface RecordRow {
 		_id: string;
-		subjectCode: string;
-		subjectTitle: string;
+		courseCode: string;
+		courseTitle: string;
 		startedAt: number;
 		status: AttendanceStatus;
 		method: string;
@@ -52,7 +52,7 @@
 	const NO_STATUS = 'no-status';
 
 	/**
-	 * The lecturer's view of one student: totals per subject, then their
+	 * The lecturer's view of one student: totals per course, then their
 	 * individual records with override and remove. Only the lecturer can change
 	 * settled records — every change is stamped on the record.
 	 */
@@ -70,7 +70,7 @@
 		onchanged?: () => void | Promise<void>;
 	} = $props();
 
-	let buckets = $state<SubjectBucket[]>([]);
+	let buckets = $state<CourseBucket[]>([]);
 	let records = $state<RecordRow[]>([]);
 	let loading = $state(false);
 	let busyId = $state('');
@@ -88,7 +88,7 @@
 			const [report, recs] = (await Promise.all([
 				client.query(api.reports.personReport, { token, personId: personId as never }),
 				client.query(api.reports.personRecords, { token, personId: personId as never })
-			])) as [{ rows: SubjectBucket[] }, RecordRow[]];
+			])) as [{ rows: CourseBucket[] }, RecordRow[]];
 			buckets = report.rows;
 			records = recs;
 			draft = {};
@@ -132,7 +132,7 @@
 	}
 
 	async function removeRecord(r: RecordRow) {
-		if (!confirm(`Delete the ${r.subjectCode} record for ${fullName}? This cannot be undone.`)) return;
+		if (!confirm(`Delete the ${r.courseCode} record for ${fullName}? This cannot be undone.`)) return;
 		busyId = r._id;
 		try {
 			const client = requireConvexClient();
@@ -152,7 +152,7 @@
 		<Dialog.Header>
 			<Dialog.Title>{fullName}</Dialog.Title>
 			<Dialog.Description>
-				Totals across every subject, then each individual record. Override only what you have checked.
+				Totals across every course, then each individual record. Override only what you have checked.
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -163,7 +163,7 @@
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
-							<Table.Head>Subject</Table.Head>
+							<Table.Head>Course</Table.Head>
 							<Table.Head>Lectures</Table.Head>
 							<Table.Head>Present</Table.Head>
 							<Table.Head>Late</Table.Head>
@@ -172,9 +172,9 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each buckets as b (b.subjectId)}
+						{#each buckets as b (b.courseId)}
 							<Table.Row>
-								<Table.Cell class="font-medium">{b.subjectCode}</Table.Cell>
+								<Table.Cell class="font-medium">{b.courseCode}</Table.Cell>
 								<Table.Cell>{b.lectures}</Table.Cell>
 								<Table.Cell>{b.present}</Table.Cell>
 								<Table.Cell>{b.late}</Table.Cell>
@@ -201,7 +201,7 @@
 						<li class="flex flex-col gap-2 p-3 text-sm">
 							<div class="flex flex-wrap items-center justify-between gap-2">
 								<span>
-									<strong>{r.subjectCode}</strong>
+									<strong>{r.courseCode}</strong>
 									<span class="text-xs text-muted-foreground">
 										· {formatDateTime(r.startedAt)}
 										{#if r.recordedBy}· via {r.recordedBy}{/if}
@@ -249,7 +249,7 @@
 								>
 									<Select.Trigger
 										size="sm"
-										aria-label={`Change record for ${r.subjectCode}`}
+										aria-label={`Change record for ${r.courseCode}`}
 									>
 										<Select.Value placeholder="Change status…" />
 									</Select.Trigger>

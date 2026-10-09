@@ -17,17 +17,17 @@
 	import { printElement } from '$lib/lams/print';
 	import StudentRecordsDialog from '$lib/components/lams/student-records-dialog.svelte';
 	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
-	import type { ClassRow, Offering, ReportRow, Semester } from '$lib/lams/types';
+	import type { ProgramRow, Offering, ReportRow, Semester } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
 
 	let token = getToken();
-	let classes = $state<ClassRow[]>([]);
+	let programs = $state<ProgramRow[]>([]);
 	let semesters = $state<Semester[]>([]);
 	let offerings = $state<Offering[]>([]);
 	let rows = $state<ReportRow[]>([]);
 	let totalLectures = $state(0);
-	let classId = $state('');
+	let programId = $state('');
 	let semesterId = $state('');
 	let offeringId = $state('');
 	let search = $state('');
@@ -79,11 +79,11 @@
 				return;
 			}
 			role = me.role;
-			[classes, semesters] = await Promise.all([
-				client.query(api.academics.listClasses, { token }) as Promise<ClassRow[]>,
+			[programs, semesters] = await Promise.all([
+				client.query(api.academics.listPrograms, { token }) as Promise<ProgramRow[]>,
 				client.query(api.academics.listSemesters, { token }) as Promise<Semester[]>
 			]);
-			if (!classId && classes.length > 0) classId = classes[0]._id;
+			if (!programId && programs.length > 0) programId = programs[0]._id;
 			await loadOfferings();
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip.
@@ -94,19 +94,19 @@
 	});
 
 	async function loadOfferings() {
-		if (!classId) return;
+		if (!programId) return;
 		try {
 			const client = requireConvexClient();
 			offerings = (await client.query(api.academics.listOfferings, {
 				token,
-				classId: classId as never
+				programId: programId as never
 			})) as unknown as Offering[];
 			if (!offeringId || !offerings.some((o) => o._id === offeringId)) {
 				offeringId = offerings[0]?._id ?? '';
 			}
 			await loadReport();
 		} catch (err) {
-			reportError(err, 'Could not load subjects.');
+			reportError(err, 'Could not load courses.');
 		}
 	}
 
@@ -117,7 +117,7 @@
 		}
 		try {
 			const client = requireConvexClient();
-			const res = (await client.query(api.reports.subjectReport, {
+			const res = (await client.query(api.reports.courseReport, {
 				token,
 				offeringId: offeringId as never
 			})) as { totalLectures: number; rows: ReportRow[] };
@@ -130,7 +130,7 @@
 
 	async function excuse(status: 'Excused' | 'Present' | 'Absent') {
 		if (!offeringId) return;
-		if (!confirm(`Mark everyone below 75% as ${status} for every past lecture in this subject?`)) return;
+		if (!confirm(`Mark everyone below 75% as ${status} for every past lecture in this course?`)) return;
 		try {
 			const client = requireConvexClient();
 			const targets = rows.filter((r) => r.attendPct < 75).map((r) => r.personId as never);
@@ -173,7 +173,7 @@
 	let historyOpen = $state(false);
 
 	$effect(() => {
-		if (classId) void loadOfferings();
+		if (programId) void loadOfferings();
 	});
 	$effect(() => {
 		if (offeringId) void loadReport();
@@ -189,7 +189,7 @@
 		<div>
 			<h1 class="text-xl font-bold text-lams-navy">Attendance records</h1>
 			<p class="text-xs text-muted-foreground">
-				See how much of each subject everyone has attended, and correct anything that looks wrong.
+				See how much of each course everyone has attended, and correct anything that looks wrong.
 			</p>
 		</div>
 	</div>
@@ -199,30 +199,32 @@
 	{:else}
 		<div class="grid gap-4 sm:grid-cols-2">
 			<div class="flex flex-col gap-1.5">
-				<Label for="cls">Class</Label>
-				<Select.Root type="single" value={classId} onValueChange={(v) => (classId = v ?? '')}>
+				<Label for="cls">Program</Label>
+				<Select.Root type="single" value={programId} onValueChange={(v) => (programId = v ?? '')}>
 					<Select.Trigger id="cls" class="w-full">
-						<Select.Value placeholder="Choose a class" />
+						<Select.Value placeholder="Choose a program" />
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
-							{#each classes as c (c._id)}
-								<Select.Item value={c._id}>{c.name}</Select.Item>
+							{#each programs as c (c._id)}
+								<Select.Item value={c._id} label={c.name}>{c.name}</Select.Item>
 							{/each}
 						</Select.Group>
 					</Select.Content>
 				</Select.Root>
 			</div>
 			<div class="flex flex-col gap-1.5">
-				<Label for="off">Subject</Label>
+				<Label for="off">Course</Label>
 				<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
 					<Select.Trigger id="off" class="w-full">
-						<Select.Value placeholder="Choose a subject" />
+						<Select.Value placeholder="Choose a course" />
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
 							{#each offerings as o (o._id)}
-								<Select.Item value={o._id}>{o.subjectCode} — {o.subjectTitle}</Select.Item>
+								<Select.Item value={o._id} label={`${o.courseCode} — ${o.courseTitle}`}>
+									{o.courseCode} — {o.courseTitle}
+								</Select.Item>
 							{/each}
 						</Select.Group>
 					</Select.Content>
@@ -233,7 +235,7 @@
 		{#if !offerings.length}
 			<Card.Root>
 				<Card.Content class="pt-6 text-center text-sm text-muted-foreground">
-					Offer this class a subject first — reports appear once lectures have been taken.
+					Offer this program a course first — reports appear once lectures have been taken.
 				</Card.Content>
 			</Card.Root>
 		{:else}
@@ -293,7 +295,7 @@
 			{#if visible.length === 0}
 				<Card.Root>
 					<Card.Content class="pt-6 text-center text-sm text-muted-foreground">
-						No lectures have been taken for this subject yet, so there is nothing to report.
+						No lectures have been taken for this course yet, so there is nothing to report.
 					</Card.Content>
 				</Card.Root>
 			{:else}

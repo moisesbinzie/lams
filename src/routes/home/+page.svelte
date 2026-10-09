@@ -11,7 +11,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { LogOut, CalendarDays, BarChart3, ScanLine, BookOpen, Pencil } from '@lucide/svelte';
-	import type { Me, MyEnrolment, MyAttendanceRow, RepClass } from '$lib/lams/types';
+	import type { Me, MyEnrolment, MyAttendanceRow, ProgramRep } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 	import StudentNav from '$lib/components/lams/student-nav.svelte';
 
@@ -28,7 +28,7 @@
 	let saving = $state(false);
 
 	let enrolments = $state<MyEnrolment[]>([]);
-	let repClasses = $state<RepClass[]>([]);
+	let repPrograms = $state<ProgramRep[]>([]);
 	let recent = $state<MyAttendanceRow[]>([]);
 	let summary = $state<{ attendPct: number; totalLectures: number } | null>(null);
 
@@ -70,7 +70,7 @@
 				client.query(api.reports.mySummary, { token }) as Promise<{ attendPct: number; totalLectures: number }>
 			]);
 			if (found.role !== 'student') {
-				repClasses = (await client.query(api.reps.listForPerson, { token })) as unknown as RepClass[];
+				repPrograms = (await client.query(api.reps.listForPerson, { token })) as unknown as ProgramRep[];
 			}
 		} catch (err) {
 			// Keep the token: a failed load is usually a network blip, and
@@ -118,20 +118,20 @@
 					<h1 class="flex flex-wrap items-center gap-2 text-2xl font-bold text-lams-navy">
 						{person.fullName}
 						{#if person.role === 'rep'}
-							<Badge class="bg-lams-green text-white">Class rep account</Badge>
+							<Badge class="bg-lams-green text-white">Program rep account</Badge>
 						{:else}
 							<Badge variant="secondary">Student account</Badge>
 						{/if}
 					</h1>
 					<p class="text-sm text-muted-foreground">
 						{person.regNumber}
-						{#if person.classNames.length > 0}
-							· {person.classNames.join(', ')}
+						{#if person.programNames.length > 0}
+							· {person.programNames.join(', ')}
 						{/if}
 					</p>
 					<p class="mt-1 text-xs text-muted-foreground">
 						{#if person.role === 'rep'}
-							Class representative — you can take attendance for your subjects.
+							Program representative — you can take attendance for your courses.
 						{:else}
 							Student
 						{/if}
@@ -154,7 +154,7 @@
 					<Card.Title>Your details</Card.Title>
 					<Card.Description>
 						You can change your name and how we reach you. Your registration number and student ID are
-						fixed — ask your class rep or lecturer to change those.
+						fixed — ask your program rep or lecturer to change those.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
@@ -185,8 +185,8 @@
 
 		<!--
 			Scanning leads because it is the one thing a student opens this page
-			to do in a lecture. "My subjects" is no longer conditional: a class rep
-			still needs to join and drop subjects like anyone else.
+			to do in a lecture. "My courses" is no longer conditional: a program rep
+			still needs to join and drop courses like anyone else.
 
 			It is also the loudest thing on the page on purpose — a full row, a size
 			up, and lifted off the surface with its own shadow. A student standing in
@@ -211,7 +211,7 @@
 			<Button href="/timetable" size="lg" variant="outline" class="h-auto flex-col items-start gap-1 py-4 text-left">
 				<CalendarDays class="size-5" />
 				<span class="text-sm font-semibold">My timetable</span>
-				<span class="text-xs font-normal opacity-80">When my classes meet</span>
+				<span class="text-xs font-normal opacity-80">When my courses meet</span>
 			</Button>
 			<Button href="/attendance" size="lg" variant="outline" class="h-auto flex-col items-start gap-1 py-4 text-left">
 				<BarChart3 class="size-5" />
@@ -220,8 +220,8 @@
 			</Button>
 			<Button href="/courses" size="lg" variant="outline" class="h-auto flex-col items-start gap-1 py-4 text-left">
 				<BookOpen class="size-5" />
-				<span class="text-sm font-semibold">My subjects</span>
-				<span class="text-xs font-normal opacity-80">Join or leave a subject</span>
+				<span class="text-sm font-semibold">My courses</span>
+				<span class="text-xs font-normal opacity-80">Join or leave a course</span>
 			</Button>
 			{#if person.role !== 'student'}
 				<Button href="/scan" size="lg" variant="secondary" class="h-auto flex-col items-start gap-1 py-4 text-left">
@@ -250,17 +250,17 @@
 		{#if person.role !== 'student'}
 			<Card.Root>
 				<Card.Header>
-					<Card.Title>Classes you can take attendance for</Card.Title>
+					<Card.Title>Programs you can take attendance for</Card.Title>
 				</Card.Header>
 				<Card.Content>
-					{#if repClasses.length === 0}
+					{#if repPrograms.length === 0}
 						<p class="text-sm text-muted-foreground">
-							You have not been made a class rep yet. Your lecturer sets this up.
+							You have not been made a program rep yet. Your lecturer sets this up.
 						</p>
 					{:else}
 						<ul class="flex flex-wrap gap-2">
-							{#each repClasses as c (c.classId)}
-								<li class="rounded-full border border-border px-3 py-1 text-sm">{c.className}</li>
+							{#each repPrograms as c (c.programId)}
+								<li class="rounded-full border border-border px-3 py-1 text-sm">{c.programName}</li>
 							{/each}
 						</ul>
 					{/if}
@@ -278,7 +278,7 @@
 						{#each recent.slice(0, 5) as r (r._id)}
 							<li class="flex items-center justify-between gap-2">
 								<span class="text-muted-foreground">
-									{r.subjectCode} · {new Date(r.date).toLocaleDateString()}
+									{r.courseCode} · {new Date(r.date).toLocaleDateString()}
 								</span>
 								<span class="font-medium">{r.status.replace('_', ' ')}</span>
 							</li>

@@ -52,7 +52,7 @@
 			const base = isAdmin ? ADMIN_NAV : LECTURER_NAV;
 			return [...base, how];
 		}
-		// A student or a class rep. A rep keeps the station tool here because it
+		// A student or a program rep. A rep keeps the station tool here because it
 		// is a different job from their own attendance and has nowhere else to
 		// live; everything that is *their* record moved into the page.
 		return me.role === 'rep' ? [dashboard, { href: '/scan', label: 'Take attendance', icon: ScanLine }, how] : [dashboard, how];
@@ -64,7 +64,7 @@
 			const isAdmin = (me as { isAdmin?: boolean }).isAdmin === true || me.role === 'admin';
 			return isAdmin ? 'Admin' : 'Lecturer';
 		}
-		return me.role === 'rep' ? 'Class rep' : 'Student';
+		return me.role === 'rep' ? 'Program rep' : 'Student';
 	});
 
 	/** Color-coded account badge so the account type reads at a glance. */

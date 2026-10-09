@@ -2,7 +2,8 @@ import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import {
 	assertCanAccessOffering,
-	lecturerClassIds,
+	lecturerAccessibleOfferingIds,
+	lecturerProgramIds,
 	logAudit,
 	requireAdmin,
 	requireActor,
@@ -26,6 +27,62 @@ export const listSemesters = query({
 			return all.filter((s: any) => semIds.has(String(s._id)));
 		}
 		return all;
+	}
+});
+
+/**
+ * Preconfigure a university year: Semester 1 and Semester 2. Idempotent —
+ * whichever half already exists (same year + number) is skipped, so running
+ * it twice never duplicates. Dates are the admin's call (every calendar
+ * differs); the form prefills the two halves of the year.
+ */
+export const ensureAcademicYear = mutation({
+	args: {
+		token: v.string(),
+		year: v.number(),
+		sem1Start: v.string(),
+		sem1End: v.string(),
+		sem2Start: v.string(),
+		sem2End: v.string()
+	},
+	handler: async (ctx, args) => {
+		await requireAdmin(ctx, args.token);
+		if (!Number.isInteger(args.year) || args.year < 2000 || args.year > 2100) {
+			throw new Error('Enter a valid year.');
+		}
+		const halves = [
+			{ number: 1, startDate: args.sem1Start, endDate: args.sem1End },
+			{ number: 2, startDate: args.sem2Start, endDate: args.sem2End }
+		];
+		for (const h of halves) {
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(h.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(h.endDate)) {
+				throw new Error('Enter dates as YYYY-MM-DD.');
+			}
+			if (h.startDate > h.endDate) throw new Error('Each semester must start on or before it ends.');
+		}
+		const existing = await ctx.db
+			.query('semesters')
+			.withIndex('by_year', (q) => q.eq('year', args.year))
+			.take(10);
+		const created: string[] = [];
+		const skipped: string[] = [];
+		for (const h of halves) {
+			const name = `Semester ${h.number}`;
+			if (existing.some((s: any) => s.number === h.number)) {
+				skipped.push(name);
+				continue;
+			}
+			await ctx.db.insert('semesters', {
+				name,
+				year: args.year,
+				number: h.number,
+				startDate: h.startDate,
+				endDate: h.endDate,
+				createdAt: Date.now()
+			});
+			created.push(name);
+		}
+		return { created, skipped };
 	}
 });
 
@@ -67,9 +124,7 @@ export const removeSemester = mutation({
 			.query('offerings')
 			.withIndex('by_semester', (q) => q.eq('semesterId', args.id))
 			.take(1);
-		if (offerings.length > 0) throw new Error('This semester already has subjects. Remove them first.');
-		const classes = await ctx.db.query('classes').withIndex('by_semester', (q) => q.eq('semesterId', args.id)).take(1);
-		if (classes.length > 0) throw new Error('This semester already has classes. Remove them first.');
+		if (offerings.length > 0) throw new Error('This semester already has courses. Remove them first.');
 		const sessions = await ctx.db
 			.query('sessions')
 			.withIndex('by_semester', (q) => q.eq('semesterId', args.id))
@@ -82,99 +137,111 @@ export const removeSemester = mutation({
 	}
 });
 
-// ------------------------------------------------------------------ classes
+// ---------------------------------------------------------------- programs
 
-export const listClasses = query({
-	args: { token: v.string(), semesterId: v.optional(v.id('semesters')) },
+export const listPrograms = query({
+	args: { token: v.string() },
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx, args.token);
-		let rows =
-			args.semesterId
-				? await ctx.db.query('classes').withIndex('by_semester', (q) => q.eq('semesterId', args.semesterId!)).take(200)
-				: await ctx.db.query('classes').order('desc').take(200);
-		// Lecturers only see cohorts they actually teach.
+		let rows = await ctx.db.query('programs').order('desc').take(200);
+		// Lecturers only see programs they actually teach.
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			const mine = new Set(await lecturerClassIds(ctx, actor.id));
-			rows = rows.filter((c: any) => mine.has(String(c._id)));
+			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
+			rows = rows.filter((p: any) => mine.has(String(p._id)));
 		}
 		return Promise.all(
-			rows.map(async (c: any) => {
+			rows.map(async (p: any) => {
 				const memberships = await ctx.db
-					.query('classMembers')
-					.withIndex('by_class', (q) => q.eq('classId', c._id))
+					.query('programMembers')
+					.withIndex('by_program', (q) => q.eq('programId', p._id))
 					.take(2000);
 				const members = (await Promise.all(memberships.map((m: any) => ctx.db.get('people', m.personId)))).filter(
-					(p: any) => p && p.status !== 'blocked'
+					(person: any) => person && person.status !== 'blocked'
 				);
-				const semester = c.semesterId ? await ctx.db.get('semesters', c.semesterId) : null;
 				return {
-					...c,
-					studentCount: members.length,
-					semesterName: semester?.name ?? ''
+					...p,
+					studentCount: members.length
 				};
 			})
 		);
 	}
 });
 
-export const createClass = mutation({
+export const createProgram = mutation({
 	args: {
 		token: v.string(),
 		name: v.string(),
-		yearOfStudy: v.number(),
-		semesterId: v.optional(v.id('semesters'))
+		durationYears: v.number()
 	},
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
 		const name = args.name.trim();
-		if (!name) throw new Error('Give the class a name.');
-		if (args.yearOfStudy < 1 || args.yearOfStudy > 10) throw new Error('Year of study must be 1 to 10.');
-		return await ctx.db.insert('classes', {
+		if (!name) throw new Error('Give the program a name.');
+		if (!Number.isInteger(args.durationYears) || args.durationYears < 1 || args.durationYears > 10) {
+			throw new Error('Duration must be 1 to 10 years.');
+		}
+		const clash = await ctx.db
+			.query('programs')
+			.withIndex('by_name', (q) => q.eq('name', name))
+			.unique();
+		if (clash) throw new Error('A program with that name already exists.');
+		return await ctx.db.insert('programs', {
 			name,
-			yearOfStudy: args.yearOfStudy,
-			...(args.semesterId ? { semesterId: args.semesterId } : {}),
+			durationYears: args.durationYears,
 			createdAt: Date.now()
 		});
 	}
 });
 
-export const updateClass = mutation({
+export const updateProgram = mutation({
 	args: {
 		token: v.string(),
-		id: v.id('classes'),
+		id: v.id('programs'),
 		name: v.optional(v.string()),
-		yearOfStudy: v.optional(v.number()),
-		semesterId: v.optional(v.id('semesters'))
+		durationYears: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
-		const cls = await ctx.db.get('classes', args.id);
-		if (!cls) throw new Error('Class not found.');
+		const program = await ctx.db.get('programs', args.id);
+		if (!program) throw new Error('Program not found.');
 		const patch: Record<string, unknown> = {};
-		if (args.name?.trim()) patch.name = args.name.trim();
-		if (args.yearOfStudy !== undefined) {
-			if (args.yearOfStudy < 1 || args.yearOfStudy > 10)
-				throw new Error('Year of study must be 1 to 10.');
-			patch.yearOfStudy = args.yearOfStudy;
+		if (args.name?.trim()) {
+			const clash = await ctx.db
+				.query('programs')
+				.withIndex('by_name', (q) => q.eq('name', args.name!.trim()))
+				.unique();
+			if (clash && String(clash._id) !== String(args.id)) {
+				throw new Error('A program with that name already exists.');
+			}
+			patch.name = args.name.trim();
 		}
-		if (args.semesterId !== undefined) patch.semesterId = args.semesterId;
+		if (args.durationYears !== undefined) {
+			if (!Number.isInteger(args.durationYears) || args.durationYears < 1 || args.durationYears > 10) {
+				throw new Error('Duration must be 1 to 10 years.');
+			}
+			patch.durationYears = args.durationYears;
+		}
 		if (Object.keys(patch).length === 0) return { ok: true };
 		await ctx.db.patch(args.id, patch);
 		return { ok: true };
 	}
 });
 
-export const removeClass = mutation({
-	args: { token: v.string(), id: v.id('classes') },
+export const removeProgram = mutation({
+	args: { token: v.string(), id: v.id('programs') },
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
-		const offerings = await ctx.db.query('offerings').withIndex('by_class', (q) => q.eq('classId', args.id)).take(1);
-		if (offerings.length > 0) throw new Error('This class still has subjects. Remove them first.');
-		// Sessions carry the class only through their offering, so check every
-		// offering of this class — lecture records are history and block removal.
+		const offerings = await ctx.db
+			.query('offerings')
+			.withIndex('by_program', (q) => q.eq('programId', args.id))
+			.take(1);
+		if (offerings.length > 0) throw new Error('This program still has courses. Remove them first.');
+		// Sessions reach the program only through their offering, so check
+		// every offering — lecture records are history and block removal.
+		// Students keep their accounts and can join another program.
 		const allOfferings = await ctx.db
 			.query('offerings')
-			.withIndex('by_class', (q) => q.eq('classId', args.id))
+			.withIndex('by_program', (q) => q.eq('programId', args.id))
 			.take(200);
 		for (const o of allOfferings) {
 			const sessions = await ctx.db
@@ -182,35 +249,35 @@ export const removeClass = mutation({
 				.withIndex('by_offering', (q) => q.eq('offeringId', o._id))
 				.take(1);
 			if (sessions.length > 0) {
-				throw new Error('This class still has lecture records, which are kept as history.');
+				throw new Error('This program still has lecture records, which are kept as history.');
 			}
 		}
-		await ctx.db.delete('classes', args.id);
+		await ctx.db.delete('programs', args.id);
 		return { ok: true };
 	}
 });
 
-// ----------------------------------------------------------------- subjects
+// ----------------------------------------------------------------- courses
 
-/** The course catalogue — lecturers only see subjects they teach. */
-export const listSubjects = query({
+/** The course catalogue — lecturers only see courses they teach. */
+export const listCourses = query({
 	args: { token: v.string() },
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx, args.token);
-		const all = await ctx.db.query('subjects').order('asc').take(500);
+		const all = await ctx.db.query('courses').order('asc').take(500);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			const mine = await ctx.db
-				.query('offerings')
-				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
-				.take(500);
-			const subjectIds = new Set(mine.map((o: any) => String(o.subjectId)));
-			return all.filter((s: any) => subjectIds.has(String(s._id)));
+			const accessible = await lecturerAccessibleOfferingIds(ctx, actor.id);
+			const offs = await ctx.db.query('offerings').take(500);
+			const courseIds = new Set(
+				offs.filter((o: any) => accessible.has(String(o._id))).map((o: any) => String(o.courseId))
+			);
+			return all.filter((c: any) => courseIds.has(String(c._id)));
 		}
 		return all;
 	}
 });
 
-export const createSubject = mutation({
+export const createCourse = mutation({
 	args: {
 		token: v.string(),
 		code: v.string(),
@@ -221,14 +288,14 @@ export const createSubject = mutation({
 		await requireAdmin(ctx, args.token);
 		const code = args.code.trim().toUpperCase();
 		const title = args.title.trim();
-		if (!code) throw new Error('Enter a subject code.');
-		if (!title) throw new Error('Enter a subject title.');
+		if (!code) throw new Error('Enter a course code.');
+		if (!title) throw new Error('Enter a course title.');
 		const existing = await ctx.db
-			.query('subjects')
+			.query('courses')
 			.withIndex('by_code', (q) => q.eq('code', code))
 			.unique();
-		if (existing) throw new Error('A subject with that code already exists.');
-		return await ctx.db.insert('subjects', {
+		if (existing) throw new Error('A course with that code already exists.');
+		return await ctx.db.insert('courses', {
 			code,
 			title,
 			openForEnrolment: false,
@@ -238,10 +305,10 @@ export const createSubject = mutation({
 	}
 });
 
-export const updateSubject = mutation({
+export const updateCourse = mutation({
 	args: {
 		token: v.string(),
-		id: v.id('subjects'),
+		id: v.id('courses'),
 		title: v.optional(v.string()),
 		hoursPerWeek: v.optional(v.number())
 	},
@@ -256,72 +323,57 @@ export const updateSubject = mutation({
 	}
 });
 
-export const removeSubject = mutation({
-	args: { token: v.string(), id: v.id('subjects') },
+export const removeCourse = mutation({
+	args: { token: v.string(), id: v.id('courses') },
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
 		const offerings = await ctx.db
 			.query('offerings')
-			.withIndex('by_subject', (q) => q.eq('subjectId', args.id))
+			.withIndex('by_course', (q) => q.eq('courseId', args.id))
 			.take(1);
-		if (offerings.length > 0) throw new Error('This subject is offered to a class. Remove it there first.');
+		if (offerings.length > 0) throw new Error('This course is offered to a program. Remove it there first.');
 		const sessions = await ctx.db
 			.query('sessions')
-			.withIndex('by_subject', (q) => q.eq('subjectId', args.id))
+			.withIndex('by_course', (q) => q.eq('courseId', args.id))
 			.take(1);
 		if (sessions.length > 0) {
-			throw new Error('This subject still has lecture records, which are kept as history.');
+			throw new Error('This course still has lecture records, which are kept as history.');
 		}
-		await ctx.db.delete('subjects', args.id);
+		await ctx.db.delete('courses', args.id);
 		return { ok: true };
 	}
 });
 
 // ---------------------------------------------------------------- offerings
 
-/** A subject offered to a class in a semester. Lecturers only see their own. */
+/** A course offered to one program year in one semester. Lecturers only see their own. */
 export const listOfferings = query({
 	args: {
 		token: v.string(),
-		classId: v.optional(v.id('classes')),
-		semesterId: v.optional(v.id('semesters'))
+		programId: v.optional(v.id('programs')),
+		semesterId: v.optional(v.id('semesters')),
+		yearOfStudy: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx, args.token);
 		let rows: any[];
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			// Own offerings plus unassigned ones in classes already taught
+			// Own offerings plus unassigned ones in programs already taught
 			// (substitute cover) — mirroring `canAccessOffering`.
-			const mine = new Set(await lecturerClassIds(ctx, actor.id));
-			const all = await ctx.db.query('offerings').take(500);
-			rows = all.filter(
-				(o: any) =>
-					String(o.lecturerId ?? '') === String(actor.id) ||
-					(!o.lecturerId && mine.has(String(o.classId)))
+			const accessible = await lecturerAccessibleOfferingIds(ctx, actor.id);
+			rows = (await ctx.db.query('offerings').take(500)).filter((o: any) =>
+				accessible.has(String(o._id))
 			);
-			if (args.classId) rows = rows.filter((o: any) => String(o.classId) === String(args.classId));
-			if (args.semesterId) rows = rows.filter((o: any) => String(o.semesterId) === String(args.semesterId));
-		} else if (args.classId && args.semesterId) {
-			rows = await ctx.db
-				.query('offerings')
-				.withIndex('by_class_and_semester', (q) =>
-					q.eq('classId', args.classId!).eq('semesterId', args.semesterId!)
-				)
-				.take(200);
-		} else if (args.classId) {
-			rows = await ctx.db.query('offerings').withIndex('by_class', (q) => q.eq('classId', args.classId!)).take(200);
-		} else if (args.semesterId) {
-			rows = await ctx.db
-				.query('offerings')
-				.withIndex('by_semester', (q) => q.eq('semesterId', args.semesterId!))
-				.take(200);
 		} else {
-			rows = await ctx.db.query('offerings').take(200);
+			rows = await ctx.db.query('offerings').take(500);
 		}
+		if (args.programId) rows = rows.filter((o: any) => String(o.programId) === String(args.programId));
+		if (args.semesterId) rows = rows.filter((o: any) => String(o.semesterId) === String(args.semesterId));
+		if (args.yearOfStudy !== undefined) rows = rows.filter((o: any) => o.yearOfStudy === args.yearOfStudy);
 		return Promise.all(
 			rows.map(async (o: any) => {
-				const subject = await ctx.db.get('subjects', o.subjectId);
-				const classDoc = await ctx.db.get('classes', o.classId);
+				const course = o.courseId ? await ctx.db.get('courses', o.courseId) : null;
+				const program = o.programId ? await ctx.db.get('programs', o.programId) : null;
 				const semester = await ctx.db.get('semesters', o.semesterId);
 				const lecturer = o.lecturerId ? await ctx.db.get('staff', o.lecturerId) : null;
 				const count = await ctx.db
@@ -330,12 +382,13 @@ export const listOfferings = query({
 					.take(1000);
 				return {
 					_id: o._id,
-					subjectId: o.subjectId,
-					subjectCode: subject?.code ?? '',
-					subjectTitle: subject?.title ?? '',
-					hoursPerWeek: subject?.hoursPerWeek ?? null,
-					classId: o.classId,
-					className: classDoc?.name ?? '',
+					courseId: o.courseId ?? null,
+					courseCode: course?.code ?? '',
+					courseTitle: course?.title ?? '',
+					hoursPerWeek: course?.hoursPerWeek ?? null,
+					programId: o.programId ?? null,
+					programName: program?.name ?? '',
+					yearOfStudy: o.yearOfStudy ?? null,
 					semesterId: o.semesterId,
 					semesterName: semester?.name ?? '',
 					openForEnrolment: o.openForEnrolment,
@@ -352,31 +405,48 @@ export const listOfferings = query({
 export const createOffering = mutation({
 	args: {
 		token: v.string(),
-		subjectId: v.id('subjects'),
-		classId: v.id('classes'),
+		courseId: v.id('courses'),
+		programId: v.id('programs'),
 		semesterId: v.id('semesters'),
+		yearOfStudy: v.number(),
 		openForEnrolment: v.optional(v.boolean()),
 		lecturerId: v.optional(v.id('staff'))
 	},
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
+		const program = await ctx.db.get('programs', args.programId);
+		if (!program) throw new Error('Program not found.');
+		const course = await ctx.db.get('courses', args.courseId);
+		if (!course) throw new Error('Course not found.');
+		if (
+			!Number.isInteger(args.yearOfStudy) ||
+			args.yearOfStudy < 1 ||
+			args.yearOfStudy > (program.durationYears ?? 10)
+		) {
+			throw new Error(`Year of study must be 1 to ${program.durationYears ?? 10} for this program.`);
+		}
 		const existing = await ctx.db
 			.query('offerings')
-			.withIndex('by_class_and_semester', (q) =>
-				q.eq('classId', args.classId).eq('semesterId', args.semesterId)
+			.withIndex('by_program_and_semester', (q) =>
+				q.eq('programId', args.programId).eq('semesterId', args.semesterId)
 			)
-			.take(50);
-		if (existing.some((o: any) => o.subjectId === args.subjectId)) {
-			throw new Error('That subject is already offered to this class this semester.');
+			.take(100);
+		if (
+			existing.some(
+				(o: any) => String(o.courseId) === String(args.courseId) && o.yearOfStudy === args.yearOfStudy
+			)
+		) {
+			throw new Error('That course is already offered to this program year this semester.');
 		}
 		if (args.lecturerId) {
 			const lecturer = await ctx.db.get('staff', args.lecturerId);
 			if (!lecturer || !lecturer.active) throw new Error('That lecturer account is not active.');
 		}
 		return await ctx.db.insert('offerings', {
-			subjectId: args.subjectId,
-			classId: args.classId,
+			courseId: args.courseId,
+			programId: args.programId,
 			semesterId: args.semesterId,
+			yearOfStudy: args.yearOfStudy,
 			openForEnrolment: args.openForEnrolment ?? false,
 			...(args.lecturerId ? { lecturerId: args.lecturerId } : {}),
 			createdAt: Date.now()
@@ -390,9 +460,9 @@ export const setOfferingLecturer = mutation({
 	handler: async (ctx, args) => {
 		const actor = await requireAdmin(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.id);
-		if (!offering) throw new Error('Subject offering not found.');
-		const subject = await ctx.db.get('subjects', offering.subjectId);
-		const classDoc = await ctx.db.get('classes', offering.classId);
+		if (!offering) throw new Error('Course offering not found.');
+		const course = offering.courseId ? await ctx.db.get('courses', offering.courseId) : null;
+		const program = offering.programId ? await ctx.db.get('programs', offering.programId) : null;
 		let targetName: string | undefined;
 		if (args.lecturerId) {
 			const lecturer = await ctx.db.get('staff', args.lecturerId);
@@ -408,7 +478,7 @@ export const setOfferingLecturer = mutation({
 			action: 'offering.assign-lecturer',
 			targetKind: 'offering',
 			targetId: args.id,
-			targetName: `${subject?.code ?? ''} · ${classDoc?.name ?? ''}`,
+			targetName: `${course?.code ?? ''} · ${program?.name ?? ''}`,
 			...(targetName ? { detail: targetName } : { detail: 'unassigned' })
 		});
 		return { ok: true };
@@ -425,7 +495,7 @@ export const setOfferingOpen = mutation({
 		const actor = await requireStaff(ctx, args.token);
 		if (!actor.isAdmin) {
 			const offering = await ctx.db.get('offerings', args.id);
-			if (!offering) throw new Error('Subject offering not found.');
+			if (!offering) throw new Error('Course offering not found.');
 			await assertCanAccessOffering(ctx, actor, offering);
 		}
 		await ctx.db.patch(args.id, { openForEnrolment: args.open });
@@ -444,13 +514,13 @@ export const removeOffering = mutation({
 			.withIndex('by_offering', (q) => q.eq('offeringId', args.id))
 			.take(1);
 		if (sessions.length > 0) {
-			throw new Error('This subject has lecture records, which are kept as history. It cannot be removed.');
+			throw new Error('This course has lecture records, which are kept as history. It cannot be removed.');
 		}
 		const enrolments = await ctx.db
 			.query('enrolments')
 			.withIndex('by_offering', (q) => q.eq('offeringId', args.id))
 			.take(1000);
-		if (enrolments.length > 0) throw new Error('Students are enrolled in this subject. Remove them first.');
+		if (enrolments.length > 0) throw new Error('Students are enrolled in this course. Remove them first.');
 		const meetings = await ctx.db.query('meetings').withIndex('by_offering', (q) => q.eq('offeringId', args.id)).take(200);
 		for (const m of meetings) await ctx.db.delete('meetings', m._id);
 		await ctx.db.delete('offerings', args.id);

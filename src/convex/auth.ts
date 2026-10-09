@@ -5,7 +5,7 @@
 //   Staff     — lecturers. A username and a shared password, seeded as
 //               admin/admin. Not tied to a student record, so a lecturer cannot
 //               be impersonated by guessing a registration number.
-//   Person    — students and class reps. A registration number plus a PIN the
+//   Person    — students and program reps. A registration number plus a PIN the
 //               person chose themselves, bound to their own phone.
 //
 // Every guarded function takes a single `token` and resolves it to an Actor.
@@ -209,14 +209,14 @@ export async function requireAdmin(ctx: any, token: string): Promise<Extract<Act
 }
 
 /**
- * Anyone who may record attendance: a lecturer, or a class rep. Reps are
+ * Anyone who may record attendance: a lecturer, or a program rep. Reps are
  * additionally checked against the subject with `canRecordFor`.
  */
 export async function requireRecorder(ctx: any, token: string): Promise<Actor> {
 	const actor = await requireActor(ctx, token);
 	if (actor.kind === 'staff') return actor;
 	if (actor.role !== 'rep') {
-		throw new Error('Only class representatives and lecturers can do this.');
+		throw new Error('Only program representatives and lecturers can do this.');
 	}
 	return actor;
 }
@@ -226,7 +226,7 @@ export async function requireRepOrStaff(ctx: any, token: string): Promise<Actor>
 	const actor = await requireActor(ctx, token);
 	if (actor.kind === 'staff') return actor;
 	if (actor.role !== 'rep') {
-		throw new Error('Only class representatives and lecturers can do this.');
+		throw new Error('Only program representatives and lecturers can do this.');
 	}
 	return actor;
 }
@@ -235,7 +235,7 @@ export async function requireRepOrStaff(ctx: any, token: string): Promise<Actor>
 export async function requirePerson(ctx: any, token: string): Promise<PersonDoc> {
 	const actor = await requireActor(ctx, token);
 	if (actor.kind !== 'person') {
-		throw new Error('This action is for students and class representatives.');
+		throw new Error('This action is for students and program representatives.');
 	}
 	return actor.person;
 }
@@ -296,15 +296,15 @@ export async function requirePersonOnDevice(
 	}
 }
 
-// ------------------------------------------------------- class-level rights
+// ----------------------------------------------------- program-level rights
 
-/** True when this person is a class rep for the class. */
-export async function isRepFor(ctx: any, personId: unknown, classId: unknown): Promise<boolean> {
+/** True when this person is a program rep for the program. */
+export async function isRepFor(ctx: any, personId: unknown, programId: unknown): Promise<boolean> {
 	const rows = await ctx.db
-		.query('classReps')
+		.query('programReps')
 		.withIndex('by_person', (q: any) => q.eq('personId', personId))
 		.take(200);
-	return rows.some((r: any) => r.classId === classId);
+	return rows.some((r: any) => String(r.programId) === String(programId));
 }
 
 /** Offering ids assigned to one lecturer. */
@@ -316,28 +316,28 @@ export async function lecturerOfferingIds(ctx: any, staffId: unknown): Promise<s
 	return rows.map((r: any) => String(r._id));
 }
 
-/** Class ids a lecturer teaches (via their assigned offerings). */
-export async function lecturerClassIds(ctx: any, staffId: unknown): Promise<string[]> {
+/** Program ids a lecturer teaches (via their assigned offerings). */
+export async function lecturerProgramIds(ctx: any, staffId: unknown): Promise<string[]> {
 	const rows = (await ctx.db
 		.query('offerings')
 		.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', staffId))
 		.take(500)) as any[];
-	return [...new Set(rows.map((r: any) => String(r.classId)))];
+	return [...new Set(rows.map((r: any) => String(r.programId ?? r.classId)))];
 }
 
 /**
  * True when the actor may touch this offering. Admins may touch anything;
- * lecturers their assigned offerings plus unassigned offerings in classes
+ * lecturers their assigned offerings plus unassigned offerings in programs
  * they already teach (sick-leave cover — nobody needs the admin at 7am);
- * reps never (they are class-scoped).
+ * reps never (they are program-scoped).
  */
 export async function canAccessOffering(ctx: any, actor: Actor, offering: any): Promise<boolean> {
 	if (actor.kind === 'staff' && actor.isAdmin) return true;
 	if (actor.kind === 'staff') {
 		if (String(offering?.lecturerId ?? '') === String(actor.id)) return true;
 		if (!offering?.lecturerId) {
-			const classes = await lecturerClassIds(ctx, actor.id);
-			return classes.includes(String(offering?.classId));
+			const programs = await lecturerProgramIds(ctx, actor.id);
+			return programs.includes(String(offering?.programId ?? offering?.classId));
 		}
 		return false;
 	}
@@ -346,15 +346,15 @@ export async function canAccessOffering(ctx: any, actor: Actor, offering: any): 
 
 /**
  * Every offering id one lecturer may touch: assigned offerings plus
- * unassigned ones in classes they already teach (substitute cover).
+ * unassigned ones in programs they already teach (substitute cover).
  */
 export async function lecturerAccessibleOfferingIds(ctx: any, staffId: unknown): Promise<Set<string>> {
 	const all = await ctx.db.query('offerings').take(500);
-	const classes = new Set(await lecturerClassIds(ctx, staffId));
-	const ids = all.filter(
-		(o: any) =>
-			String(o.lecturerId ?? '') === String(staffId) || (!o.lecturerId && classes.has(String(o.classId)))
-	);
+	const programs = new Set(await lecturerProgramIds(ctx, staffId));
+	const ids = all.filter((o: any) => {
+		const programId = String(o.programId ?? o.classId);
+		return String(o.lecturerId ?? '') === String(staffId) || (!o.lecturerId && programs.has(programId));
+	});
 	return new Set(ids.map((o: any) => String(o._id)));
 }
 
@@ -363,30 +363,30 @@ export async function assertCanAccessOffering(ctx: any, actor: Actor, offering: 
 	if (await canAccessOffering(ctx, actor, offering)) return;
 	throw new Error(
 		actor.kind === 'staff'
-			? 'This subject is not assigned to you. Ask the admin to assign it.'
-			: 'You are only a class representative for your own class.'
+			? 'This course is not assigned to you. Ask the admin to assign it.'
+			: 'You are only a program representative for your own program.'
 	);
 }
 
 /**
- * True when the actor may record attendance for this class. Admins may do so
- * for anything; lecturers only for classes they teach; reps only for classes
- * they represent.
+ * True when the actor may record attendance for this program. Admins may do
+ * so for anything; lecturers only for programs they teach; reps only for
+ * programs they represent.
  */
-export async function canRecordFor(ctx: any, actor: Actor, classId: unknown): Promise<boolean> {
+export async function canRecordFor(ctx: any, actor: Actor, programId: unknown): Promise<boolean> {
 	if (actor.kind === 'staff' && actor.isAdmin) return true;
 	if (actor.kind === 'staff') {
-		const classes = await lecturerClassIds(ctx, actor.id);
-		return classes.includes(String(classId));
+		const programs = await lecturerProgramIds(ctx, actor.id);
+		return programs.includes(String(programId));
 	}
 	if (actor.role !== 'rep') return false;
-	return await isRepFor(ctx, actor.id, classId);
+	return await isRepFor(ctx, actor.id, programId);
 }
 
 /**
- * True when the actor may touch this session. Admins and class-scoped reps
- * use the class rule; lecturers are stricter — only sessions of offerings
- * assigned to them, so two lecturers sharing a class never see each other's
+ * True when the actor may touch this session. Admins and program-scoped reps
+ * use the program rule; lecturers are stricter — only sessions of offerings
+ * they may touch, so two lecturers sharing a program never see each other's
  * lectures.
  */
 export async function canRecordSession(ctx: any, actor: Actor, session: any): Promise<boolean> {
@@ -395,16 +395,16 @@ export async function canRecordSession(ctx: any, actor: Actor, session: any): Pr
 		const offering = await ctx.db.get('offerings', session.offeringId);
 		return await canAccessOffering(ctx, actor, offering);
 	}
-	return await canRecordFor(ctx, actor, session?.classId);
+	return await canRecordFor(ctx, actor, session?.programId ?? session?.classId);
 }
 
-/** Throws unless the actor may record for the class. */
-export async function assertCanRecordFor(ctx: any, actor: Actor, classId: unknown): Promise<void> {
-	if (await canRecordFor(ctx, actor, classId)) return;
+/** Throws unless the actor may record for the program. */
+export async function assertCanRecordFor(ctx: any, actor: Actor, programId: unknown): Promise<void> {
+	if (await canRecordFor(ctx, actor, programId)) return;
 	throw new Error(
 		actor.kind === 'staff'
-			? 'Not allowed for this class.'
-			: 'You are only a class representative for your own class.'
+			? 'Not allowed for this program.'
+			: 'You are only a program representative for your own program.'
 	);
 }
 

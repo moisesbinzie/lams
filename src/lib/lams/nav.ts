@@ -35,7 +35,7 @@ export const STUDENT_NAV: StudentNavItem[] = [
 	{ href: '/scanner', label: 'Scan', icon: ScanLine },
 	{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
 	{ href: '/attendance', label: 'Attendance', icon: BarChart3 },
-	{ href: '/courses', label: 'Subjects', icon: BookOpen }
+	{ href: '/courses', label: 'Courses', icon: BookOpen }
 ];
 
 /**

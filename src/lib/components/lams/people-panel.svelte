@@ -15,14 +15,14 @@
 	import * as Table from '$lib/components/ui/table';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { UserRoundCheck } from '@lucide/svelte';
-	import ClassPicker from './class-picker.svelte';
+	import ProgramPicker from './class-picker.svelte';
 	import PersonEditDialog from './person-edit-dialog.svelte';
-	import type { ClassRow, PersonRow } from '$lib/lams/types';
+	import type { ProgramRow, PersonRow } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = getToken();
-	let classes = $state<ClassRow[]>([]);
-	let classId = $state('');
+	let programs = $state<ProgramRow[]>([]);
+	let programId = $state('');
 	let people = $state<PersonRow[]>([]);
 	let unassigned = $state<PersonRow[]>([]);
 	let showUnassigned = $state(false);
@@ -61,25 +61,25 @@
 		if (!token) return;
 		try {
 			const client = requireConvexClient();
-			classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
-			if (!classId && classes.length > 0) classId = classes[0]._id;
+			programs = (await client.query(api.academics.listPrograms, { token })) as unknown as ProgramRow[];
+			if (!programId && programs.length > 0) programId = programs[0]._id;
 		} catch (err) {
-			reportError(err, 'Could not load classes.');
+			reportError(err, 'Could not load programs.');
 		} finally {
 			loading = false;
 		}
 	});
 
 	async function loadPeople() {
-		if (!classId) {
+		if (!programId) {
 			people = [];
 			return;
 		}
 		try {
 			const client = requireConvexClient();
 			const [rows, reps] = (await Promise.all([
-				client.query(api.people.listPeople, { token, classId: classId as never }),
-				client.query(api.reps.listForClass, { token, classId: classId as never })
+				client.query(api.people.listPeople, { token, programId: programId as never }),
+				client.query(api.reps.listForProgram, { token, programId: programId as never })
 			])) as [PersonRow[], { personId: string }[]];
 			people = rows;
 			repIds = new Set(reps.map((r) => r.personId));
@@ -89,7 +89,7 @@
 	}
 
 	$effect(() => {
-		if (classId) void loadPeople();
+		if (programId) void loadPeople();
 	});
 
 	async function loadUnassigned() {
@@ -97,10 +97,10 @@
 			const client = requireConvexClient();
 			unassigned = (await client.query(api.people.listPeople, {
 				token,
-				withoutClass: true
+				withoutProgram: true
 			})) as unknown as PersonRow[];
 		} catch (err) {
-			reportError(err, 'Could not load students without a class.');
+			reportError(err, 'Could not load students without a program.');
 		}
 	}
 
@@ -120,7 +120,7 @@
 				regNumber: newReg.trim(),
 				studentId: newSid.trim(),
 				role: 'student',
-				classId: classId as never
+				programId: programId as never
 			});
 			newName = '';
 			newReg = '';
@@ -145,7 +145,7 @@
 			const client = requireConvexClient();
 			const res = await client.mutation(api.people.importPeople, {
 				token,
-				classId: classId as never,
+				programId: programId as never,
 				rows
 			});
 			pasteText = '';
@@ -164,16 +164,16 @@
 			const client = requireConvexClient();
 			await client.mutation(api.reps.setRep, {
 				token,
-				classId: classId as never,
+				programId: programId as never,
 				personId: p._id as never,
 				isRep: !isRep
 			});
 			await loadPeople();
-			reportSuccess(
-				isRep
-					? `${p.fullName} is no longer a class rep.`
-					: `${p.fullName} can now take attendance for everything this class takes.`
-			);
+				reportSuccess(
+					isRep
+						? `${p.fullName} is no longer a program rep.`
+						: `${p.fullName} can now take attendance for everything this program takes.`
+				);
 		} catch (err) {
 			reportError(err, 'Could not change that.');
 		}
@@ -230,11 +230,11 @@
 	{#if loading}
 		<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 	{:else}
-		<ClassPicker {classes} bind:classId emptyHint="No classes yet — add one in “Classes & semesters”." />
+		<ProgramPicker {programs} bind:programId emptyHint="No programs yet — add one in “Programs & semesters”." />
 
 		<div>
 			<Button size="sm" variant="outline" onclick={toggleUnassigned}>
-				{showUnassigned ? 'Hide students with no class' : 'Show students with no class'}
+				{showUnassigned ? 'Hide students with no program' : 'Show students with no program'}
 				{#if showUnassigned}
 					<Badge variant="secondary">{unassigned.length}</Badge>
 				{/if}
@@ -244,15 +244,15 @@
 		{#if showUnassigned}
 			<Card.Root>
 				<Card.Header>
-					<Card.Title>Students with no class</Card.Title>
+					<Card.Title>Students with no program</Card.Title>
 					<Card.Description>
-						Created without a class. Use Edit to claim them into one of your classes.
+						Created without a program. Use Edit to claim them into one of your programs.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
 					{#if unassigned.length === 0}
 						<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-							Nobody is waiting for a class.
+							Nobody is waiting for a program.
 						</p>
 					{:else}
 						<ul class="flex flex-col divide-y divide-border rounded-md border">
@@ -283,19 +283,19 @@
 			</Card.Root>
 		{/if}
 
-		{#if classId}
+		{#if programId}
 			<Card.Root>
 				<Card.Header>
 					<Card.Title class="flex flex-wrap items-center gap-2">
-						Students in this class
+						Students in this program
 						{#if notSetUp > 0}
 							<Badge class="bg-amber-600 text-white">{notSetUp} have not set a PIN yet</Badge>
 						{/if}
 					</Card.Title>
 				<Card.Description>
-					Only someone with this console can add students, so nobody can add themselves. A student
-					who repeats a subject from another class can sit in both — use Edit to add the second
-					class.
+					Only someone with this console can add students, so nobody can add themselves. 					A student
+					who repeats a course from another program can sit in both — use Edit to add the second
+					program.
 				</Card.Description>
 				</Card.Header>
 				<Card.Content class="flex flex-col gap-3">
@@ -349,7 +349,7 @@
 
 					{#if filtered.length === 0}
 						<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-							No students in this class yet. Add them above — anyone not recorded is marked absent.
+							No students in this program yet. Add them above — anyone not recorded is marked absent.
 						</p>
 					{:else}
 						<div class="overflow-x-auto rounded-md border">
@@ -375,9 +375,9 @@
 														</Badge>
 													{/if}
 												</span>
-											{@const otherNames = p.classIds
-												.filter((id) => id !== classId)
-												.map((id) => classes.find((c) => c._id === id)?.name)
+											{@const otherNames = p.programIds
+												.filter((id) => id !== programId)
+												.map((id) => programs.find((c) => c._id === id)?.name)
 												.filter((n): n is string => Boolean(n))}
 											{#if otherNames.length > 0}
 												<span class="block text-xs text-muted-foreground">
@@ -457,7 +457,7 @@
 <PersonEditDialog
 	bind:open={editOpen}
 	person={editing}
-	{classes}
+	{programs}
 	{token}
 	onsaved={async () => {
 		await loadPeople();

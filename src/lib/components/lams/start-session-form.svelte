@@ -16,19 +16,19 @@
 
 	interface RecordableOffering {
 		_id: string;
-		subjectCode: string;
-		subjectTitle: string;
-		className: string;
+		courseCode: string;
+		courseTitle: string;
+		programName: string;
 	}
 
 	/**
 	 * Start a live attendance window from the scanning screen. Lecturers see
-	 * every offering; a class rep sees only offerings for classes they
+	 * their offerings; a program rep sees only offerings for programs they
 	 * represent — the server enforces the same rule.
 	 *
-	 * `initialOfferingId` pre-selects a subject, which is what lets the station
+	 * `initialOfferingId` pre-selects a course, which is what lets the station
 	 * screen put "start the next hour of this lecture" one tap away instead of
-	 * making the rep find the same subject in a list again.
+	 * making the rep find the same course in a list again.
 	 */
 	let {
 		onstarted,
@@ -48,7 +48,7 @@
 	 * it comes from is still loading. So it is applied whenever it changes,
 	 * which covers both arriving late and the running lecture being swapped for
 	 * another one — but only while the selection is still untouched or still
-	 * holds the previous suggestion. A subject the rep picked themselves is
+	 * holds the previous suggestion. A course the rep picked themselves is
 	 * never overwritten under them.
 	 */
 	let appliedSuggestion = '';
@@ -92,7 +92,7 @@
 			// `null` is the server saying the token is no longer accepted, which
 			// is what a station screen left open past its session looks like.
 			// There is nothing to list in that case, so sign out cleanly instead
-			// of showing an empty subject box the rep cannot explain.
+			// of showing an empty course box the rep cannot explain.
 			if (rows === null) {
 				endSession();
 				await goto('/signin');
@@ -100,7 +100,7 @@
 			}
 			offerings = rows;
 		} catch (err) {
-			reportError(err, 'Could not load your subjects.');
+			reportError(err, 'Could not load your courses.');
 		} finally {
 			loading = false;
 		}
@@ -177,25 +177,25 @@
 			<div class="h-16 animate-pulse rounded-md bg-muted"></div>
 		{:else if offerings.length === 0}
 			<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-				Nothing to start yet. Lecturers: offer subjects to your classes first. Class reps: your
-				lecturer can make you a rep of your class.
+				Nothing to start yet. Lecturers: offer courses to your programs first. Program reps: your
+				lecturer can make you a rep of your program.
 			</p>
 		{:else}
 			<form class="flex flex-col gap-4" onsubmit={start}>
 				<div class="flex flex-col gap-1.5">
-					<Label for="soff">Subject and class</Label>
+					<Label for="soff">Course and program</Label>
 					<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
 						<Select.Trigger id="soff" class="w-full">
-							<Select.Value placeholder="Choose a subject" />
+							<Select.Value placeholder="Choose a course" />
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
 								{#each offerings as o (o._id)}
 									<Select.Item
 										value={o._id}
-										label={`${o.subjectCode} — ${o.subjectTitle} · ${o.className}`}
+										label={`${o.courseCode} — ${o.courseTitle} · ${o.programName}`}
 									>
-										{o.subjectCode} — {o.subjectTitle} · {o.className}
+										{o.courseCode} — {o.courseTitle} · {o.programName}
 									</Select.Item>
 								{/each}
 							</Select.Group>

@@ -225,3 +225,25 @@ else": signed in, one scan and one location grant is the whole flow.
   now describes the station and labels the field "Station radius".
 - **`clearDevice` was already sound** (it deletes the person's sessions) — the new
   scan-time check makes it belt-and-braces rather than the only barrier.
+
+### Q30: Program/Course vocabulary + tree UI + drag-and-drop (2026-10-09)
+**A:** Full rename, new structure, visual tree everywhere.
+
+- **Vocabulary.** "Class" → **Program**, "Subject" → **Course**, "class rep" →
+  **program rep** — in UI, code, API outputs, and database tables (`classes` →
+  `programs`, `subjects` → `courses`, `classMembers`/`classReps` →
+  `programMembers`/`programReps`). Person `role: 'rep'` is unchanged.
+- **Structure.** A program runs `durationYears` years (default 4, editable);
+  an offering names the program year it is taught in (`yearOfStudy`), so one
+  course can serve Year 1 and repeat in Year 3, and one course can belong to
+  several programs. Tree groups Program → Year → courses (semester badges).
+- **Student tree.** My programs → enrolled courses (drop where allowed) plus
+  open courses to join, including repeats from earlier semesters.
+- **Drag-and-drop.** Dragging a catalogue course onto a program year prefills
+  that year's offer form (semester + lecturer chosen there, then Offer).
+  Drop = offer, never move — moving history is blocked anyway.
+- **Migration runbook.** Old tables are retained untouched as a backup.
+  1. Back up the deployment (Convex dashboard → Export). 2. Deploy this code.
+  3. In `/admin`, run the migration from the amber card until it reports done
+  (idempotent, page-sized, safe to re-run). 4. Compare counts in the card.
+  Dropping the old tables is a follow-up schema edit once counts check out.

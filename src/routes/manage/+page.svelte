@@ -11,7 +11,7 @@
 	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
 	import SetupPanel from '$lib/components/lams/setup-panel.svelte';
 	import PeoplePanel from '$lib/components/lams/people-panel.svelte';
-	import SubjectsPanel from '$lib/components/lams/subjects-panel.svelte';
+	import CoursesPanel from '$lib/components/lams/subjects-panel.svelte';
 	import TimetablePanel from '$lib/components/lams/timetable-panel.svelte';
 	import LecturePanel from '$lib/components/lams/lecture-panel.svelte';
 
@@ -49,9 +49,9 @@
 	});
 
 	const allTabs = [
-		{ key: 'setup', label: 'Classes & semesters' },
+		{ key: 'setup', label: 'Programs & semesters' },
 		{ key: 'people', label: 'Students' },
-		{ key: 'subjects', label: 'Subjects' },
+		{ key: 'courses', label: 'Courses' },
 		{ key: 'timetable', label: 'Timetable' },
 		{ key: 'lectures', label: 'Lectures' }
 	] as const;
@@ -77,10 +77,10 @@
 			</h1>
 			<p class="text-xs text-muted-foreground">
 				{#if isAdmin}
-					Organise semesters, classes, subjects and timetables. Lecturer accounts and their
+					Organise semesters, programs, courses and timetables. Lecturer accounts and their
 					assignments live in the admin console.
 				{:else}
-					Set up semesters, classes and subjects, add students, then start lectures and review records.
+					Set up semesters, programs and courses, add students, then start lectures and review records.
 				{/if}
 			</p>
 		</div>
@@ -90,7 +90,7 @@
 		<LecturerNav />
 		{#if !isAdmin}
 			<p class="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground" role="status">
-				You only see the subjects assigned to you. Ask the admin if a subject is missing.
+				You only see the courses assigned to you. Ask the admin if a course is missing.
 			</p>
 		{/if}
 		<Tabs.Root value="setup">
@@ -105,8 +105,8 @@
 						<SetupPanel />
 					{:else if t.key === 'people'}
 						<PeoplePanel />
-					{:else if t.key === 'subjects'}
-						<SubjectsPanel />
+					{:else if t.key === 'courses'}
+						<CoursesPanel />
 					{:else if t.key === 'timetable'}
 						<TimetablePanel />
 					{:else}

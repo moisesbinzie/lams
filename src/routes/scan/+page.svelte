@@ -36,7 +36,7 @@
 	let token = $state('');
 	let sessions = $state<LectureSession[]>([]);
 	/**
-	 * This screen is shared: lecturers open it from their console and class
+	 * This screen is shared: lecturers open it from their console and program
 	 * reps from the station job. The in-page strip follows the viewer — the
 	 * lecturer sections for staff, the student's own sections for a rep, who
 	 * otherwise has no way back to their account once the top bar drops its
@@ -129,7 +129,7 @@
 	const current = $derived(openNow[0] ?? null);
 
 	/**
-	 * Starting a lecture is the main job on this screen, so the subject is
+	 * Starting a lecture is the main job on this screen, so the course is
 	 * pre-answered when there is only one lecture it could be. With several
 	 * running side by side the rep has to say which, rather than the screen
 	 * guessing and quietly closing the wrong one.
@@ -213,7 +213,7 @@
 			const when = new Date(target.closesAt).toLocaleTimeString();
 			if (
 				!confirm(
-					`${target.subjectCode}'s window ended at ${when}. Close it now and mark everyone not recorded absent?`
+					`${target.courseCode}'s window ended at ${when}. Close it now and mark everyone not recorded absent?`
 				)
 			) {
 				return;
@@ -499,7 +499,7 @@
 							A lecture is running now
 						</p>
 						<p class="mt-1 text-xs text-muted-foreground">
-							{current.subjectCode} — {current.subjectTitle} · {current.className} · closes in {formatCountdown(
+							{current.courseCode} — {current.courseTitle} · {current.programName} · closes in {formatCountdown(
 								current.closesAt - now
 							)}
 						</p>
@@ -549,9 +549,9 @@
 								{#each [...openNow, ...past] as s (s._id)}
 									<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
 										<span>
-											<strong>{s.subjectCode}</strong> — {s.subjectTitle}
+											<strong>{s.courseCode}</strong> — {s.courseTitle}
 											<span class="block text-xs text-muted-foreground">
-												{s.className} · {new Date(s.startedAt).toLocaleString()}
+												{s.programName} · {new Date(s.startedAt).toLocaleString()}
 											</span>
 										</span>
 										<span class="flex items-center gap-2">
@@ -572,9 +572,9 @@
 		<Card.Root>
 			<Card.Content class="flex flex-wrap items-center justify-between gap-3 pt-6">
 				<div>
-					<p class="font-semibold">{live.subjectCode} — {live.subjectTitle}</p>
+					<p class="font-semibold">{live.courseCode} — {live.courseTitle}</p>
 					<p class="text-xs text-muted-foreground">
-						{live.className}
+						{live.programName}
 						{#if !closed}· closes in {formatCountdown(live.closesAt - now)}{/if}
 					</p>
 				</div>
@@ -840,7 +840,7 @@
 						</div>
 					</form>
 					<p class="text-xs text-muted-foreground">
-						Start typing to pick from the class roster. They must already be enrolled in this subject.
+						Start typing to pick from the program roster. They must already be enrolled in this course.
 					</p>
 				{:else}
 					<p class="text-sm text-muted-foreground">

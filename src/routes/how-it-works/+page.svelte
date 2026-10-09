@@ -89,13 +89,13 @@
 			icon: Ban,
 			question: 'I have no phone, or the camera will not focus',
 			answer:
-				'Your class rep can add you by hand. They have to say why, and their name goes on the record — that is normal and it is not held against you.'
+				'Your program rep can add you by hand. They have to say why, and their name goes on the record — that is normal and it is not held against you.'
 		},
 		{
 			icon: AlertTriangle,
 			question: 'The screen says it has been moved',
 			answer:
-				'The screen has been carried out of the room it belongs to, so it has stopped recording anything. Tell your class rep. Once it is put back, scanning starts again and you can scan in.'
+				'The screen has been carried out of the room it belongs to, so it has stopped recording anything. Tell your program rep. Once it is put back, scanning starts again and you can scan in.'
 		},
 		{
 			icon: Clock,
@@ -119,13 +119,13 @@
 		},
 		{
 			icon: Hand,
-			who: 'Class rep',
+			who: 'Program rep',
 			body: 'Start the lecture, put the screen at the front of the hall and leave it there. Add anyone without a working phone by hand, with a reason.'
 		},
 		{
 			icon: GraduationCap,
 			who: 'Lecturer',
-			body: 'Set up subjects and classes, start lectures, and correct or excuse any record afterwards. Every change is logged.'
+			body: 'Set up courses and programs, start lectures, and correct or excuse any record afterwards. Every change is logged.'
 		}
 	];
 
@@ -381,8 +381,8 @@
 					{/each}
 				</ul>
 				<p class="mt-4 text-xs text-muted-foreground">
-					Only a class rep or lecturer can add a student by hand, and they have to give a reason. Nobody can put
-					themselves into a class they do not belong to.
+					Only a program rep or lecturer can add a student by hand, and they have to give a reason. Nobody can put
+					themselves into a program they do not belong to.
 				</p>
 			</Card.Content>
 		</Card.Root>

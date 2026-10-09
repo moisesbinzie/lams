@@ -6,24 +6,24 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import type { ClassRow, PersonRow } from '$lib/lams/types';
+	import type { ProgramRow, PersonRow } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 
 	/**
-	 * Edit a person's editable details: name, identifiers and their classes.
-	 * A student may sit in several classes (the repeating-subject case), so
+	 * Edit a person's editable details: name, identifiers and their programs.
+	 * A student may sit in several programs (the repeating-course case), so
 	 * membership is a checkbox list, not a single pick. Identity changes are
 	 * unusual — the server rejects a reg number another person already holds.
 	 */
 	let {
 		person,
-		classes,
+		programs,
 		token,
 		open = $bindable(false),
 		onsaved
 	}: {
 		person: PersonRow | null;
-		classes: ClassRow[];
+		programs: ProgramRow[];
 		token: string;
 		open?: boolean;
 		onsaved?: () => void | Promise<void>;
@@ -32,7 +32,7 @@
 	let fullName = $state('');
 	let regNumber = $state('');
 	let studentId = $state('');
-	let pickedClassIds = $state<string[]>([]);
+	let pickedProgramIds = $state<string[]>([]);
 	let busy = $state(false);
 
 	$effect(() => {
@@ -40,14 +40,14 @@
 			fullName = person.fullName;
 			regNumber = person.regNumber;
 			studentId = person.studentId;
-			pickedClassIds = [...person.classIds];
+			pickedProgramIds = [...person.programIds];
 		}
 	});
 
-	function toggleClass(classId: string) {
-		pickedClassIds = pickedClassIds.includes(classId)
-			? pickedClassIds.filter((id) => id !== classId)
-			: [...pickedClassIds, classId];
+	function toggleProgram(programId: string) {
+		pickedProgramIds = pickedProgramIds.includes(programId)
+			? pickedProgramIds.filter((id) => id !== programId)
+			: [...pickedProgramIds, programId];
 	}
 
 	async function save(e: SubmitEvent) {
@@ -62,7 +62,7 @@
 				fullName: fullName.trim(),
 				regNumber: regNumber.trim(),
 				studentId: studentId.trim(),
-				classIds: pickedClassIds as never[]
+				programIds: pickedProgramIds as never[]
 			});
 			open = false;
 			await onsaved?.();
@@ -79,8 +79,8 @@
 		<Dialog.Header>
 			<Dialog.Title>Edit {person?.fullName ?? 'student'}</Dialog.Title>
 			<Dialog.Description>
-				Fix a typo, or tick every class the student sits in — for example their own class plus a
-				junior class for a subject they are repeating.
+				Fix a typo, or tick every program the student sits in — for example their own program plus
+				another one for a course they are repeating.
 			</Dialog.Description>
 		</Dialog.Header>
 		<form class="flex flex-col gap-3" onsubmit={save}>
@@ -99,17 +99,17 @@
 				</div>
 			</div>
 			<fieldset class="flex flex-col gap-1">
-				<legend class="text-sm font-medium">Classes</legend>
-				{#if classes.length === 0}
-					<p class="text-sm text-muted-foreground">No classes exist yet.</p>
+				<legend class="text-sm font-medium">Programs</legend>
+				{#if programs.length === 0}
+					<p class="text-sm text-muted-foreground">No programs exist yet.</p>
 				{:else}
 					<div class="flex flex-col gap-1 rounded-md border border-border p-2">
-						{#each classes as c (c._id)}
+						{#each programs as c (c._id)}
 							<div class="flex items-center gap-2">
 								<Checkbox
 									id={`cls-${c._id}`}
-									checked={pickedClassIds.includes(c._id)}
-									onCheckedChange={() => toggleClass(c._id)}
+									checked={pickedProgramIds.includes(c._id)}
+									onCheckedChange={() => toggleProgram(c._id)}
 								/>
 								<Label for={`cls-${c._id}`} class="font-normal">{c.name}</Label>
 							</div>

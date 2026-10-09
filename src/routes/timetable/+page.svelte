@@ -50,7 +50,7 @@
 	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My timetable</h1>
-		<p class="text-sm text-muted-foreground">The classes you are enrolled in, and when they meet.</p>
+			<p class="text-sm text-muted-foreground">The courses you are enrolled in, and when they meet.</p>
 	</div>
 
 	{#if loading}
@@ -65,9 +65,9 @@
 				<CalendarDays class="size-9 text-muted-foreground/60" aria-hidden="true" />
 				<p class="text-sm font-medium">Your timetable is empty.</p>
 				<p class="max-w-md text-sm text-muted-foreground">
-					You have not joined any subjects yet. Once you do, your lectures will show up here.
+					You have not joined any courses yet. Once you do, your lectures will show up here.
 				</p>
-				<Button href="/courses">Join a subject</Button>
+				<Button href="/courses">Join a course</Button>
 			</Card.Content>
 		</Card.Root>
 	{:else}
@@ -83,8 +83,8 @@
 								<li class="rounded-md border border-border p-3">
 									<div class="flex items-start justify-between gap-2">
 										<div>
-											<p class="text-sm font-semibold">{item.subjectCode}</p>
-											<p class="text-xs text-muted-foreground">{item.subjectTitle}</p>
+											<p class="text-sm font-semibold">{item.courseCode}</p>
+											<p class="text-xs text-muted-foreground">{item.courseTitle}</p>
 										</div>
 										<span class="shrink-0 text-xs font-medium text-lams-navy">
 											{item.startTime}–{item.endTime}
@@ -120,7 +120,7 @@
 						<Table.Header>
 							<Table.Row>
 								<Table.Head>Date</Table.Head>
-								<Table.Head>Subject</Table.Head>
+									<Table.Head>Course</Table.Head>
 								<Table.Head>Time</Table.Head>
 								<Table.Head>Room</Table.Head>
 							</Table.Row>
@@ -130,8 +130,8 @@
 								<Table.Row>
 									<Table.Cell class="text-xs">{m.date}</Table.Cell>
 									<Table.Cell class="text-xs">
-										<strong>{m.subjectCode}</strong>
-										<span class="block text-muted-foreground">{m.subjectTitle}</span>
+										<strong>{m.courseCode}</strong>
+										<span class="block text-muted-foreground">{m.courseTitle}</span>
 									</Table.Cell>
 									<Table.Cell class="text-xs">{m.startTime}–{m.endTime}</Table.Cell>
 									<Table.Cell class="text-xs">{m.room || '—'}</Table.Cell>
@@ -145,6 +145,6 @@
 		{/if}
 
 		<div class="flex justify-center">
-			<Button variant="outline" href="/courses">Change my subjects</Button>
+			<Button variant="outline" href="/courses">Change my courses</Button>
 		</div>
 	{/if}

@@ -56,16 +56,16 @@
 			} | null;
 			if (!me || me.kind !== 'staff') {
 				if (!me) endSession();
-				else toast.error('Only lecturers start lectures here. Class reps use “Take attendance”.');
+				else toast.error('Only lecturers start lectures here. Program reps use “Take attendance”.');
 				return;
 			}
 			if (me.role !== 'lecturer' && me.role !== 'admin') {
-				toast.error('Only lecturers start lectures here. Class reps use “Take attendance”.');
+				toast.error('Only lecturers start lectures here. Program reps use “Take attendance”.');
 				return;
 			}
 			// Scoped server-side: lecturers get only their assigned offerings,
-			// admins get everything. No class picker needed — each offering
-			// already carries its class.
+			// admins get everything. No program picker needed — each offering
+			// already carries its program.
 			offerings = (await client.query(api.academics.listOfferings, { token })) as unknown as Offering[];
 			if (!offeringId || !offerings.some((o) => o._id === offeringId)) {
 				offeringId = offerings[0]?._id ?? '';
@@ -157,7 +157,7 @@
 		<Card.Header>
 			<Card.Title>Start a lecture</Card.Title>
 			<Card.Description>
-				Pick one of your assigned subjects, share your location, and start. The lecture closes itself.
+				Pick one of your assigned courses, share your location, and start. The lecture closes itself.
 			</Card.Description>
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-4">
@@ -165,23 +165,23 @@
 				<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 			{:else if offerings.length === 0}
 				<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-					No subjects assigned to you yet. Ask the admin to assign your subjects in the admin console.
+					No courses assigned to you yet. Ask the admin to assign your subjects in the admin console.
 				</p>
 			{:else}
 				<div class="flex flex-col gap-1.5">
-					<Label for="off">Subject</Label>
+					<Label for="off">Course</Label>
 					<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
 						<Select.Trigger id="off" class="w-full">
-							<Select.Value placeholder="Choose a subject" />
+							<Select.Value placeholder="Choose a course" />
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
 								{#each offerings as o (o._id)}
 									<Select.Item
 										value={o._id}
-										label={`${o.subjectCode} — ${o.subjectTitle} · ${o.className}`}
+										label={`${o.courseCode} — ${o.courseTitle} · ${o.programName}`}
 									>
-										{o.subjectCode} — {o.subjectTitle} · {o.className}
+										{o.courseCode} — {o.courseTitle} · {o.programName}
 									</Select.Item>
 								{/each}
 							</Select.Group>
@@ -189,7 +189,7 @@
 					</Select.Root>
 					{#if selected}
 						<p class="text-xs text-muted-foreground">
-							{selected.className} · {selected.semesterName} · {selected.studentCount} student(s) enrolled
+							{selected.programName} · {selected.semesterName} · {selected.studentCount} student(s) enrolled
 						</p>
 					{/if}
 				</div>
@@ -284,8 +284,8 @@
 				{#each openSessions as s (s._id)}
 					<div class="flex flex-wrap items-center justify-between gap-2 text-sm">
 						<span>
-							<strong>{s.subjectCode}</strong> — {s.subjectTitle}
-							<span class="text-xs text-muted-foreground">· {s.className}</span>
+							<strong>{s.courseCode}</strong> — {s.courseTitle}
+							<span class="text-xs text-muted-foreground">· {s.programName}</span>
 							{#if (s.flaggedCount ?? 0) > 0 || (s.disputedCount ?? 0) > 0}
 								<span class="text-xs font-medium text-amber-700">
 									· needs review{#if (s.disputedCount ?? 0) > 0} ({s.disputedCount} disputed){/if}{#if (s.flaggedCount ?? 0) > 0} ({s.flaggedCount} flagged){/if}
@@ -315,9 +315,9 @@
 					{#each sessions.slice(0, 15) as s (s._id)}
 						<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
 							<span>
-								<strong>{s.subjectCode}</strong>
+								<strong>{s.courseCode}</strong>
 								<span class="text-muted-foreground">
-									· {s.className} · {new Date(s.startedAt).toLocaleString()}
+									· {s.programName} · {new Date(s.startedAt).toLocaleString()}
 								</span>
 							</span>
 							<span class="flex items-center gap-2">

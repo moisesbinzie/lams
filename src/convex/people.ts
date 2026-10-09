@@ -7,7 +7,7 @@ import {
 	SCHEME,
 	SESSION_TTL_MS,
 	hashPin,
-	lecturerClassIds,
+	lecturerProgramIds,
 	logAudit,
 	randomSalt,
 	requireAdmin,
@@ -24,47 +24,47 @@ function isPinFormat(pin: string): boolean {
 	return /^\d{4,8}$/.test(pin.trim());
 }
 
-// ---------------------------------------------------------- class membership
+// ---------------------------------------------------------- program membership
 //
-// A student can belong to several classes (the repeating-subject case), so
-// membership lives in the `classMembers` join table rather than a single
+// A student can belong to several programs (the repeating-subject case), so
+// membership lives in the `programMembers` join table rather than a single
 // column on the person.
 
-/** All class ids a person belongs to. */
-async function memberClassIds(ctx: any, personId: unknown): Promise<string[]> {
+/** All program ids a person belongs to. */
+async function memberProgramIds(ctx: any, personId: unknown): Promise<string[]> {
 	const rows = await ctx.db
-		.query('classMembers')
+		.query('programMembers')
 		.withIndex('by_person', (q: any) => q.eq('personId', personId))
 		.take(100);
-	return rows.map((r: any) => String(r.classId));
+	return rows.map((r: any) => String(r.programId));
 }
 
-async function hasMembership(ctx: any, personId: unknown, classId: unknown): Promise<boolean> {
+async function hasMembership(ctx: any, personId: unknown, programId: unknown): Promise<boolean> {
 	const rows = await ctx.db
-		.query('classMembers')
+		.query('programMembers')
 		.withIndex('by_person', (q: any) => q.eq('personId', personId))
 		.take(100);
-	return rows.some((r: any) => String(r.classId) === String(classId));
+	return rows.some((r: any) => String(r.programId) === String(programId));
 }
 
-async function addMembership(ctx: any, personId: unknown, classId: unknown): Promise<void> {
-	if (await hasMembership(ctx, personId, classId)) return;
-	await ctx.db.insert('classMembers', { personId, classId, createdAt: Date.now() });
+async function addMembership(ctx: any, personId: unknown, programId: unknown): Promise<void> {
+	if (await hasMembership(ctx, personId, programId)) return;
+	await ctx.db.insert('programMembers', { personId, programId, createdAt: Date.now() });
 }
 
-/** Sets the person's memberships to exactly `classIds` (diff, not wipe-and-recreate). */
-async function replaceMemberships(ctx: any, personId: unknown, classIds: string[]): Promise<void> {
+/** Sets the person's memberships to exactly `programIds` (diff, not wipe-and-recreate). */
+async function replaceMemberships(ctx: any, personId: unknown, programIds: string[]): Promise<void> {
 	const current = await ctx.db
-		.query('classMembers')
+		.query('programMembers')
 		.withIndex('by_person', (q: any) => q.eq('personId', personId))
 		.take(100);
-	const wanted = new Set(classIds.map(String));
+	const wanted = new Set(programIds.map(String));
 	for (const row of current) {
-		if (!wanted.has(String(row.classId))) await ctx.db.delete('classMembers', row._id);
+		if (!wanted.has(String(row.programId))) await ctx.db.delete('programMembers', row._id);
 	}
-	for (const classId of wanted) {
-		if (!current.some((r: any) => String(r.classId) === classId)) {
-			await ctx.db.insert('classMembers', { personId, classId, createdAt: Date.now() });
+	for (const programId of wanted) {
+		if (!current.some((r: any) => String(r.programId) === programId)) {
+			await ctx.db.insert('programMembers', { personId, programId, createdAt: Date.now() });
 		}
 	}
 }
@@ -80,16 +80,16 @@ export const createPerson = mutation({
 		regNumber: v.string(),
 		studentId: v.string(),
 		role: v.optional(v.union(v.literal('student'), v.literal('rep'))),
-		classId: v.optional(v.id('classes')),
+		programId: v.optional(v.id('programs')),
 		email: v.optional(v.string()),
 		phone: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
-		if (actor.kind === 'staff' && !actor.isAdmin && args.classId) {
-			const mine = await lecturerClassIds(ctx, actor.id);
-			if (!mine.includes(String(args.classId))) {
-				throw new Error('You can only add students to classes you teach.');
+		if (actor.kind === 'staff' && !actor.isAdmin && args.programId) {
+			const mine = await lecturerProgramIds(ctx, actor.id);
+			if (!mine.includes(String(args.programId))) {
+				throw new Error('You can only add students to programs you teach.');
 			}
 		}
 		const fullName = args.fullName.trim();
@@ -114,24 +114,24 @@ export const createPerson = mutation({
 			status: 'invited',
 			createdAt: Date.now()
 		});
-		if (args.classId) await addMembership(ctx, personId, args.classId);
+		if (args.programId) await addMembership(ctx, personId, args.programId);
 		return personId;
 	}
 });
 
-/** Adds several people at once from pasted class-list lines. */
+/** Adds several people at once from pasted program-list lines. */
 export const importPeople = mutation({
 	args: {
 		token: v.string(),
-		classId: v.id('classes'),
+		programId: v.id('programs'),
 		rows: v.array(v.object({ fullName: v.string(), regNumber: v.string(), studentId: v.string() }))
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			const mine = await lecturerClassIds(ctx, actor.id);
-			if (!mine.includes(String(args.classId))) {
-				throw new Error('You can only add students to classes you teach.');
+			const mine = await lecturerProgramIds(ctx, actor.id);
+			if (!mine.includes(String(args.programId))) {
+				throw new Error('You can only add students to programs you teach.');
 			}
 		}
 		let added = 0;
@@ -162,7 +162,7 @@ export const importPeople = mutation({
 				status: 'invited',
 				createdAt: Date.now()
 			});
-			await addMembership(ctx, personId, args.classId);
+			await addMembership(ctx, personId, args.programId);
 			added += 1;
 		}
 		return { added, skipped };
@@ -269,7 +269,7 @@ export const login = mutation({
 			return {
 				ok: false as const,
 				message:
-					'Too many wrong attempts. Please wait 15 minutes or ask your class rep to reset your PIN.'
+					'Too many wrong attempts. Please wait 15 minutes or ask your program rep to reset your PIN.'
 			};
 		}
 
@@ -295,7 +295,7 @@ export const login = mutation({
 			return {
 				ok: false as const,
 				message:
-					'This account is already set up on another phone. Ask your class rep or lecturer to move it to this one.'
+					'This account is already set up on another phone. Ask your program rep or lecturer to move it to this one.'
 			};
 		}
 
@@ -372,12 +372,12 @@ export const resetPin = mutation({
 		const actor = await requireRecorder(ctx, args.token);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			const memberships = await ctx.db
-				.query('classMembers')
+				.query('programMembers')
 				.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
 				.take(100);
-			const mine = await lecturerClassIds(ctx, actor.id);
-			if (!memberships.some((m: any) => mine.includes(String(m.classId)))) {
-				throw new Error('That student is not in a class you teach.');
+			const mine = await lecturerProgramIds(ctx, actor.id);
+			if (!memberships.some((m: any) => mine.includes(String(m.programId)))) {
+				throw new Error('That student is not in a program you teach.');
 			}
 		}
 		const person = await ctx.db.get('people', args.personId);
@@ -426,12 +426,12 @@ export const resetPin = mutation({
 				const actor = await requireRecorder(ctx, args.token);
 				if (actor.kind === 'staff' && !actor.isAdmin) {
 					const memberships = await ctx.db
-						.query('classMembers')
+						.query('programMembers')
 						.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
 						.take(100);
-					const mine = await lecturerClassIds(ctx, actor.id);
-					if (!memberships.some((m: any) => mine.includes(String(m.classId)))) {
-						throw new Error('That student is not in a class you teach.');
+					const mine = await lecturerProgramIds(ctx, actor.id);
+					if (!memberships.some((m: any) => mine.includes(String(m.programId)))) {
+						throw new Error('That student is not in a program you teach.');
 					}
 				}
 				const person = await ctx.db.get('people', args.personId);
@@ -458,7 +458,7 @@ export const resetPin = mutation({
 			}
 		});
 
-/** Admins change anyone; lecturers only people in classes they teach. */
+/** Admins change anyone; lecturers only people in programs they teach. */
 export const updatePerson = mutation({
 	args: {
 		token: v.string(),
@@ -466,28 +466,28 @@ export const updatePerson = mutation({
 		fullName: v.optional(v.string()),
 		regNumber: v.optional(v.string()),
 		studentId: v.optional(v.string()),
-		/** The person's full class membership list; replaces whatever it was. */
-		classIds: v.optional(v.array(v.id('classes'))),
+		/** The person's full program membership list; replaces whatever it was. */
+		programIds: v.optional(v.array(v.id('programs'))),
 		role: v.optional(v.union(v.literal('student'), v.literal('rep'))),
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireStaff(ctx, args.token);
 		if (!actor.isAdmin) {
 			const memberships = await ctx.db
-				.query('classMembers')
+				.query('programMembers')
 				.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
 				.take(100);
-			const mine = await lecturerClassIds(ctx, actor.id);
-			// Class-less students are the onboarding queue: any lecturer may
-			// claim them into their own classes.
+			const mine = await lecturerProgramIds(ctx, actor.id);
+			// Program-less students are the onboarding queue: any lecturer may
+			// claim them into their own programs.
 			if (memberships.length > 0) {
-				const overlap = memberships.some((m: any) => mine.includes(String(m.classId)));
-				if (!overlap) throw new Error('That student is not in a class you teach.');
+				const overlap = memberships.some((m: any) => mine.includes(String(m.programId)));
+				if (!overlap) throw new Error('That student is not in a program you teach.');
 			}
-			if (args.classIds !== undefined) {
-				const wanted = args.classIds.map(String);
+			if (args.programIds !== undefined) {
+				const wanted = args.programIds.map(String);
 				if (!wanted.every((c) => mine.includes(c))) {
-					throw new Error('You can only move students within classes you teach.');
+					throw new Error('You can only move students within programs you teach.');
 				}
 			}
 		}
@@ -512,8 +512,8 @@ export const updatePerson = mutation({
 		}
 		if (args.role) patch.role = args.role;
 		if (Object.keys(patch).length > 0) await ctx.db.patch(args.personId, patch);
-		if (args.classIds !== undefined) {
-			await replaceMemberships(ctx, args.personId, args.classIds.map(String));
+		if (args.programIds !== undefined) {
+			await replaceMemberships(ctx, args.personId, args.programIds.map(String));
 		}
 		return { ok: true };
 	}
@@ -525,12 +525,12 @@ export const setBlocked = mutation({
 		const actor = await requireStaff(ctx, args.token);
 		if (!actor.isAdmin) {
 			const memberships = await ctx.db
-				.query('classMembers')
+				.query('programMembers')
 				.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
 				.take(100);
-			const mine = await lecturerClassIds(ctx, actor.id);
-			if (!memberships.some((m: any) => mine.includes(String(m.classId)))) {
-				throw new Error('That student is not in a class you teach.');
+			const mine = await lecturerProgramIds(ctx, actor.id);
+			if (!memberships.some((m: any) => mine.includes(String(m.programId)))) {
+				throw new Error('That student is not in a program you teach.');
 			}
 		}
 		const person = await ctx.db.get('people', args.personId);
@@ -555,42 +555,42 @@ export const setBlocked = mutation({
 	}
 });
 
-/** People list — lecturers only see students in classes they teach. */
+/** People list — lecturers only see students in programs they teach. */
 export const listPeople = query({
 	args: {
 		token: v.string(),
-		classId: v.optional(v.id('classes')),
+		programId: v.optional(v.id('programs')),
 		status: v.optional(v.string()),
-		/** Students with no class at all — the onboarding queue. */
-		withoutClass: v.optional(v.boolean())
+		/** Students with no program at all — the onboarding queue. */
+		withoutProgram: v.optional(v.boolean())
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			const mine = await lecturerClassIds(ctx, actor.id);
-			if (args.classId && !mine.includes(String(args.classId))) {
-				throw new Error('That class is not assigned to you.');
+			const mine = await lecturerProgramIds(ctx, actor.id);
+			if (args.programId && !mine.includes(String(args.programId))) {
+				throw new Error('That program is not assigned to you.');
 			}
 		}
 		let rows: any[];
-		if (args.withoutClass) {
+		if (args.withoutProgram) {
 			const all = await ctx.db.query('people').take(1000);
-			const everyMembership = await ctx.db.query('classMembers').take(2000);
-			const hasClass = new Set(everyMembership.map((m: any) => String(m.personId)));
-			rows = all.filter((p: any) => !hasClass.has(String(p._id)));
-		} else if (args.classId) {
+			const everyMembership = await ctx.db.query('programMembers').take(2000);
+			const hasProgram = new Set(everyMembership.map((m: any) => String(m.personId)));
+			rows = all.filter((p: any) => !hasProgram.has(String(p._id)));
+		} else if (args.programId) {
 			const memberships = await ctx.db
-				.query('classMembers')
-				.withIndex('by_class', (q: any) => q.eq('classId', args.classId!))
+				.query('programMembers')
+				.withIndex('by_program', (q: any) => q.eq('programId', args.programId!))
 				.take(1000);
 			rows = (await Promise.all(memberships.map((m: any) => ctx.db.get('people', m.personId)))).filter(
 				Boolean
 			);
 		} else if (actor.kind === 'staff' && !actor.isAdmin) {
-			const mine = new Set(await lecturerClassIds(ctx, actor.id));
-			const memberships = await ctx.db.query('classMembers').take(2000);
+			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
+			const memberships = await ctx.db.query('programMembers').take(2000);
 			const personIds = new Set(
-				memberships.filter((m: any) => mine.has(String(m.classId))).map((m: any) => String(m.personId))
+				memberships.filter((m: any) => mine.has(String(m.programId))).map((m: any) => String(m.personId))
 			);
 			const all = await ctx.db.query('people').take(1000);
 			rows = all.filter((p: any) => personIds.has(String(p._id)));
@@ -598,10 +598,10 @@ export const listPeople = query({
 			rows = await ctx.db.query('people').take(1000);
 		}
 		const idsByPerson = new Map<string, string[]>();
-		const memberships = await ctx.db.query('classMembers').take(2000);
+		const memberships = await ctx.db.query('programMembers').take(2000);
 		for (const m of memberships) {
 			const key = String(m.personId);
-			idsByPerson.set(key, [...(idsByPerson.get(key) ?? []), String(m.classId)]);
+			idsByPerson.set(key, [...(idsByPerson.get(key) ?? []), String(m.programId)]);
 		}
 		return rows
 			.filter((p: any) => (args.status ? p.status === args.status : true))
@@ -612,7 +612,7 @@ export const listPeople = query({
 				regNumber: p.regNumber,
 				studentId: p.studentId,
 				status: p.status,
-				classIds: idsByPerson.get(String(p._id)) ?? [],
+				programIds: idsByPerson.get(String(p._id)) ?? [],
 				email: p.email ?? '',
 				phone: p.phone ?? '',
 				hasDevice: !!p.boundDeviceId,

@@ -14,17 +14,25 @@
 	import DatePicker from '$lib/components/ui/date-picker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Pencil } from '@lucide/svelte';
-	import ClassPicker from './class-picker.svelte';
-	import type { ClassRow, Semester } from '$lib/lams/types';
+	import ProgramPicker from './class-picker.svelte';
+	import type { ProgramRow, Semester } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 	import { sessionMe } from '$lib/lams/session.svelte';
 
 	let token = getToken();
 	let semesters = $state<Semester[]>([]);
-	let classes = $state<ClassRow[]>([]);
-	let classId = $state('');
+	let programs = $state<ProgramRow[]>([]);
+	let programId = $state('');
 	let loading = $state(true);
 	let busy = $state(false);
+
+	// Academic-year quick setup (admin): Semester 1 & 2 for a calendar year.
+	const thisYear = new Date().getFullYear();
+	let ayYear = $state(String(thisYear));
+	let ayS1Start = $state(`${thisYear}-01-01`);
+	let ayS1End = $state(`${thisYear}-06-30`);
+	let ayS2Start = $state(`${thisYear}-07-01`);
+	let ayS2End = $state(`${thisYear}-12-31`);
 
 	// New semester form.
 	//
@@ -37,17 +45,15 @@
 	let semStart = $state('');
 	let semEnd = $state('');
 
-	// New class form.
-	let newClassName = $state('');
-	let newClassYear = $state('1');
-	let newClassSemester = $state('');
+	// New program form.
+	let newProgramName = $state('');
+	let newProgramYears = $state('4');
 
-	// Edit-class dialog.
+	// Edit-program dialog.
 	let editOpen = $state(false);
 	let editId = $state('');
 	let editName = $state('');
-	let editYear = $state('1');
-	let editSemester = $state('');
+	let editYears = $state('4');
 
 	const me = $derived(sessionMe());
 	const isAdmin = $derived(me?.kind === 'staff' && (me.isAdmin === true || me.role === 'admin'));
@@ -57,27 +63,20 @@
 		return [y - 1, y, y + 1].map((v) => String(v));
 	});
 
-	/**
-	 * "No semester" is a real choice in both semester pickers, but bits-ui will
-	 * not take an empty string as an item value — so it travels through the menu
-	 * as a sentinel and is mapped back to the empty string the server expects.
-	 */
-	const NO_SEMESTER = 'none';
-
 	async function loadSemesters() {
 		const client = requireConvexClient();
 		semesters = (await client.query(api.academics.listSemesters, { token })) as unknown as Semester[];
 	}
 
-	async function loadClasses() {
+	async function loadPrograms() {
 		const client = requireConvexClient();
-		classes = (await client.query(api.academics.listClasses, { token })) as unknown as ClassRow[];
+		programs = (await client.query(api.academics.listPrograms, { token })) as unknown as ProgramRow[];
 	}
 
 	onMount(async () => {
 		if (!token) return;
 		try {
-			await Promise.all([loadSemesters(), loadClasses()]);
+			await Promise.all([loadSemesters(), loadPrograms()]);
 		} catch (err) {
 			reportError(err, 'Could not load the setup data.');
 		} finally {
@@ -104,9 +103,39 @@
 			await loadSemesters();
 			// The "now add X" half of these messages is a next step, not a receipt, so
 					// they are given long enough to actually read before they disappear.
-				reportSuccess('Semester created. Now add a class to it.', 7000);
+				reportSuccess('Semester created. Programs take courses per semester in the structure.', 7000);
 		} catch (err) {
 			reportError(err, 'Could not create the semester.');
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function ensureYear(e: SubmitEvent) {
+		e.preventDefault();
+		busy = true;
+		try {
+			const client = requireConvexClient();
+			const res = (await client.mutation(api.academics.ensureAcademicYear, {
+				token,
+				year: Number(ayYear),
+				sem1Start: ayS1Start,
+				sem1End: ayS1End,
+				sem2Start: ayS2Start,
+				sem2End: ayS2End
+			})) as { created: string[]; skipped: string[] };
+			await loadSemesters();
+			if (res.created.length === 0) {
+				reportSuccess('Both semesters already exist for that year — nothing to do.');
+			} else {
+				reportSuccess(
+					`${res.created.join(' and ')} created for ${ayYear}.` +
+						(res.skipped.length > 0 ? ` ${res.skipped.join(' and ')} already existed.` : ''),
+					7000
+				);
+			}
+		} catch (err) {
+			reportError(err, 'Could not create the semesters.');
 		} finally {
 			busy = false;
 		}
@@ -116,40 +145,38 @@
 		try {
 			const client = requireConvexClient();
 			await client.mutation(api.academics.removeSemester, { token, id: id as never });
-			await Promise.all([loadSemesters(), loadClasses()]);
+			await Promise.all([loadSemesters(), loadPrograms()]);
 			reportSuccess('Semester removed.');
 		} catch (err) {
-			// The server refuses while offerings or classes still use it.
+			// The server refuses while offerings still use it.
 			reportError(err, 'Could not remove the semester.');
 		}
 	}
 
-	async function createClass(e: SubmitEvent) {
+	async function createProgram(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
 		try {
 			const client = requireConvexClient();
-			await client.mutation(api.academics.createClass, {
+			await client.mutation(api.academics.createProgram, {
 				token,
-				name: newClassName.trim(),
-				yearOfStudy: Number(newClassYear),
-				...(newClassSemester ? { semesterId: newClassSemester as never } : {})
+				name: newProgramName.trim(),
+				durationYears: Number(newProgramYears)
 			});
-			newClassName = '';
-			await loadClasses();
-			reportSuccess('Class created. Add its students next.', 7000);
+			newProgramName = '';
+			await loadPrograms();
+			reportSuccess('Program created. Offer its courses per year in the structure below.', 7000);
 		} catch (err) {
-			reportError(err, 'Could not create the class.');
+			reportError(err, 'Could not create the program.');
 		} finally {
 			busy = false;
 		}
 	}
 
-	function openEdit(c: ClassRow) {
-		editId = c._id;
-		editName = c.name;
-		editYear = String(c.yearOfStudy);
-		editSemester = c.semesterId ?? '';
+	function openEdit(p: ProgramRow) {
+		editId = p._id;
+		editName = p.name;
+		editYears = String(p.durationYears);
 		editOpen = true;
 	}
 
@@ -158,33 +185,32 @@
 		busy = true;
 		try {
 			const client = requireConvexClient();
-			await client.mutation(api.academics.updateClass, {
+			await client.mutation(api.academics.updateProgram, {
 				token,
 				id: editId as never,
 				name: editName.trim(),
-				yearOfStudy: Number(editYear),
-				semesterId: (editSemester || undefined) as never
+				durationYears: Number(editYears)
 			});
 			editOpen = false;
-			await loadClasses();
-			reportSuccess('Class updated.');
+			await loadPrograms();
+			reportSuccess('Program updated.');
 		} catch (err) {
-			reportError(err, 'Could not update the class.');
+			reportError(err, 'Could not update the program.');
 		} finally {
 			busy = false;
 		}
 	}
 
-	async function removeClass() {
+	async function removeProgram() {
 		try {
 			const client = requireConvexClient();
-			await client.mutation(api.academics.removeClass, { token, id: editId as never });
+			await client.mutation(api.academics.removeProgram, { token, id: editId as never });
 			editOpen = false;
-			classId = '';
-			await loadClasses();
-			reportSuccess('Class removed.');
+			programId = '';
+			await loadPrograms();
+			reportSuccess('Program removed.');
 		} catch (err) {
-			reportError(err, 'Could not remove the class.');
+			reportError(err, 'Could not remove the program.');
 		}
 	}
 </script>
@@ -196,13 +222,42 @@
 			<div class="h-20 animate-pulse rounded-md bg-muted"></div>
 		</div>
 	{:else}
+		{#if isAdmin}
+			<Card.Root class="border-lams-navy/25">
+				<Card.Header>
+					<Card.Title>Academic year</Card.Title>
+					<Card.Description>
+						A university year holds two semesters. Create both at once — adjust the dates to your
+						calendar first.
+					</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					<form class="grid gap-2 sm:grid-cols-[1fr_1fr_1fr]" onsubmit={ensureYear}>
+						<div class="flex flex-col gap-1">
+							<Label for="ayy">Year</Label>
+							<Input id="ayy" type="number" min="2000" max="2100" bind:value={ayYear} required />
+						</div>
+						<DatePicker id="ays1s" label="Semester 1 starts" bind:value={ayS1Start} />
+						<DatePicker id="ays1e" label="Semester 1 ends" bind:value={ayS1End} />
+						<DatePicker id="ays2s" label="Semester 2 starts" bind:value={ayS2Start} />
+						<DatePicker id="ays2e" label="Semester 2 ends" bind:value={ayS2End} />
+						<div class="flex items-end sm:col-span-3">
+							<Button type="submit" disabled={busy || !ayS1Start || !ayS1End || !ayS2Start || !ayS2End}>
+								Create Semester 1 &amp; 2
+							</Button>
+						</div>
+					</form>
+				</Card.Content>
+			</Card.Root>
+		{/if}
+
 		<Card.Root>
 			<Card.Header>
 				<Card.Title>Semesters</Card.Title>
 				<Card.Description>
 					{isAdmin
-						? 'Subjects are offered per semester, so create the current one first.'
-						: 'Semesters for the classes you teach. Only the admin can create them.'}
+						? 'Courses are offered per semester, so create the current one first.'
+						: 'Semesters for the programs you teach in. Only the admin can create them.'}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
@@ -232,7 +287,7 @@
 											<AlertDialog.Header>
 												<AlertDialog.Title>Remove {s.name}?</AlertDialog.Title>
 												<AlertDialog.Description>
-													This only works while no class or subject uses the semester.
+													This only works while no program or course uses the semester.
 												</AlertDialog.Description>
 											</AlertDialog.Header>
 											<AlertDialog.Footer>
@@ -298,30 +353,27 @@
 
 		<Card.Root>
 			<Card.Header>
-				<Card.Title>Classes</Card.Title>
+				<Card.Title>Programs</Card.Title>
 				<Card.Description>
 					{isAdmin
-						? 'A class is a cohort, e.g. “BSc Computer Science”. Its year of study is set separately below. Subjects are offered to classes, and students belong to one or more of them.'
-						: 'The classes you teach. Only the admin can create or edit them.'}
+						? 'A program is a course of study, e.g. “BSc Computer Science”, running several years. Courses change every semester until the final year; students belong to one or more programs.'
+						: 'The programs you teach in. Only the admin can create or edit them.'}
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
-				<ClassPicker {classes} bind:classId emptyHint={isAdmin ? 'No classes yet — add one below.' : 'No classes assigned to you yet.'} />
+				<ProgramPicker {programs} bind:programId emptyHint={isAdmin ? 'No programs yet — add one below.' : 'No programs assigned to you yet.'} />
 
-				{#if classId}
-					{@const selected = classes.find((c) => c._id === classId)}
+				{#if programId}
+					{@const selected = programs.find((c) => c._id === programId)}
 					{#if selected}
 						<div class="flex flex-wrap items-center gap-2 rounded-md border border-border p-3 text-sm">
 							<span class="font-semibold">{selected.name}</span>
-							<Badge variant="secondary">Year {selected.yearOfStudy}</Badge>
-							{#if selected.semesterId}
-								<Badge variant="outline">{selected.semesterName}</Badge>
-							{:else}
-								<Badge class="bg-amber-600 text-white">No semester — subjects cannot be offered</Badge>
-							{/if}
+							<Badge variant="secondary">
+								{selected.durationYears} year{selected.durationYears === 1 ? '' : 's'}
+							</Badge>
 							{#if isAdmin}
 								<Button variant="outline" size="sm" class="ml-auto" onclick={() => openEdit(selected)}>
-									<Pencil class="size-3.5" /> Edit class
+									<Pencil class="size-3.5" /> Edit program
 								</Button>
 							{/if}
 						</div>
@@ -330,42 +382,18 @@
 
 				{#if isAdmin}
 					<details class="rounded-md border border-border p-3">
-					<summary class="cursor-pointer text-sm font-medium">Add a class</summary>
-					<form class="mt-3 grid gap-2 sm:grid-cols-[2fr_1fr_1.5fr_auto]" onsubmit={createClass}>
+					<summary class="cursor-pointer text-sm font-medium">Add a program</summary>
+					<form class="mt-3 grid gap-2 sm:grid-cols-[2fr_1fr_auto]" onsubmit={createProgram}>
 						<div class="flex flex-col gap-1">
-							<Label for="cn">Class name</Label>
-							<Input id="cn" bind:value={newClassName} placeholder="e.g. BSc Computer Science" required />
+							<Label for="cn">Program name</Label>
+							<Input id="cn" bind:value={newProgramName} placeholder="e.g. BSc Computer Science" required />
 						</div>
 						<div class="flex flex-col gap-1">
-							<Label for="cy">Year of study</Label>
-							<Input id="cy" type="number" min="1" max="10" bind:value={newClassYear} />
-						</div>
-						<div class="flex flex-col gap-1">
-							<Label for="cs">Semester</Label>
-							<Select.Root
-								type="single"
-								value={newClassSemester || NO_SEMESTER}
-								onValueChange={(v) => (newClassSemester = v === NO_SEMESTER ? '' : (v ?? ''))}
-							>
-								<Select.Trigger id="cs" class="w-full">
-									<Select.Value
-										placeholder={semesters.length === 0 ? 'Create a semester first' : 'No semester'}
-									/>
-								</Select.Trigger>
-								<Select.Content>
-									<Select.Group>
-										<Select.Item value={NO_SEMESTER} label="No semester">
-											{semesters.length === 0 ? 'Create a semester first' : 'No semester'}
-										</Select.Item>
-										{#each semesters as s (s._id)}
-											<Select.Item value={s._id} label={s.name}>{s.name}</Select.Item>
-										{/each}
-									</Select.Group>
-								</Select.Content>
-							</Select.Root>
+							<Label for="cy">Years</Label>
+							<Input id="cy" type="number" min="1" max="10" bind:value={newProgramYears} />
 						</div>
 						<div class="flex items-end">
-								<Button type="submit" disabled={busy}>Add class</Button>
+								<Button type="submit" disabled={busy}>Add program</Button>
 							</div>
 						</form>
 					</details>
@@ -378,56 +406,34 @@
 <Dialog.Root bind:open={editOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>Edit class</Dialog.Title>
-			<Dialog.Description>Changes apply immediately to every student in the class.</Dialog.Description>
+			<Dialog.Title>Edit program</Dialog.Title>
+			<Dialog.Description>Changes apply immediately to every student in the program.</Dialog.Description>
 		</Dialog.Header>
 		<form class="flex flex-col gap-3" onsubmit={saveEdit}>
 			<div class="flex flex-col gap-1">
-				<Label for="ecn">Class name</Label>
+				<Label for="ecn">Program name</Label>
 				<Input id="ecn" bind:value={editName} required />
 			</div>
-			<div class="grid grid-cols-2 gap-2">
-				<div class="flex flex-col gap-1">
-					<Label for="ecy">Year of study</Label>
-					<Input id="ecy" type="number" min="1" max="10" bind:value={editYear} />
-				</div>
-				<div class="flex flex-col gap-1">
-					<Label for="ecs">Semester</Label>
-					<Select.Root
-						type="single"
-						value={editSemester || NO_SEMESTER}
-						onValueChange={(v) => (editSemester = v === NO_SEMESTER ? '' : (v ?? ''))}
-					>
-						<Select.Trigger id="ecs" class="w-full">
-							<Select.Value placeholder="No semester" />
-						</Select.Trigger>
-						<Select.Content>
-								<Select.Group>
-										<Select.Item value={NO_SEMESTER} label="No semester">No semester</Select.Item>
-										{#each semesters as s (s._id)}
-											<Select.Item value={s._id} label={s.name}>{s.name}</Select.Item>
-										{/each}
-									</Select.Group>
-						</Select.Content>
-					</Select.Root>
-				</div>
+			<div class="flex flex-col gap-1">
+				<Label for="ecy">Years</Label>
+				<Input id="ecy" type="number" min="1" max="10" bind:value={editYears} />
 			</div>
 			<div class="mt-2 flex items-center justify-between gap-2">
 				<AlertDialog.Root>
 					<AlertDialog.Trigger class="text-sm text-red-700 underline" type="button">
-						Remove class
+						Remove program
 					</AlertDialog.Trigger>
 					<AlertDialog.Content>
 						<AlertDialog.Header>
-							<AlertDialog.Title>Remove this class?</AlertDialog.Title>
+							<AlertDialog.Title>Remove this program?</AlertDialog.Title>
 							<AlertDialog.Description>
-								This only works while the class still has subjects. Students are kept and can be moved to
-								another class.
+								This only works while the program still has courses. Students are kept and can be moved to
+								another program.
 							</AlertDialog.Description>
 						</AlertDialog.Header>
 						<AlertDialog.Footer>
 							<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-							<AlertDialog.Action onclick={removeClass}>Remove</AlertDialog.Action>
+							<AlertDialog.Action onclick={removeProgram}>Remove</AlertDialog.Action>
 						</AlertDialog.Footer>
 					</AlertDialog.Content>
 				</AlertDialog.Root>

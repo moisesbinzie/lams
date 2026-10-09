@@ -147,7 +147,7 @@
 				<Card.Header>
 					<Card.Title>Lecturer accounts</Card.Title>
 					<Card.Description>
-						Lecturer accounts now live in the admin console, where you can create accounts and assign subjects.
+						Lecturer accounts now live in the admin console, where you can create accounts and assign courses.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
@@ -157,20 +157,20 @@
 		{:else}
 			<Card.Root>
 				<Card.Header>
-					<Card.Title>My subjects ({offerings.length})</Card.Title>
+					<Card.Title>My courses ({offerings.length})</Card.Title>
 					<Card.Description>
-						Subjects assigned to you by the admin. If one is missing, ask the admin to assign it.
+						Courses assigned to you by the admin. If one is missing, ask the admin to assign it.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
 					{#if offerings.length === 0}
-						<p class="text-sm text-muted-foreground">No subjects assigned yet.</p>
+						<p class="text-sm text-muted-foreground">No courses assigned yet.</p>
 					{:else}
 						<ul class="flex flex-col divide-y divide-border">
 							{#each offerings as o (o._id)}
 								<li class="py-2 text-sm">
-									<strong>{o.subjectCode}</strong> — {o.subjectTitle}
-									<span class="text-xs text-muted-foreground">· {o.className} · {o.semesterName}</span>
+									<strong>{o.courseCode}</strong> — {o.courseTitle}
+									<span class="text-xs text-muted-foreground">· {o.programName} · {o.semesterName}</span>
 								</li>
 							{/each}
 						</ul>

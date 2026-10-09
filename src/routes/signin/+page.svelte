@@ -17,8 +17,8 @@
 	/**
 	 * Three audiences, three doors. Admins and lecturers both use a username
 	 * and password, but they land in different consoles: admins manage
-	 * accounts and assignments, lecturers see only their own subjects.
-	 * Students and class reps use a registration number and a PIN they chose.
+	 * accounts and assignments, lecturers see only their own courses.
+	 * Students and program reps use a registration number and a PIN they chose.
 	 * Keeping staff and student doors apart means a student who guesses a
 	 * registration number cannot reach a staff account, and vice versa.
 	 */
@@ -221,10 +221,10 @@
 			{#if mode === 'staff'}
 				For lecturers. Use the username and temporary password the admin gave you.
 			{:else if mode === 'admin'}
-				For administrators. Manage lecturer accounts and subject assignments. First run? Use
+				For administrators. Manage lecturer accounts and course assignments. First run? Use
 				<code class="rounded bg-muted px-1 font-mono">admin / admin</code>, then change the password in Settings.
 			{:else if mode === 'activate'}
-				Your class rep or lecturer has already added you. Confirm your details and choose a PIN.
+				Your program rep or lecturer has already added you. Confirm your details and choose a PIN.
 			{:else if mode === 'person'}
 				Use your registration number and PIN.
 			{:else}
@@ -258,7 +258,7 @@
 					</span>
 					<div class="flex-1">
 						<p class="font-semibold">I am an admin</p>
-						<p class="text-sm text-muted-foreground">Create lecturers, reset passwords, assign subjects.</p>
+						<p class="text-sm text-muted-foreground">Create lecturers, reset passwords, assign courses.</p>
 					</div>
 					<Button onclick={() => { mode = 'admin'; resetMessages(); }}>Continue</Button>
 				</Card.Content>
@@ -271,7 +271,7 @@
 					</span>
 					<div class="flex-1">
 						<p class="font-semibold">I am a lecturer</p>
-						<p class="text-sm text-muted-foreground">Take attendance for my assigned subjects.</p>
+						<p class="text-sm text-muted-foreground">Take attendance for my assigned courses.</p>
 					</div>
 					<Button variant="secondary" onclick={() => { mode = 'staff'; resetMessages(); }}>Continue</Button>
 				</Card.Content>
@@ -283,7 +283,7 @@
 						<UserRound class="size-6" aria-hidden="true" />
 					</span>
 					<div class="flex-1">
-						<p class="font-semibold">I am a student or class rep</p>
+						<p class="font-semibold">I am a student or program rep</p>
 						<p class="text-sm text-muted-foreground">Show your code and check your attendance.</p>
 					</div>
 					<Button variant="secondary" onclick={() => { mode = 'person'; resetMessages(); }}>
@@ -365,7 +365,7 @@
 							<Label for="apin">Choose a PIN</Label>
 							<Input id="apin" type="password" inputmode="numeric" bind:value={pin} placeholder="4 to 8 digits" required />
 							<p class="text-xs text-muted-foreground">
-								Use a PIN you will remember. If you forget it, your class rep or lecturer can reset it.
+								Use a PIN you will remember. If you forget it, your program rep or lecturer can reset it.
 							</p>
 						</div>
 						<div class="flex flex-col gap-1.5">

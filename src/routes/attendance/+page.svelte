@@ -54,8 +54,8 @@
 			const q = search.trim().toLowerCase();
 			if (!q) return true;
 			return (
-				r.subjectCode.toLowerCase().includes(q) ||
-				r.subjectTitle.toLowerCase().includes(q) ||
+				r.courseCode.toLowerCase().includes(q) ||
+				r.courseTitle.toLowerCase().includes(q) ||
 				r.isoDate.includes(q)
 			);
 		})
@@ -105,8 +105,8 @@
 
 	function exportCsv() {
 		const csv = toCsv(
-			['Date', 'Subject', 'Subject name', 'Status', 'How it was recorded', 'Recorded by'],
-			visible.map((r) => [r.isoDate, r.subjectCode, r.subjectTitle, r.status, r.method, r.recordedBy ?? ''])
+				['Date', 'Course', 'Course name', 'Status', 'How it was recorded', 'Recorded by'],
+			visible.map((r) => [r.isoDate, r.courseCode, r.courseTitle, r.status, r.method, r.recordedBy ?? ''])
 		);
 		downloadTextFile(`my-attendance-${Date.now()}.csv`, csv);
 	}
@@ -201,7 +201,7 @@
 					<Input
 						class="max-w-xs flex-1"
 						bind:value={search}
-						placeholder="Search a subject or date"
+							placeholder="Search a course or date"
 						aria-label="Search"
 					/>
 					<Select.Root
@@ -260,7 +260,7 @@
 					<Table.Header>
 						<Table.Row>
 							<Table.Head>Date</Table.Head>
-							<Table.Head>Subject</Table.Head>
+							<Table.Head>Course</Table.Head>
 							<Table.Head>Status</Table.Head>
 							<Table.Head>Recorded by</Table.Head>
 							<Table.Head></Table.Head>
@@ -271,8 +271,8 @@
 							<Table.Row>
 								<Table.Cell class="text-xs">{r.isoDate}</Table.Cell>
 								<Table.Cell class="text-xs">
-									<strong>{r.subjectCode}</strong>
-									<span class="block text-muted-foreground">{r.subjectTitle}</span>
+									<strong>{r.courseCode}</strong>
+									<span class="block text-muted-foreground">{r.courseTitle}</span>
 								</Table.Cell>
 								<Table.Cell><StatusBadge status={r.status} /></Table.Cell>
 								<Table.Cell class="text-xs">{r.recordedBy ?? 'Nobody'}</Table.Cell>

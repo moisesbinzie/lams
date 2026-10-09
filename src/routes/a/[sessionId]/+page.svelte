@@ -271,13 +271,13 @@
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">
 			{#if preview}
-				{preview.subjectCode} — {preview.subjectTitle}
+				{preview.courseCode} — {preview.courseTitle}
 			{:else}
 				Attendance
 			{/if}
 		</h1>
 		{#if preview}
-			<p class="text-sm text-muted-foreground">{preview.className}</p>
+			<p class="text-sm text-muted-foreground">{preview.programName}</p>
 		{/if}
 	</div>
 
@@ -306,19 +306,19 @@
 		<Card.Root class="border-amber-300 bg-amber-50">
 			<Card.Content class="flex flex-col items-center gap-3 pt-8 pb-8 text-center">
 				<TriangleAlert class="size-10 text-amber-600" aria-hidden="true" />
-				<p class="text-lg font-semibold text-amber-900">Add this subject first</p>
+				<p class="text-lg font-semibold text-amber-900">Add this course first</p>
 				<p class="text-sm text-amber-900">
 					Nothing was recorded, because you are not taking
-					<strong>{preview ? `${preview.subjectCode} — ${preview.subjectTitle}` : 'this subject'}</strong
-					>. Add it to your subjects, then scan the screen again.
+					<strong>{preview ? `${preview.courseCode} — ${preview.courseTitle}` : 'this course'}</strong
+					>. Add it to your courses, then scan the screen again.
 				</p>
 				<div class="mt-1 flex flex-wrap justify-center gap-3">
-					<Button href="/courses">Add this subject</Button>
+					<Button href="/courses">Add this course</Button>
 					<Button variant="outline" href="/home">Not now</Button>
 				</div>
 				<p class="text-xs text-amber-900">
-					If it should already be there, or you are repeating this subject with another class, ask your
-					class rep or lecturer to add you.
+					If it should already be there, or you are repeating this course with another program, ask your
+					program rep or lecturer to add you.
 				</p>
 			</Card.Content>
 		</Card.Root>
@@ -455,7 +455,7 @@
 
 	{#if preview && !closed && stage !== 'done'}
 		<p class="text-center text-xs text-muted-foreground" aria-live="polite">
-			{preview.subjectCode} closes in {Math.ceil(expiresIn / 1000)}s
+			{preview.courseCode} closes in {Math.ceil(expiresIn / 1000)}s
 		</p>
 		{/if}
 	</div>

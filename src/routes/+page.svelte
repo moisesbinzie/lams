@@ -26,12 +26,12 @@
 		{
 			icon: ClipboardCheck,
 			title: '1 · Your lecturer adds you',
-			body: 'Your class rep or lecturer adds every student to their class. Nobody can add themselves, so only real students appear on the list.'
+			body: 'Your program rep or lecturer adds every student to their program. Nobody can add themselves, so only real students appear on the list.'
 		},
 		{
 			icon: BookOpen,
-			title: '2 · You pick your subjects',
-			body: 'Sign in and choose the subjects you are taking. Your lecturer opens each one, and your timetable builds itself.'
+			title: '2 · You pick your courses',
+			body: 'Sign in and choose the courses you are taking. Your lecturer opens each one, and your timetable builds itself.'
 		},
 		{
 			icon: ScanLine,
@@ -72,10 +72,10 @@
 		},
 		{
 			icon: UsersRound,
-			title: 'Class representatives',
+			title: 'Program representatives',
 			tone: 'text-lams-green',
 			lines: [
-				'Add students to your class and assign subjects.',
+				'Add students to your program and assign courses.',
 				'Put the station QR on your screen at the front of the hall.',
 				'Add anyone without a working phone by hand — under your name.'
 			]
@@ -85,8 +85,8 @@
 			title: 'Lecturers',
 			tone: 'text-lams-navy',
 			lines: [
-				'Set up subjects, classes and timetables.',
-				'Open enrolment and choose class reps.',
+				'Set up courses, programs and timetables.',
+				'Open enrolment and choose program reps.',
 				'Correct, excuse or remove any record.'
 			]
 		},
@@ -134,7 +134,7 @@
 							? ` as ${viewer.fullName}`
 							: ''}. Use the navigation above to continue.
 				{:else}
-					New here? Ask your class representative or lecturer to add you, then set your PIN.
+					New here? Ask your program representative or lecturer to add you, then set your PIN.
 				{/if}
 			</p>
 		</div>
@@ -205,10 +205,10 @@
 		<Card.Root>
 			<Card.Header>
 				<Card.Title class="flex items-center gap-2">
-					<CalendarDays class="size-5 text-lams-green" /> Timetables and subjects
+					<CalendarDays class="size-5 text-lams-green" /> Timetables and courses
 				</Card.Title>
 				<Card.Description>
-					Subjects are saved once and reused. Lecturers build the weekly timetable, and everybody sees their
+					Courses are saved once and reused. Lecturers build the weekly timetable, and everybody sees their
 					own.
 				</Card.Description>
 			</Card.Header>
@@ -216,11 +216,11 @@
 				<ul class="flex flex-col gap-1.5">
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
-						<span>Subjects sit in a catalogue, so they are only entered once.</span>
+						<span>Courses sit in a catalogue, so they are only entered once.</span>
 					</li>
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
-						<span>A class is offered a subject in a given semester, with its own weekly meeting times.</span>
+						<span>A program year is offered a course in a given semester, with its own weekly meeting times.</span>
 					</li>
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
@@ -281,7 +281,7 @@
 					<li class="flex gap-2">
 						<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
 						<span
-							>Only a class rep or lecturer can add a student, so nobody can put themselves into a class
+							>Only a program rep or lecturer can add a student, so nobody can put themselves into a program
 							they do not belong to.</span
 						>
 					</li>
@@ -331,8 +331,8 @@
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-3">
 				<p class="text-sm text-muted-foreground">
-					Set up subjects, classes and semesters, decide who can enrol, build the weekly timetable, choose
-					class reps, start lectures and change any record afterwards.
+					Set up courses, programs and semesters, decide who can enrol, build the weekly timetable, choose
+					program reps, start lectures and change any record afterwards.
 				</p>
 				{#if isAuthed}
 					<Button variant="outline" size="sm" href={isStaff ? '/manage' : '/home'}>

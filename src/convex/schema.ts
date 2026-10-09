@@ -1,14 +1,20 @@
 // LAMS schema.
 //
 // Vocabulary:
-//   Person   — one human: student, class rep or lecturer.
-//   Semester — the period a cohort studies in (was "term").
-//   Subject  — a course in the catalogue, e.g. BIT 221.
-//   Class    — a cohort, e.g. "BSc Computer Science, Year 2".
-//   Meeting  — when a subject actually meets: a weekly slot or a one-off makeup.
-//   Session  — the live 5-minute attendance window opened during a meeting.
-//   SubjectRep — REMOVED: rep rights are per class now (see ClassRep).
-//   ClassRep — grants a person attendance rights over everything their class takes.
+//   Person     — one human: student, program rep or lecturer.
+//   Semester   — one half of a university year (Semester 1 or 2).
+//   Course     — an entry in the catalogue, e.g. BIT 221. May be taught in
+//                several programs and semesters.
+//   Program    — a course of study, e.g. "BSc Computer Science", running
+//                `durationYears` years. Its courses change every semester
+//                until the final year.
+//   Year       — one year of a program (1..durationYears). Not a table: an
+//                offering names the program year it is taught in.
+//   Offering   — a course taught to one program year in one semester.
+//   Meeting    — when a course actually meets: a weekly slot or a one-off makeup.
+//   Session    — the live attendance window opened during a meeting.
+//   ProgramRep — grants a person attendance rights over everything their
+//                program takes.
 
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -155,6 +161,54 @@ export default defineSchema({
 	})
 		.index('by_year', ['year']),
 
+	/**
+	 * A program of study, e.g. "BSc Computer Science". Courses change every
+	 * semester across `durationYears` years until the final year.
+	 */
+	programs: defineTable({
+		name: v.string(),
+		/** How many years the program runs, e.g. 4. */
+		durationYears: v.number(),
+		createdAt: v.number()
+	}).index('by_name', ['name']),
+
+	/** The course catalogue. Independent of any semester or program. */
+	courses: defineTable({
+		code: v.string(),
+		title: v.string(),
+		/** Optional: opening this to self-enrolment is a lecturer decision. */
+		openForEnrolment: v.boolean(),
+		/** Lecture hours per week, shown to students when choosing. */
+		hoursPerWeek: v.optional(v.number()),
+		createdAt: v.number()
+	}).index('by_code', ['code']),
+
+	/**
+	 * Program membership. A student can belong to several programs — e.g. a
+	 * repeating student retakes a first-year course while in third year.
+	 * Attendance never reads this directly; it follows enrolments.
+	 */
+	programMembers: defineTable({
+		personId: v.id('people'),
+		programId: v.id('programs'),
+		createdAt: v.number()
+	})
+		.index('by_person', ['personId'])
+		.index('by_program', ['programId']),
+
+	/**
+	 * Program-rep rights. A rep of a program can take attendance for anything
+	 * that program is taking. Several people may represent one program.
+	 */
+	programReps: defineTable({
+		personId: v.id('people'),
+		programId: v.id('programs'),
+		createdAt: v.number()
+	})
+		.index('by_person', ['personId'])
+		.index('by_program', ['programId']),
+
+	/** Deprecated: migrated to `programs` (see `migrations.migrateToProgramsAndCourses`). */
 	classes: defineTable({
 		name: v.string(),
 		/** Year of study within the programme, e.g. 1–4. */
@@ -163,29 +217,25 @@ export default defineSchema({
 		createdAt: v.number()
 	}).index('by_semester', ['semesterId']),
 
-	/** The course catalogue. Independent of any semester or cohort. */
+	/** Deprecated: migrated to `courses` (see `migrations.migrateToProgramsAndCourses`). */
 	subjects: defineTable({
 		code: v.string(),
 		title: v.string(),
-		/**
-		 * Deprecated: nothing reads or writes this. Who teaches a subject is
-		 * decided per offering (`offerings.lecturerId`), set by the admin.
-		 * Kept in the schema only until existing rows are backfilled (see
-		 * `migrations.backfillSubjectsDropLecturer`), then it goes away.
-		 */
 		lecturerId: v.optional(v.id('staff')),
-		/** Optional: opening this to self-enrolment is a lecturer decision. */
 		openForEnrolment: v.boolean(),
-		/** Lecture hours per week, shown to students when choosing. */
 		hoursPerWeek: v.optional(v.number()),
 		createdAt: v.number()
 	}).index('by_code', ['code']),
 
-	/** A subject offered to a specific cohort in a specific semester. */
+	/** A course offered to one program year in one semester. */
 	offerings: defineTable({
-		subjectId: v.id('subjects'),
-		classId: v.id('classes'),
+		subjectId: v.optional(v.id('subjects')),
+		classId: v.optional(v.id('classes')),
+		courseId: v.optional(v.id('courses')),
+		programId: v.optional(v.id('programs')),
 		semesterId: v.id('semesters'),
+		/** Which year of the program this offering is taught in (1..durationYears). */
+		yearOfStudy: v.optional(v.number()),
 		/** The lecturer teaching this offering. One offering has one lecturer; a lecturer may teach many. */
 		lecturerId: v.optional(v.id('staff')),
 		openForEnrolment: v.boolean(),
@@ -193,17 +243,22 @@ export default defineSchema({
 	})
 		.index('by_subject', ['subjectId'])
 		.index('by_class', ['classId'])
+		.index('by_course', ['courseId'])
+		.index('by_program', ['programId'])
 		.index('by_semester', ['semesterId'])
 		.index('by_lecturer', ['lecturerId'])
-		.index('by_class_and_semester', ['classId', 'semesterId']),
+		.index('by_class_and_semester', ['classId', 'semesterId'])
+		.index('by_program_and_semester', ['programId', 'semesterId']),
 
 	/** A person's place in one offering. The many-to-many heart of the system. */
 	enrolments: defineTable({
 		personId: v.id('people'),
-		subjectId: v.id('subjects'),
+		subjectId: v.optional(v.id('subjects')),
 		offeringId: v.id('offerings'),
 		semesterId: v.id('semesters'),
-		classId: v.id('classes'),
+		classId: v.optional(v.id('classes')),
+		courseId: v.optional(v.id('courses')),
+		programId: v.optional(v.id('programs')),
 		status: v.union(v.literal('active'), v.literal('dropped')),
 		/** 'self' chose it themselves; 'rep' or 'lecturer' assigned it. */
 		addedBy: v.union(v.literal('self'), v.literal('rep'), v.literal('lecturer')),
@@ -213,14 +268,11 @@ export default defineSchema({
 		.index('by_person_and_status', ['personId', 'status'])
 		.index('by_offering', ['offeringId'])
 		.index('by_subject', ['subjectId'])
-		.index('by_class', ['classId']),
+		.index('by_class', ['classId'])
+		.index('by_course', ['courseId'])
+		.index('by_program', ['programId']),
 
-	/**
-	 * Class membership. A student can belong to several classes — e.g. a
-	 * repeating student sits in a junior class for one subject while their
-	 * cohort moves on. Attendance never reads this directly; it follows
-	 * enrolments, which may come from any of the person's classes.
-	 */
+	/** Deprecated: migrated to `programMembers` (see `migrations.migrateToProgramsAndCourses`). */
 	classMembers: defineTable({
 		personId: v.id('people'),
 		classId: v.id('classes'),
@@ -229,10 +281,7 @@ export default defineSchema({
 		.index('by_person', ['personId'])
 		.index('by_class', ['classId']),
 
-	/**
-	 * Class-rep rights. A rep of a class can take attendance for any subject
-	 * that class is taking. Several reps may share one class.
-	 */
+	/** Deprecated: migrated to `programReps` (see `migrations.migrateToProgramsAndCourses`). */
 	classReps: defineTable({
 		personId: v.id('people'),
 		classId: v.id('classes'),
@@ -242,12 +291,13 @@ export default defineSchema({
 		.index('by_class', ['classId']),
 
 	/**
-	 * When a subject meets. `kind: 'weekly'` repeats on `dayOfWeek` at
+	 * When a course meets. `kind: 'weekly'` repeats on `dayOfWeek` at
 	 * `startTime`; `kind: 'makeup'` happens once on `date` (a make-up lecture).
 	 */
 	meetings: defineTable({
 		offeringId: v.id('offerings'),
-		subjectId: v.id('subjects'),
+		subjectId: v.optional(v.id('subjects')),
+		courseId: v.optional(v.id('courses')),
 		kind: v.union(v.literal('weekly'), v.literal('makeup')),
 		/** 0 = Sunday … 6 = Saturday, for weekly meetings. */
 		dayOfWeek: v.optional(v.number()),
@@ -267,9 +317,11 @@ export default defineSchema({
 	sessions: defineTable({
 		meetingId: v.optional(v.id('meetings')),
 		offeringId: v.id('offerings'),
-		subjectId: v.id('subjects'),
+		subjectId: v.optional(v.id('subjects')),
 		semesterId: v.id('semesters'),
-		classId: v.id('classes'),
+		classId: v.optional(v.id('classes')),
+		courseId: v.optional(v.id('courses')),
+		programId: v.optional(v.id('programs')),
 		/**
 		 * Where the QR station physically stands. Kept separate from the lecture
 		 * position so the two radii can differ — the screen may sit at a doorway
@@ -356,14 +408,16 @@ export default defineSchema({
 		.index('by_offering', ['offeringId'])
 		.index('by_status', ['status'])
 		.index('by_subject', ['subjectId'])
+		.index('by_course', ['courseId'])
 		.index('by_semester', ['semesterId']),
 
 	attendance: defineTable({
 		sessionId: v.id('sessions'),
 		personId: v.optional(v.id('people')),
 		offeringId: v.id('offerings'),
-		subjectId: v.id('subjects'),
+		subjectId: v.optional(v.id('subjects')),
 		semesterId: v.id('semesters'),
+		courseId: v.optional(v.id('courses')),
 		fullName: v.string(),
 		regNumber: v.string(),
 		regNorm: v.string(),

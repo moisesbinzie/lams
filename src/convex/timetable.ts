@@ -17,7 +17,7 @@ function validateTime(value: string, label: string): string {
 
 /**
  * Weekly meeting slots. These are what make a timetable possible: a repeating
- * day + time + room per subject. A make-up lecture is a one-off `makeup`
+ * day + time + room per course. A make-up lecture is a one-off `makeup`
  * meeting with a date and no recurrence.
  */
 export const createWeekly = mutation({
@@ -32,11 +32,11 @@ export const createWeekly = mutation({
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
-		if (!offering) throw new Error('Subject offering not found.');
+		if (!offering) throw new Error('Course offering not found.');
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			await assertCanAccessOffering(ctx, actor, offering);
-		} else if (!(await canRecordFor(ctx, actor, offering.classId))) {
-			throw new Error('You are only a class representative for your own class.');
+		} else if (!(await canRecordFor(ctx, actor, offering.programId))) {
+			throw new Error('You are only a program representative for your own program.');
 		}
 		if (args.dayOfWeek < 0 || args.dayOfWeek > 6) throw new Error('Choose a day of the week.');
 		const start = validateTime(args.startTime, 'Start time');
@@ -44,7 +44,7 @@ export const createWeekly = mutation({
 		if (end <= start) throw new Error('The end time must be after the start time.');
 		return await ctx.db.insert('meetings', {
 			offeringId: offering._id,
-			subjectId: offering.subjectId,
+			courseId: offering.courseId,
 			kind: 'weekly',
 			dayOfWeek: args.dayOfWeek,
 			startTime: start,
@@ -68,11 +68,11 @@ export const createMakeup = mutation({
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
-		if (!offering) throw new Error('Subject offering not found.');
+		if (!offering) throw new Error('Course offering not found.');
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			await assertCanAccessOffering(ctx, actor, offering);
-		} else if (!(await canRecordFor(ctx, actor, offering.classId))) {
-			throw new Error('You are only a class representative for your own class.');
+		} else if (!(await canRecordFor(ctx, actor, offering.programId))) {
+			throw new Error('You are only a program representative for your own program.');
 		}
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new Error('Enter the date as YYYY-MM-DD.');
 		const start = validateTime(args.startTime, 'Start time');
@@ -80,7 +80,7 @@ export const createMakeup = mutation({
 		if (end <= start) throw new Error('The end time must be after the start time.');
 		return await ctx.db.insert('meetings', {
 			offeringId: offering._id,
-			subjectId: offering.subjectId,
+			courseId: offering.courseId,
 			kind: 'makeup',
 			date: args.date,
 			startTime: start,
@@ -108,11 +108,11 @@ export const updateMeeting = mutation({
 		const meeting = await ctx.db.get('meetings', args.id);
 		if (!meeting) throw new Error('Meeting not found.');
 		const offering = await ctx.db.get('offerings', meeting.offeringId);
-		if (!offering) throw new Error('Subject offering not found.');
+		if (!offering) throw new Error('Course offering not found.');
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			await assertCanAccessOffering(ctx, actor, offering);
-		} else if (!(await canRecordFor(ctx, actor, offering.classId))) {
-			throw new Error('You are only a class representative for your own class.');
+		} else if (!(await canRecordFor(ctx, actor, offering.programId))) {
+			throw new Error('You are only a program representative for your own program.');
 		}
 		const start = args.startTime ? validateTime(args.startTime, 'Start time') : meeting.startTime;
 		const end = args.endTime ? validateTime(args.endTime, 'End time') : meeting.endTime;
@@ -139,11 +139,11 @@ export const removeMeeting = mutation({
 		const meeting = await ctx.db.get('meetings', args.id);
 		if (!meeting) throw new Error('Meeting not found.');
 		const offering = await ctx.db.get('offerings', meeting.offeringId);
-		if (!offering) throw new Error('Subject offering not found.');
+		if (!offering) throw new Error('Course offering not found.');
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			await assertCanAccessOffering(ctx, actor, offering);
-		} else if (!(await canRecordFor(ctx, actor, offering.classId))) {
-			throw new Error('You are only a class representative for your own class.');
+		} else if (!(await canRecordFor(ctx, actor, offering.programId))) {
+			throw new Error('You are only a program representative for your own program.');
 		}
 		// Refuse to drop a slot that already has attendance recorded against it.
 		const sessions = await ctx.db
@@ -166,11 +166,11 @@ export const listForOffering = query({
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
-		if (!offering) throw new Error('Subject offering not found.');
+		if (!offering) throw new Error('Course offering not found.');
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			await assertCanAccessOffering(ctx, actor, offering);
-		} else if (!(await canRecordFor(ctx, actor, offering.classId))) {
-			throw new Error('You are only a class representative for your own class.');
+		} else if (!(await canRecordFor(ctx, actor, offering.programId))) {
+			throw new Error('You are only a program representative for your own program.');
 		}
 		const rows = await ctx.db
 			.query('meetings')
@@ -207,7 +207,7 @@ export const myTimetable = query({
 		const makeups: any[] = [];
 		for (const e of enrolments) {
 			if (e.status !== 'active') continue;
-			const subject = await ctx.db.get('subjects', e.subjectId);
+			const course = e.courseId ? await ctx.db.get('courses', e.courseId) : null;
 			const meetings = await ctx.db
 				.query('meetings')
 				.withIndex('by_offering', (q) => q.eq('offeringId', e.offeringId))
@@ -216,8 +216,8 @@ export const myTimetable = query({
 				const entry = {
 					meetingId: m._id,
 					offeringId: e.offeringId,
-					subjectCode: subject?.code ?? '',
-					subjectTitle: subject?.title ?? '',
+					courseCode: course?.code ?? '',
+					courseTitle: course?.title ?? '',
 					room: m.room ?? '',
 					startTime: m.startTime,
 					endTime: m.endTime
@@ -239,17 +239,17 @@ export const myTimetable = query({
 					}
 				});
 
-				/** The timetable for a whole class — lecturers only see their own offerings. */
-export const listForClass = query({
-	args: { token: v.string(), classId: v.id('classes') },
+				/** The timetable for a whole program — lecturers only see their own offerings. */
+export const listForProgram = query({
+	args: { token: v.string(), programId: v.id('programs') },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		let offerings = await ctx.db
 			.query('offerings')
-			.withIndex('by_class', (q) => q.eq('classId', args.classId))
+			.withIndex('by_program', (q) => q.eq('programId', args.programId))
 			.take(200);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			// Own offerings plus unassigned ones in this class (substitute cover).
+			// Own offerings plus unassigned ones in this program (substitute cover).
 			offerings = offerings.filter(
 				(o: any) => String(o.lecturerId ?? '') === String(actor.id) || !o.lecturerId
 			);
@@ -257,7 +257,7 @@ export const listForClass = query({
 		const weekly: any[] = [];
 		const makeups: any[] = [];
 		for (const o of offerings) {
-			const subject = await ctx.db.get('subjects', o.subjectId);
+			const course = o.courseId ? await ctx.db.get('courses', o.courseId) : null;
 			const meetings = await ctx.db
 				.query('meetings')
 				.withIndex('by_offering', (q) => q.eq('offeringId', o._id))
@@ -266,8 +266,8 @@ export const listForClass = query({
 				const entry = {
 					meetingId: m._id,
 					offeringId: o._id,
-					subjectCode: subject?.code ?? '',
-					subjectTitle: subject?.title ?? '',
+					courseCode: course?.code ?? '',
+					courseTitle: course?.title ?? '',
 					room: m.room ?? '',
 					startTime: m.startTime,
 					endTime: m.endTime
@@ -289,24 +289,24 @@ export const listForClass = query({
 	}
 });
 
-/** Meetings happening today for a class — drives "start attendance". */
-export const listTodayForClass = query({
-	args: { token: v.string(), classId: v.id('classes'), dayOfWeek: v.number() },
+/** Meetings happening today for a program — drives "start attendance". */
+export const listTodayForProgram = query({
+	args: { token: v.string(), programId: v.id('programs'), dayOfWeek: v.number() },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		let offerings = await ctx.db
 			.query('offerings')
-			.withIndex('by_class', (q) => q.eq('classId', args.classId))
+			.withIndex('by_program', (q) => q.eq('programId', args.programId))
 			.take(200);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			// Own offerings plus unassigned ones in this class (substitute cover).
+			// Own offerings plus unassigned ones in this program (substitute cover).
 			offerings = offerings.filter(
 				(o: any) => String(o.lecturerId ?? '') === String(actor.id) || !o.lecturerId
 			);
 		}
 		const out: any[] = [];
 		for (const o of offerings) {
-			const subject = await ctx.db.get('subjects', o.subjectId);
+			const course = o.courseId ? await ctx.db.get('courses', o.courseId) : null;
 			const meetings = await ctx.db
 				.query('meetings')
 				.withIndex('by_offering', (q) => q.eq('offeringId', o._id))
@@ -316,9 +316,9 @@ export const listTodayForClass = query({
 				out.push({
 					meetingId: m._id,
 					offeringId: o._id,
-					subjectId: o.subjectId,
-					subjectCode: subject?.code ?? '',
-					subjectTitle: subject?.title ?? '',
+					courseId: o.courseId,
+					courseCode: course?.code ?? '',
+					courseTitle: course?.title ?? '',
 					startTime: m.startTime,
 					endTime: m.endTime,
 					room: m.room ?? ''
@@ -330,13 +330,13 @@ export const listTodayForClass = query({
 });
 
 /**
- * Cross-class clash check: warns when a new slot overlaps an existing one for
- * the same class, so a timetable cannot quietly contain impossible weeks.
+ * Cross-program clash check: warns when a new slot overlaps an existing one for
+ * the same program, so a timetable cannot quietly contain impossible weeks.
  */
 export const findClashes = query({
 	args: {
 		token: v.string(),
-		classId: v.id('classes'),
+		programId: v.id('programs'),
 		dayOfWeek: v.number(),
 		startTime: v.string(),
 		endTime: v.string(),
@@ -346,18 +346,18 @@ export const findClashes = query({
 		const actor = await requireRecorder(ctx, args.token);
 		let offerings = await ctx.db
 			.query('offerings')
-			.withIndex('by_class', (q) => q.eq('classId', args.classId))
+			.withIndex('by_program', (q) => q.eq('programId', args.programId))
 			.take(200);
 		// Lecturers only compare against their own offerings.
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			// Own offerings plus unassigned ones in this class (substitute cover).
+			// Own offerings plus unassigned ones in this program (substitute cover).
 			offerings = offerings.filter(
 				(o: any) => String(o.lecturerId ?? '') === String(actor.id) || !o.lecturerId
 			);
 		}
 		const clashes: string[] = [];
 		for (const o of offerings) {
-			const subject = await ctx.db.get('subjects', o.subjectId);
+			const course = o.courseId ? await ctx.db.get('courses', o.courseId) : null;
 			const meetings = await ctx.db
 				.query('meetings')
 				.withIndex('by_offering', (q) => q.eq('offeringId', o._id))
@@ -367,7 +367,7 @@ export const findClashes = query({
 				if (m.dayOfWeek !== args.dayOfWeek) continue;
 				if (args.ignoreMeetingId && m._id === args.ignoreMeetingId) continue;
 				if (args.startTime < m.endTime && m.startTime < args.endTime) {
-					clashes.push(`${subject?.code ?? 'A subject'} ${m.startTime}–${m.endTime}`);
+					clashes.push(`${course?.code ?? 'A course'} ${m.startTime}–${m.endTime}`);
 				}
 			}
 		}

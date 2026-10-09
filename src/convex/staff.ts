@@ -159,13 +159,13 @@ export const me = query({
 		const doc = await ctx.db.get('people', actor.id);
 		if (!doc) return null;
 		const memberships = await ctx.db
-			.query('classMembers')
+			.query('programMembers')
 			.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
 			.take(50);
-		const classNames: string[] = [];
+		const programNames: string[] = [];
 		for (const m of memberships) {
-			const cls = await ctx.db.get('classes', m.classId);
-			if (cls) classNames.push(cls.name);
+			const program = await ctx.db.get('programs', m.programId);
+			if (program) programNames.push(program.name);
 		}
 		return {
 			kind: 'person' as const,
@@ -176,7 +176,7 @@ export const me = query({
 			studentId: doc.studentId,
 			email: doc.email ?? '',
 			phone: doc.phone ?? '',
-			classNames
+			programNames
 		};
 	}
 });
@@ -416,7 +416,7 @@ export const listStaff = query({
  * Per-lecturer activity for the admin dashboard, counted from attendance
  * sessions. Each session is attributed to the staff account that opened it
  * (`startedByStaffId`), falling back to the offering's current lecturer for
- * old or rep-started rows — so reassigning a subject or renaming an account
+ * old or rep-started rows — so reassigning a course or renaming an account
  * never rewrites history. Capped at the 2000 most recent sessions, matching
  * the reporting queries.
  */
@@ -546,7 +546,7 @@ export const setActive = mutation({
 				.withIndex('by_staff', (q) => q.eq('staffId', args.staffId))
 				.take(20);
 			for (const s of sessions) await ctx.db.delete('staffSessions', s._id);
-			// Release their offerings back to unassigned so subjects do not
+			// Release their offerings back to unassigned so courses do not
 			// silently become unstartable — history stays attributed via
 			// `startedByStaffId`, and the admin reassigns from the console.
 			const held = await ctx.db

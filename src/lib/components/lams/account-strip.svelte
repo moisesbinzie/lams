@@ -6,7 +6,7 @@
 	/**
 	 * Global account-type indicator. Rendered once in the root layout above
 	 * every page, so a signed-in user always sees which account they hold:
-	 * Admin, Lecturer, Class rep or Student. Each type has its own icon,
+	 * Admin, Lecturer, Program rep or Student. Each type has its own icon,
 	 * label and tint — color is never the only signal, the words are there.
 	 */
 
@@ -24,7 +24,7 @@
 					key: 'admin',
 					icon: ShieldCheck,
 					label: 'Admin account',
-					detail: 'Full access — lecturers, subjects and assignments',
+					detail: 'Full access — lecturers, courses and assignments',
 					name: me.username,
 					box: 'border-amber-300 bg-amber-50 text-amber-950',
 					pill: 'bg-amber-600 text-white'
@@ -34,7 +34,7 @@
 				key: 'lecturer',
 				icon: GraduationCap,
 				label: 'Lecturer account',
-				detail: 'Assigned subjects only',
+				detail: 'Assigned courses only',
 				name: (me as { username: string }).username,
 				box: 'border-lams-navy/25 bg-lams-navy/5 text-lams-navy',
 				pill: 'bg-lams-navy text-white'
@@ -44,8 +44,8 @@
 			return {
 				key: 'rep',
 				icon: UsersRound,
-				label: 'Class rep account',
-				detail: 'Take attendance for your classes',
+				label: 'Program rep account',
+				detail: 'Take attendance for your programs',
 				name: me.fullName,
 				box: 'border-lams-green/30 bg-lams-green/5 text-lams-navy',
 				pill: 'bg-lams-green text-white'

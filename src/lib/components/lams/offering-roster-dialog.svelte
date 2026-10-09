@@ -5,7 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import type { ClassRow, Offering, PersonRow } from '$lib/lams/types';
+	import type { ProgramRow, Offering, PersonRow } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 
 	interface RosterRow {
@@ -17,35 +17,35 @@
 	}
 
 	/**
-	 * Who is taking this subject, and who could join. Class members come first,
-	 * then — because a student may sit in several classes or repeat a subject
-	 * from a junior class — every other student, searchable by name or reg
+	 * Who is taking this course, and who could join. Program members come first,
+	 * then — because a student may sit in several programs or repeat a course
+	 * from another program — every other student, searchable by name or reg
 	 * number. Assign or withdraw one student at a time; the enrolment this
 	 * creates is identical to a self-join.
 	 */
 	let {
 		offering,
-		classes,
+		programs,
 		token,
 		open = $bindable(false),
 		onchanged
 	}: {
 		offering: Offering | null;
-		classes: ClassRow[];
+		programs: ProgramRow[];
 		token: string;
 		open?: boolean;
 		onchanged?: () => void | Promise<void>;
 	} = $props();
 
 	let roster = $state<RosterRow[]>([]);
-	let classCandidates = $state<PersonRow[]>([]);
+	let programCandidates = $state<PersonRow[]>([]);
 	let otherCandidates = $state<PersonRow[]>([]);
 	let search = $state('');
 	let loading = $state(false);
 	let busyId = $state('');
 
-	const className = $derived(
-		classes.find((c) => c._id === offering?.classId)?.name ?? offering?.className ?? 'this class'
+	const programName = $derived(
+		programs.find((c) => c._id === offering?.programId)?.name ?? offering?.programName ?? 'this program'
 	);
 	const filteredRoster = $derived(
 		roster.filter((r) => {
@@ -53,7 +53,7 @@
 			return !q || r.fullName.toLowerCase().includes(q) || r.regNumber.toLowerCase().includes(q);
 		})
 	);
-	const filteredClassCandidates = $derived(filterCandidates(classCandidates));
+	const filteredProgramCandidates = $derived(filterCandidates(programCandidates));
 	const filteredOtherCandidates = $derived(filterCandidates(otherCandidates));
 
 	function filterCandidates(list: PersonRow[]): PersonRow[] {
@@ -63,9 +63,9 @@
 		);
 	}
 
-	function classNamesOf(person: PersonRow): string {
-		return person.classIds
-			.map((id) => classes.find((c) => c._id === id)?.name)
+	function programNamesOf(person: PersonRow): string {
+		return person.programIds
+			.map((id) => programs.find((c) => c._id === id)?.name)
 			.filter(Boolean)
 			.join(', ');
 	}
@@ -88,9 +88,10 @@
 			const available = everyone.filter(
 				(m) => !enrolledIds.has(m._id) && m.status !== 'blocked'
 			);
-			classCandidates = available.filter((m) => m.classIds.includes(offering.classId));
+			const pid = offering.programId;
+			programCandidates = pid ? available.filter((m) => m.programIds.includes(pid)) : [];
 			otherCandidates = available
-				.filter((m) => !m.classIds.includes(offering.classId))
+				.filter((m) => pid === null || !m.programIds.includes(pid))
 				.sort((a, b) => a.fullName.localeCompare(b.fullName));
 		} catch (err) {
 			reportError(err, 'Could not load the roster.');
@@ -123,10 +124,10 @@
 <Dialog.Root bind:open>
 	<Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-lg">
 		<Dialog.Header>
-			<Dialog.Title>Roster — {offering?.subjectCode}</Dialog.Title>
+			<Dialog.Title>Roster — {offering?.courseCode}</Dialog.Title>
 			<Dialog.Description>
-				{roster.length} student(s) taking this subject. Everyone in {className} is listed first;
-				students from other classes (e.g. repeats) can be added from the second list.
+				{roster.length} student(s) taking this course. Everyone in {programName} is listed first;
+				students from other programs (e.g. repeats) can be added from the second list.
 			</Dialog.Description>
 		</Dialog.Header>
 		<div class="flex flex-col gap-3">
@@ -158,11 +159,11 @@
 					{/each}
 				</ul>
 
-				{#if filteredClassCandidates.length > 0}
+				{#if filteredProgramCandidates.length > 0}
 					<div>
-						<p class="mb-1 text-sm font-medium">In {className}, not taking this subject</p>
+						<p class="mb-1 text-sm font-medium">In {programName}, not taking this course</p>
 						<ul class="flex flex-col divide-y divide-border rounded-md border">
-							{#each filteredClassCandidates as c (c._id)}
+							{#each filteredProgramCandidates as c (c._id)}
 								<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
 									<span>
 										{c.fullName}
@@ -179,7 +180,7 @@
 
 				{#if filteredOtherCandidates.length > 0}
 					<div>
-						<p class="mb-1 text-sm font-medium">From other classes</p>
+						<p class="mb-1 text-sm font-medium">From other programs</p>
 						<p class="mb-1 text-xs text-muted-foreground">
 							Repeating a subject or sitting in with another cohort — adding them here is the same as
 							them joining themselves.
@@ -191,8 +192,8 @@
 										{c.fullName}
 										<span class="block text-xs text-muted-foreground">
 											{c.regNumber}
-											{#if classNamesOf(c)}
-												· {classNamesOf(c)}
+											{#if programNamesOf(c)}
+												· {programNamesOf(c)}
 											{/if}
 										</span>
 									</span>
@@ -203,7 +204,7 @@
 							{/each}
 						</ul>
 					</div>
-				{:else if roster.length > 0 && filteredClassCandidates.length === 0}
+				{:else if roster.length > 0 && filteredProgramCandidates.length === 0}
 					<Badge variant="secondary">Everyone on the roster is already here</Badge>
 				{/if}
 			{/if}
