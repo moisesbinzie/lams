@@ -33,7 +33,7 @@
 	 *
 	 *   anon     -> How it works
 	 *   admin    -> Admin console, Set up, Records, Settings, How
-	 *   lecturer -> Set up, Take attendance, Records, Settings, How
+	 *   lecturer -> Take attendance, Lectures, Records, Timetable, Settings, How
 	 *   rep      -> My account, Take attendance, How
 	 *   student  -> My account, How
 	 *
@@ -87,7 +87,7 @@
 		if (!me) return '/';
 		if (me.kind === 'person') return '/home';
 		const isAdmin = (me as { isAdmin?: boolean }).isAdmin === true || me.role === 'admin';
-		return isAdmin ? '/admin' : '/manage';
+		return isAdmin ? '/admin' : '/lectures';
 	});
 
 	function isActive(href: string): boolean {

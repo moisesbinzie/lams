@@ -291,6 +291,101 @@ export const listForProgram = query({
 	}
 });
 
+/**
+ * Every weekly slot for one program in one semester, ready to draw as a grid.
+ *
+ * One query rather than one per course: a weekly timetable is a picture of the
+ * whole week, so it cannot be assembled from a per-course call without leaving
+ * the cells that matter most — the collisions — invisible until every course
+ * has been fetched anyway.
+ *
+ * `yearOfStudy` filters the grid to one year of study without changing what is
+ * checked for clashes: a clash is about a student who is in both courses, and
+ * years do overlap (repeats). The client shows the year filter as a view
+ * setting, not as a scope that hides conflicts.
+ */
+export const gridForSemester = query({
+	args: {
+		token: v.string(),
+		programId: v.id('programs'),
+		semesterId: v.id('semesters'),
+		yearOfStudy: v.optional(v.number())
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const program = await ctx.db.get('programs', args.programId);
+		if (!program) throw new Error('Program not found.');
+		const semester = await ctx.db.get('semesters', args.semesterId);
+		if (!semester) throw new Error('Semester not found.');
+
+		let offerings = await ctx.db
+			.query('offerings')
+			.withIndex('by_program_and_semester', (q) =>
+				q.eq('programId', args.programId).eq('semesterId', args.semesterId)
+			)
+			.take(300);
+		// A lecturer only edits their own courses, plus any still unassigned in a
+		// program they already teach in — the same substitute-cover rule used by
+		// `listForProgram` and `canAccessOffering`.
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			offerings = offerings.filter((o: any) => {
+				const holders = offeringLecturers(o);
+				return holders.includes(String(actor.id)) || holders.length === 0;
+			});
+		}
+		if (args.yearOfStudy !== undefined) {
+			offerings = offerings.filter((o: any) => (o.yearOfStudy ?? 0) === args.yearOfStudy);
+		}
+
+		const slots: any[] = [];
+		const courses: any[] = [];
+		for (const o of offerings) {
+			const course = o.courseId ? await ctx.db.get('courses', o.courseId) : null;
+			if (!course) continue;
+			const holders = offeringLecturers(o);
+			const lecturers = (
+				await Promise.all(holders.map((id: string) => ctx.db.get('staff', id as never)))
+			).filter(Boolean);
+			courses.push({
+				offeringId: o._id,
+				courseId: course._id,
+				courseCode: course.code,
+				courseTitle: course.title,
+				hoursPerWeek: course.hoursPerWeek ?? null,
+				yearOfStudy: o.yearOfStudy ?? null,
+				lecturerNames: lecturers.map((l: any) => l.fullName)
+			});
+			const meetings = await ctx.db
+				.query('meetings')
+				.withIndex('by_offering', (q) => q.eq('offeringId', o._id))
+				.take(100);
+			for (const m of meetings) {
+				if (m.kind !== 'weekly' || m.dayOfWeek === undefined) continue;
+				slots.push({
+					meetingId: m._id,
+					offeringId: o._id,
+					courseCode: course.code,
+					courseTitle: course.title,
+					yearOfStudy: o.yearOfStudy ?? null,
+					dayOfWeek: m.dayOfWeek,
+					startTime: m.startTime,
+					endTime: m.endTime,
+					room: m.room ?? ''
+				});
+			}
+		}
+		slots.sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime));
+		courses.sort((a, b) => a.courseCode.localeCompare(b.courseCode));
+		return {
+			programName: program.name,
+			semesterName: semester.name,
+			semesterYear: semester.year,
+			slots,
+			courses
+		};
+	}
+});
+
 /** Meetings happening today for a program — drives "start attendance". */
 export const listTodayForProgram = query({
 	args: { token: v.string(), programId: v.id('programs'), dayOfWeek: v.number() },

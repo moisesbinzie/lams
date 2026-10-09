@@ -603,6 +603,15 @@ export const listPeople = query({
 			const key = String(m.personId);
 			idsByPerson.set(key, [...(idsByPerson.get(key) ?? []), String(m.programId)]);
 		}
+		// Active enrolment counts, grouped in one pass so the roll can show
+		// "3 courses" without a query per student.
+		const countsByPerson = new Map<string, number>();
+		const enrolments = await ctx.db.query('enrolments').take(3000);
+		for (const e of enrolments) {
+			if (e.status !== 'active') continue;
+			const key = String(e.personId);
+			countsByPerson.set(key, (countsByPerson.get(key) ?? 0) + 1);
+		}
 		return rows
 			.filter((p: any) => (args.status ? p.status === args.status : true))
 			.map((p: any) => ({
@@ -613,10 +622,67 @@ export const listPeople = query({
 				studentId: p.studentId,
 				status: p.status,
 				programIds: idsByPerson.get(String(p._id)) ?? [],
+				courseCount: countsByPerson.get(String(p._id)) ?? 0,
 				email: p.email ?? '',
 				phone: p.phone ?? '',
 				hasDevice: !!p.boundDeviceId,
 			activatedAt: p.activatedAt ?? null
 			}));
+	}
+});
+
+/**
+ * Global student search for the Lectures roster hub.
+ *
+ * `listPeople` is deliberately scoped — a lecturer only sees students in
+ * programs they teach — which hides repeating students from other programs.
+ * This query searches everyone instead, so a lecturer can pull a repeat
+ * student into their course. The write is still guarded: `assignForPerson`
+ * refuses an offering the lecturer may not touch, so finding someone here
+ * never grants anything by itself.
+ *
+ * Staff (lecturer + admin) search the whole roll; program reps search only
+ * the programs they represent.
+ */
+export const searchPeople = query({
+	args: { token: v.string(), q: v.string() },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const needle = args.q.trim().toLowerCase();
+		if (needle.length < 2) return [];
+		let allowedProgramIds: Set<string> | null = null;
+		if (actor.kind !== 'staff') {
+			const repRows = await ctx.db
+				.query('programReps')
+				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+				.take(200);
+			allowedProgramIds = new Set(repRows.map((r: any) => String(r.programId)));
+			if (allowedProgramIds.size === 0) return [];
+		}
+		const all = await ctx.db.query('people').take(1000);
+		const memberships = await ctx.db.query('programMembers').take(2000);
+		const idsByPerson = new Map<string, string[]>();
+		for (const m of memberships) {
+			const key = String(m.personId);
+			idsByPerson.set(key, [...(idsByPerson.get(key) ?? []), String(m.programId)]);
+		}
+		const out: any[] = [];
+		for (const p of all) {
+			if (p.status === 'blocked') continue;
+			const hay = `${p.fullName ?? ''} ${p.regNumber ?? ''} ${p.studentId ?? ''}`.toLowerCase();
+			if (!hay.includes(needle)) continue;
+			const programIds = idsByPerson.get(String(p._id)) ?? [];
+			if (allowedProgramIds && !programIds.some((id) => allowedProgramIds.has(id))) continue;
+			out.push({
+				_id: p._id,
+				fullName: p.fullName,
+				regNumber: p.regNumber,
+				studentId: p.studentId,
+				status: p.status,
+				programIds
+			});
+			if (out.length >= 20) break;
+		}
+		return out;
 	}
 });

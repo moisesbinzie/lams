@@ -162,6 +162,17 @@ export default defineSchema({
 		.index('by_year', ['year']),
 
 	/**
+	 * Singleton app settings, keyed by `key`. Only `activeYear` is stored
+	 * today: the academic year that drives default semester pickers across
+	 * Setup (Programs, Timetable). One row, `key: 'activeYear'`.
+	 */
+	appSettings: defineTable({
+		key: v.string(),
+		year: v.optional(v.number()),
+		updatedAt: v.number()
+	}).index('by_key', ['key']),
+
+	/**
 	 * A program of study, e.g. "BSc Computer Science". Courses change every
 	 * semester across `durationYears` years until the final year.
 	 */

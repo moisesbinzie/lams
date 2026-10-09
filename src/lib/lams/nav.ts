@@ -44,11 +44,18 @@ export const STUDENT_NAV: StudentNavItem[] = [
  * narrow screens, so the two lists must offer the same destinations in the
  * same order. `How it works` stays in the chrome (header on desktop, footer
  * everywhere), exactly like the student strip.
+ *
+ * Order is the job order: run a lecture first (Take attendance), then manage
+ * the courses behind it (Lectures = roster), review what happened (Records),
+ * plan the week (Timetable), and finally the account itself (Settings).
+ * There is deliberately no Set up — that console lives at `/manage` for
+ * admins only; lecturers only ever see the courses assigned to them.
  */
 export const LECTURER_NAV: StudentNavItem[] = [
-	{ href: '/manage', label: 'Set up', icon: Settings2 },
 	{ href: '/scan', label: 'Take attendance', icon: ScanLine },
+	{ href: '/lectures', label: 'Lectures', icon: BookOpen },
 	{ href: '/records', label: 'Records', icon: BarChart3 },
+	{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
 	{ href: '/settings', label: 'Settings', icon: Settings }
 ];
 

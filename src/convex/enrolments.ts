@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 import {
 	assertCanAccessOffering,
 	canAccessOffering,
+	lecturerProgramIds,
 	requirePerson,
 	requireRecorder,
 	requireStaff
@@ -136,6 +137,46 @@ export const dropSelf = mutation({
 	}
 });
 
+/**
+ * The one place an enrolment is written by staff. Assigning from a course's
+ * roster and ticking a list of courses from the student's own row differ only
+ * in who is allowed to ask, so the write itself lives here: profile pickups,
+ * the re-add-after-drop path, and the `addedBy` tag that records who chose it.
+ */
+async function assignOne(
+	ctx: any,
+	offering: any,
+	personId: any,
+	enroll: boolean,
+	addedBy: 'rep' | 'lecturer'
+): Promise<'added' | 'removed' | 'unchanged'> {
+	const rows = await ctx.db.query('enrolments').withIndex('by_person', (q: any) => q.eq('personId', personId)).take(300);
+	const existing = rows.find((e: any) => e.offeringId === offering._id);
+
+	if (enroll) {
+		if (existing?.status === 'active') return 'unchanged';
+		if (existing) {
+			await ctx.db.patch(existing._id, { status: 'active', createdAt: Date.now(), addedBy });
+			return 'added';
+		}
+		await ctx.db.insert('enrolments', {
+			personId,
+			courseId: offering.courseId,
+			offeringId: offering._id,
+			semesterId: offering.semesterId,
+			programId: offering.programId,
+			status: 'active',
+			addedBy,
+			createdAt: Date.now()
+		});
+		return 'added';
+	}
+
+	if (!existing || existing.status === 'dropped') return 'unchanged';
+	await ctx.db.patch(existing._id, { status: 'dropped' });
+	return 'removed';
+}
+
 /** Staff assign or remove a course for one person. */
 export const assignForPerson = mutation({
 	args: { token: v.string(), personId: v.id('people'), offeringId: v.id('offerings'), enroll: v.boolean() },
@@ -161,34 +202,146 @@ export const assignForPerson = mutation({
 			}
 		}
 
-		const rows = await ctx.db
-			.query('enrolments')
-			.withIndex('by_person', (q) => q.eq('personId', args.personId))
-			.take(300);
-		const existing = rows.find((e: any) => e.offeringId === args.offeringId);
+		await assignOne(ctx, offering, args.personId, args.enroll, addedBy);
+		return { ok: true };
+	}
+});
 
-		if (args.enroll) {
-			if (existing?.status === 'active') return { ok: true };
-			if (existing) {
-				await ctx.db.patch(existing._id, { status: 'active', createdAt: Date.now(), addedBy });
-				return { ok: true };
+/**
+ * Set several of one student's courses at once — the Students tab's tick list.
+ *
+ * Written as one mutation rather than N calls so a single Save is a single
+ * transaction: either the whole tick list lands or none of it does, and the
+ * screen never has to reconcile a half-applied selection.
+ */
+export const assignCoursesForStudent = mutation({
+	args: {
+		token: v.string(),
+		personId: v.id('people'),
+		/** Courses the student should be taking after this call. */
+		enrolOfferingIds: v.array(v.id('offerings')),
+		/** Courses to withdraw them from. Ignored if an id appears in both. */
+		dropOfferingIds: v.optional(v.array(v.id('offerings')))
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const person = await ctx.db.get('people', args.personId);
+		if (!person) throw new Error('Person not found.');
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
+			const memberships = await ctx.db
+				.query('programMembers')
+				.withIndex('by_person', (q) => q.eq('personId', args.personId))
+				.take(50);
+			if (!memberships.some((m: any) => mine.has(String(m.programId)))) {
+				throw new Error('That student is not in a program you teach.');
 			}
-			await ctx.db.insert('enrolments', {
-				personId: args.personId,
-				courseId: offering.courseId,
-				offeringId: offering._id,
-				semesterId: offering.semesterId,
-				programId: offering.programId,
-				status: 'active',
-				addedBy,
-				createdAt: Date.now()
-			});
-			return { ok: true };
+		}
+		const addedBy = actor.kind === 'staff' ? ('lecturer' as const) : ('rep' as const);
+
+		// De-duplicate before touching anything: a doubled id would otherwise be
+		// applied twice and count as two changes in the answer below.
+		const uniq = (ids: any[]) => ids.filter((id, i, all) => all.findIndex((x) => String(x) === String(id)) === i);
+		const toEnroll = uniq(args.enrolOfferingIds);
+		const enrollSet = new Set(toEnroll.map(String));
+		const toDrop = uniq(args.dropOfferingIds ?? []).filter((id) => !enrollSet.has(String(id)));
+
+		let added = 0;
+		let removed = 0;
+		let unchanged = 0;
+		// Guards run before any write so a bad id cannot leave the student half-set.
+		const resolved: any[] = [];
+		for (const offeringId of [...toEnroll, ...toDrop]) {
+			const offering = await ctx.db.get('offerings', offeringId);
+			if (!offering) throw new Error('One of those courses no longer exists.');
+			if (actor.kind === 'staff' && !actor.isAdmin) {
+				await assertCanAccessOffering(ctx, actor, offering);
+			}
+			if (actor.kind !== 'staff') {
+				const repRows = await ctx.db
+					.query('programReps')
+					.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+					.take(200);
+				if (!repRows.some((r: any) => r.programId === offering.programId)) {
+					throw new Error('You are only a program rep for your own program.');
+				}
+			}
+			resolved.push({ offering, enroll: enrollSet.has(String(offeringId)) });
 		}
 
-		if (!existing || existing.status === 'dropped') throw new Error('That person is not enrolled.');
-		await ctx.db.patch(existing._id, { status: 'dropped' });
-		return { ok: true };
+		for (const step of resolved) {
+			const outcome = await assignOne(ctx, step.offering, args.personId, step.enroll, addedBy);
+			if (outcome === 'added') added += 1;
+			else if (outcome === 'removed') removed += 1;
+			else unchanged += 1;
+		}
+		return { added, removed, unchanged };
+	}
+});
+
+/**
+ * Enrol every member of one program into every course placed for one year of
+ * study (optionally one semester). The new-intake case: Year 1 arrives, one
+ * click gives all of them the Year-1 courses. Already-enrolled students are
+ * skipped, so re-running is safe.
+ */
+export const enrolProgramYear = mutation({
+	args: {
+		token: v.string(),
+		programId: v.id('programs'),
+		yearOfStudy: v.number(),
+		semesterId: v.optional(v.id('semesters'))
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const program = await ctx.db.get('programs', args.programId);
+		if (!program) throw new Error('Program not found.');
+		if (!Number.isInteger(args.yearOfStudy) || args.yearOfStudy < 1 || args.yearOfStudy > 10) {
+			throw new Error('Year of study must be 1 to 10.');
+		}
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = await lecturerProgramIds(ctx, actor.id);
+			if (!mine.includes(String(args.programId))) {
+				throw new Error('That program is not assigned to you.');
+			}
+		}
+		if (actor.kind !== 'staff') {
+			const repRows = await ctx.db
+				.query('programReps')
+				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+				.take(200);
+			if (!repRows.some((r: any) => String(r.programId) === String(args.programId))) {
+				throw new Error('You are only a program rep for your own program.');
+			}
+		}
+		let offerings = await ctx.db
+			.query('offerings')
+			.withIndex('by_program', (q) => q.eq('programId', args.programId))
+			.take(200);
+		offerings = offerings.filter((o: any) => o.yearOfStudy === args.yearOfStudy);
+		if (args.semesterId) {
+			offerings = offerings.filter((o: any) => String(o.semesterId) === String(args.semesterId));
+		}
+		if (offerings.length === 0) {
+			throw new Error('No courses are placed for that year yet. Place them on the Programs tab first.');
+		}
+		const memberships = await ctx.db
+			.query('programMembers')
+			.withIndex('by_program', (q: any) => q.eq('programId', args.programId))
+			.take(1000);
+		const addedBy = actor.kind === 'staff' ? ('lecturer' as const) : ('rep' as const);
+		let students = 0;
+		let added = 0;
+		let unchanged = 0;
+		for (const m of memberships.slice(0, 1000)) {
+			students += 1;
+			for (const offering of offerings) {
+				const outcome = await assignOne(ctx, offering, m.personId, true, addedBy);
+				if (outcome === 'added') added += 1;
+				else unchanged += 1;
+			}
+		}
+		return { students, courses: offerings.length, added, unchanged };
 	}
 });
 
@@ -232,6 +385,144 @@ export const listMine = query({
 			});
 		}
 		return out;
+	}
+});
+
+/**
+ * What one student is studying, joined for display. This is the read side of
+ * the Students tab: a student's courses are reached from the student, not by
+ * hunting for the offering that carries them.
+ */
+export const listForPerson = query({
+	args: { token: v.string(), personId: v.id('people') },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			// A lecturer may look at a student in a program they teach in.
+			const mine = new Set(await lecturerProgramIds(ctx, actor.id));
+			const memberships = await ctx.db
+				.query('programMembers')
+				.withIndex('by_person', (q) => q.eq('personId', args.personId))
+				.take(50);
+			if (!memberships.some((m: any) => mine.has(String(m.programId)))) {
+				throw new Error('That student is not in a program you teach.');
+			}
+		}
+		const rows = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', args.personId))
+			.take(300);
+		const out: any[] = [];
+		for (const e of rows) {
+			if (e.status !== 'active') continue;
+			const course = e.courseId ? await ctx.db.get('courses', e.courseId) : null;
+			const program = e.programId ? await ctx.db.get('programs', e.programId) : null;
+			const semester = await ctx.db.get('semesters', e.semesterId);
+			const offering = await ctx.db.get('offerings', e.offeringId);
+			const meetings = await ctx.db
+				.query('meetings')
+				.withIndex('by_offering', (q) => q.eq('offeringId', e.offeringId))
+				.take(20);
+			out.push({
+				enrolmentId: e._id,
+				offeringId: e.offeringId,
+				courseId: e.courseId ?? null,
+				courseCode: course?.code ?? '',
+				courseTitle: course?.title ?? '',
+				programId: e.programId ?? null,
+				programName: program?.name ?? '',
+				yearOfStudy: offering?.yearOfStudy ?? null,
+				semesterId: e.semesterId,
+				semesterName: semester?.name ?? '',
+				semesterYear: semester?.year ?? null,
+				addedBy: e.addedBy,
+				meetingCount: meetings.length,
+				enrolledAt: e.createdAt
+			});
+		}
+		return out.sort(
+			(a, b) =>
+				String(a.programName).localeCompare(String(b.programName)) ||
+				Number(a.yearOfStudy ?? 0) - Number(b.yearOfStudy ?? 0) ||
+				String(a.courseCode).localeCompare(String(b.courseCode))
+		);
+	}
+});
+
+/**
+ * Every course one student could be given, from every program they belong to,
+ * each flagged with whether they already have it. A repeating student belongs
+ * to more than one program, so this is the union — which is the point of the
+ * Students tab: one place to see and set everything they study.
+ *
+ * Read-only for a student's own use? No — this is a staff screen. Students
+ * still see their own courses through `listMine`.
+ */
+export const listStudentCourses = query({
+	args: { token: v.string(), personId: v.id('people') },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const mine = new Set(
+			actor.kind === 'staff' && !actor.isAdmin ? await lecturerProgramIds(ctx, actor.id) : []
+		);
+		const memberships = await ctx.db
+			.query('programMembers')
+			.withIndex('by_person', (q) => q.eq('personId', args.personId))
+			.take(50);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			if (!memberships.some((m: any) => mine.has(String(m.programId)))) {
+				throw new Error('That student is not in a program you teach.');
+			}
+		}
+		const enrolled = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', args.personId))
+			.take(300);
+		const activeByOffering = new Map<string, any>();
+		for (const e of enrolled) {
+			if (e.status === 'active') activeByOffering.set(String(e.offeringId), e);
+		}
+		const out: any[] = [];
+		const seen = new Set<string>();
+		for (const m of memberships) {
+			if (actor.kind === 'staff' && !actor.isAdmin && !mine.has(String(m.programId))) continue;
+			const program = await ctx.db.get('programs', m.programId);
+			const offerings = await ctx.db
+				.query('offerings')
+				.withIndex('by_program', (q) => q.eq('programId', m.programId))
+				.take(200);
+			for (const o of offerings) {
+				if (seen.has(String(o._id))) continue;
+				seen.add(String(o._id));
+				const course = o.courseId ? await ctx.db.get('courses', o.courseId) : null;
+				if (!course) continue;
+				const semester = await ctx.db.get('semesters', o.semesterId);
+				const existing = activeByOffering.get(String(o._id));
+				out.push({
+					offeringId: o._id,
+					courseId: o.courseId,
+					courseCode: course.code,
+					courseTitle: course.title,
+					hoursPerWeek: course.hoursPerWeek ?? null,
+					programId: m.programId,
+					programName: program?.name ?? '',
+					yearOfStudy: o.yearOfStudy ?? null,
+					semesterId: o.semesterId,
+					semesterName: semester?.name ?? '',
+					semesterYear: semester?.year ?? null,
+					openForEnrolment: o.openForEnrolment,
+					enrolled: Boolean(existing),
+					addedBy: existing?.addedBy ?? null
+				});
+			}
+		}
+		return out.sort(
+			(a, b) =>
+				String(a.programName).localeCompare(String(b.programName)) ||
+				Number(a.yearOfStudy ?? 0) - Number(b.yearOfStudy ?? 0) ||
+				String(a.semesterName).localeCompare(String(b.semesterName)) ||
+				String(a.courseCode).localeCompare(String(b.courseCode))
+		);
 	}
 });
 

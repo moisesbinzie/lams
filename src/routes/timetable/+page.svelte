@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api } from '../../convex/_generated/api.js';
 	import { requireConvexClient } from '$lib/convexClient';
+	import { endSession } from '$lib/lams/session.svelte';
 	import { getToken } from '$lib/lams/auth';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
@@ -11,9 +12,18 @@
 	import type { TimetableWeekly, TimetableMakeup } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 	import StudentNav from '$lib/components/lams/student-nav.svelte';
+	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
+	import TimetablePanel from '$lib/components/lams/timetable-panel.svelte';
 
 	const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+	/**
+	 * Shared timetable page: students see their own week (built from their
+	 * enrolments), while lecturers get the full editable week grid scoped to
+	 * the courses assigned to them — the same panel the setup console uses,
+	 * so there is exactly one editor and its scoping rules stay in one place.
+	 */
+	let viewerKind = $state<'staff' | 'person' | ''>('');
 	let weekly = $state<TimetableWeekly[]>([]);
 	let makeups = $state<TimetableMakeup[]>([]);
 	let loading = $state(true);
@@ -26,6 +36,21 @@
 		}
 		try {
 			const client = requireConvexClient();
+			const me = (await client.query(api.staff.me, { token })) as {
+				kind: string;
+				role: string;
+			} | null;
+			if (!me) {
+				endSession();
+				void goto('/signin');
+				return;
+			}
+			if (me.kind === 'staff') {
+				viewerKind = 'staff';
+				loading = false;
+				return;
+			}
+			viewerKind = 'person';
 			const res = (await client.query(api.timetable.myTimetable, { token })) as {
 				weekly: TimetableWeekly[];
 				makeups: TimetableMakeup[];
@@ -36,7 +61,7 @@
 			// Keep the token: a failed load is usually a network blip.
 			reportError(err, 'Could not load your timetable.');
 		} finally {
-			loading = false;
+			if (viewerKind !== 'staff') loading = false;
 		}
 	});
 
@@ -47,6 +72,22 @@
 	);
 </script>
 
+{#if viewerKind === 'staff'}
+	<div class="mx-auto flex w-full max-w-3xl flex-col gap-6 lg:max-w-5xl">
+		<LecturerNav />
+		<div class="flex items-center gap-3">
+			<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
+			<div>
+				<h1 class="text-xl font-bold text-lams-navy">Timetable</h1>
+				<p class="text-xs text-muted-foreground">
+					When your courses meet. You only see the courses assigned to you — click an empty
+					slot to add one, click a lecture to change it.
+				</p>
+			</div>
+		</div>
+		<TimetablePanel />
+	</div>
+{:else}
 	<StudentNav />
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">My timetable</h1>
@@ -148,3 +189,4 @@
 			<Button variant="outline" href="/courses">Change my courses</Button>
 		</div>
 	{/if}
+{/if}

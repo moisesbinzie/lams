@@ -49,6 +49,8 @@ export interface PersonRow {
 	status: PersonStatus;
 	/** Every program the person belongs to (ids into `programs`). */
 	programIds: string[];
+	/** Joined by listPeople: active enrolments. */
+	courseCount?: number;
 	email: string;
 	phone: string;
 	hasDevice: boolean;
@@ -68,8 +70,10 @@ export interface ProgramRow {
 	_id: string;
 	name: string;
 	durationYears: number;
-	/** Joined by listPrograms. */
+	/** Joined by listPrograms: students who belong, blocked ones excluded. */
 	studentCount?: number;
+	/** Joined by listPrograms: offerings placed in this program. */
+	courseCount?: number;
 }
 
 /** What reps.listForPerson returns — the programs a person represents. */
@@ -84,6 +88,114 @@ export interface Course {
 	title: string;
 	hoursPerWeek?: number;
 	openForEnrolment: boolean;
+	/** Joined by listCourses: how many programs take this course. */
+	placementCount?: number;
+	/** Joined by listCourses: up to 5 program names taking this course. */
+	programNames?: string[];
+}
+
+/**
+ * A course placed in a program: the one row that ties course ↔ program ↔
+ * semester ↔ year of study together, resolved with every display name.
+ *
+ * `_id` is the offering's id — the "placement", not the course. The same
+ * course code appears in as many placements as it is taught in, which is what
+ * makes one course belong to several programs (and lets a repeating student
+ * meet it again in a later year).
+ */
+export interface ProgramCoursePlacement {
+	_id: string;
+	courseId: string | null;
+	courseCode: string;
+	courseTitle: string;
+	hoursPerWeek: number | null;
+	courseOpenForEnrolment: boolean;
+	programId: string | null;
+	programName: string;
+	yearOfStudy: number | null;
+	semesterId: string;
+	semesterName: string;
+	semesterYear: number | null;
+	semesterNumber: number | null;
+	openForEnrolment: boolean;
+	lecturerIds: string[];
+	lecturerNames: string[];
+	lecturerUsernames: string[];
+	lecturerId: string | null;
+	lecturerName: string | null;
+	lecturerUsername: string | null;
+	studentCount: number;
+	/** Weekly + make-up slots set on the Timetable tab. */
+	meetingCount: number;
+	createdAt: number;
+}
+
+/** A course one student is enrolled in — the Students tab's read side. */
+export interface StudentCourse {
+	enrolmentId: string;
+	offeringId: string;
+	courseId: string | null;
+	courseCode: string;
+	courseTitle: string;
+	programId: string | null;
+	programName: string;
+	yearOfStudy: number | null;
+	semesterId: string;
+	semesterName: string;
+	semesterYear: number | null;
+	addedBy: 'self' | 'rep' | 'lecturer';
+	meetingCount: number;
+	enrolledAt: number;
+}
+
+/** A course one student could be given, from every program they belong to. */
+export interface StudentCourseOption {
+	offeringId: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
+	hoursPerWeek: number | null;
+	programId: string;
+	programName: string;
+	yearOfStudy: number | null;
+	semesterId: string;
+	semesterName: string;
+	semesterYear: number | null;
+	openForEnrolment: boolean;
+	enrolled: boolean;
+	addedBy: 'self' | 'rep' | 'lecturer' | null;
+}
+
+/** One weekly meeting as the timetable grid draws it. */
+export interface TimetableSlot {
+	meetingId: string;
+	offeringId: string;
+	courseCode: string;
+	courseTitle: string;
+	yearOfStudy: number | null;
+	dayOfWeek: number;
+	startTime: string;
+	endTime: string;
+	room: string;
+}
+
+/** A course placed in the selected semester, for the grid's legend/picker. */
+export interface TimetableGridCourse {
+	offeringId: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
+	hoursPerWeek: number | null;
+	yearOfStudy: number | null;
+	lecturerNames: string[];
+}
+
+export interface TimetableGrid {
+	programName: string;
+	semesterName: string;
+	semesterYear: number;
+	slots: TimetableSlot[];
+	courses: TimetableGridCourse[];
 }
 
 export interface Offering {
@@ -92,11 +204,16 @@ export interface Offering {
 	courseCode: string;
 	courseTitle: string;
 	hoursPerWeek: number | null;
+	/** Whether the catalogue course itself is open — a lecturer's setting. */
+	courseOpenForEnrolment?: boolean;
 	programId: string | null;
 	programName: string;
 	yearOfStudy: number | null;
 	semesterId: string;
 	semesterName: string;
+	/** Joined so a semester can be named unambiguously across years. */
+	semesterYear?: number | null;
+	semesterNumber?: number | null;
 	openForEnrolment: boolean;
 	lecturerIds?: string[];
 	lecturerNames?: string[];
@@ -105,6 +222,9 @@ export interface Offering {
 	lecturerName?: string | null;
 	lecturerUsername?: string | null;
 	studentCount: number;
+	/** Weekly + make-up slots set on this offering. */
+	meetingCount?: number;
+	createdAt?: number;
 }
 
 export interface Meeting {
