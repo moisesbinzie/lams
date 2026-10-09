@@ -184,7 +184,15 @@
 			<form class="flex flex-col gap-4" onsubmit={start}>
 				<div class="flex flex-col gap-1.5">
 					<Label for="soff">Course and program</Label>
-					<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
+					<Select.Root
+						type="single"
+						value={offeringId}
+						onValueChange={(v) => (offeringId = v ?? '')}
+						items={offerings.map((o) => ({
+							value: o._id,
+							label: `${o.courseCode} — ${o.courseTitle} · ${o.programName}`
+						}))}
+					>
 						<Select.Trigger id="soff" class="w-full">
 							<Select.Value placeholder="Choose a course" />
 						</Select.Trigger>

@@ -200,7 +200,12 @@
 		<div class="grid gap-4 sm:grid-cols-2">
 			<div class="flex flex-col gap-1.5">
 				<Label for="cls">Program</Label>
-				<Select.Root type="single" value={programId} onValueChange={(v) => (programId = v ?? '')}>
+				<Select.Root
+					type="single"
+					value={programId}
+					onValueChange={(v) => (programId = v ?? '')}
+					items={programs.map((c) => ({ value: c._id, label: c.name }))}
+				>
 					<Select.Trigger id="cls" class="w-full">
 						<Select.Value placeholder="Choose a program" />
 					</Select.Trigger>
@@ -215,7 +220,12 @@
 			</div>
 			<div class="flex flex-col gap-1.5">
 				<Label for="off">Course</Label>
-				<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
+				<Select.Root
+					type="single"
+					value={offeringId}
+					onValueChange={(v) => (offeringId = v ?? '')}
+					items={offerings.map((o) => ({ value: o._id, label: `${o.courseCode} — ${o.courseTitle}` }))}
+				>
 					<Select.Trigger id="off" class="w-full">
 						<Select.Value placeholder="Choose a course" />
 					</Select.Trigger>

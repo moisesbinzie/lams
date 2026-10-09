@@ -170,7 +170,15 @@
 			{:else}
 				<div class="flex flex-col gap-1.5">
 					<Label for="off">Course</Label>
-					<Select.Root type="single" value={offeringId} onValueChange={(v) => (offeringId = v ?? '')}>
+					<Select.Root
+						type="single"
+						value={offeringId}
+						onValueChange={(v) => (offeringId = v ?? '')}
+						items={offerings.map((o) => ({
+							value: o._id,
+							label: `${o.courseCode} — ${o.courseTitle} · ${o.programName}`
+						}))}
+					>
 						<Select.Trigger id="off" class="w-full">
 							<Select.Value placeholder="Choose a course" />
 						</Select.Trigger>

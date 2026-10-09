@@ -246,6 +246,10 @@
 									onValueChange={(v) => {
 										draft[r._id] = v === NO_STATUS ? undefined : (v as AttendanceStatus);
 									}}
+									items={[
+										{ value: NO_STATUS, label: 'Change status…' },
+										...OVERRIDABLE.map((s) => ({ value: s, label: s.replace('_', ' ') }))
+									]}
 								>
 									<Select.Trigger
 										size="sm"
@@ -255,9 +259,9 @@
 									</Select.Trigger>
 									<Select.Content>
 										<Select.Group>
-											<Select.Item value={NO_STATUS}>Change status…</Select.Item>
+											<Select.Item value={NO_STATUS} label="Change status…">Change status…</Select.Item>
 											{#each OVERRIDABLE as s (s)}
-												<Select.Item value={s}>{s.replace('_', ' ')}</Select.Item>
+												<Select.Item value={s} label={s.replace('_', ' ')}>{s.replace('_', ' ')}</Select.Item>
 											{/each}
 										</Select.Group>
 									</Select.Content>

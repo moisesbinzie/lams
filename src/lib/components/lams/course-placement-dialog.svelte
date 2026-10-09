@@ -179,7 +179,12 @@
 			{#if mode === 'existing'}
 				<div class="flex flex-col gap-1.5">
 					<Label for="pl-course">Course</Label>
-					<Select.Root type="single" value={courseId} onValueChange={(v) => (courseId = v ?? '')}>
+					<Select.Root
+						type="single"
+						value={courseId}
+						onValueChange={(v) => (courseId = v ?? '')}
+						items={courses.map((c) => ({ value: c._id, label: `${c.code} — ${c.title}` }))}
+					>
 						<Select.Trigger id="pl-course" class="w-full">
 							<Select.Value placeholder="Choose a course" />
 						</Select.Trigger>
@@ -225,6 +230,7 @@
 						type="single"
 						value={String(year)}
 						onValueChange={(v) => (year = Number(v ?? 1))}
+						items={years.map((y) => ({ value: String(y), label: `Year ${y}` }))}
 					>
 						<Select.Trigger id="pl-year" class="w-full">
 							<Select.Value placeholder="Choose a year" />
@@ -245,7 +251,12 @@
 							No semesters exist yet. Create the academic year first.
 						</p>
 					{:else}
-						<Select.Root type="single" value={semesterId} onValueChange={(v) => (semesterId = v ?? '')}>
+						<Select.Root
+							type="single"
+							value={semesterId}
+							onValueChange={(v) => (semesterId = v ?? '')}
+							items={semestersOrdered.map((s) => ({ value: s._id, label: `${s.name} · ${s.year}` }))}
+						>
 							<Select.Trigger id="pl-sem" class="w-full">
 								<Select.Value placeholder="Choose a semester" />
 							</Select.Trigger>

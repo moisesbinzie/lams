@@ -183,13 +183,14 @@
 								semesterId = v ?? '';
 								void load();
 							}}
+							items={semesters.map((s) => ({ value: s._id, label: s.name }))}
 						>
 							<Select.Trigger id="sem" class="w-full">
 								<Select.Value placeholder={semesters.length ? 'Whole time at school' : 'No semesters yet'} />
 							</Select.Trigger>
 							<Select.Content>
 								{#each semesters as s (s._id)}
-									<Select.Item value={s._id}>{s.name}</Select.Item>
+									<Select.Item value={s._id} label={s.name}>{s.name}</Select.Item>
 								{/each}
 							</Select.Content>
 						</Select.Root>
@@ -210,18 +211,26 @@
 						onValueChange={(v) => {
 							statusFilter = v === ALL_STATUSES ? '' : (v ?? '');
 						}}
+						items={[
+							{ value: ALL_STATUSES, label: 'All statuses' },
+							{ value: 'Present', label: 'On time' },
+							{ value: 'Late', label: 'Late' },
+							{ value: 'Out_of_Range', label: 'Out of range' },
+							{ value: 'Absent', label: 'Absent' },
+							{ value: 'Excused', label: 'Excused' }
+						]}
 					>
 						<Select.Trigger class="w-44 shrink-0" aria-label="Filter by status">
 							<Select.Value placeholder="All statuses" />
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
-								<Select.Item value={ALL_STATUSES}>All statuses</Select.Item>
-								<Select.Item value="Present">On time</Select.Item>
-								<Select.Item value="Late">Late</Select.Item>
-								<Select.Item value="Out_of_Range">Out of range</Select.Item>
-								<Select.Item value="Absent">Absent</Select.Item>
-								<Select.Item value="Excused">Excused</Select.Item>
+								<Select.Item value={ALL_STATUSES} label="All statuses">All statuses</Select.Item>
+								<Select.Item value="Present" label="On time">On time</Select.Item>
+								<Select.Item value="Late" label="Late">Late</Select.Item>
+								<Select.Item value="Out_of_Range" label="Out of range">Out of range</Select.Item>
+								<Select.Item value="Absent" label="Absent">Absent</Select.Item>
+								<Select.Item value="Excused" label="Excused">Excused</Select.Item>
 							</Select.Group>
 						</Select.Content>
 					</Select.Root>

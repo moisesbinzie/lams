@@ -48,7 +48,12 @@
 {:else if variant === 'select'}
 	<div class="flex flex-col gap-1.5">
 		<span class="text-sm font-medium">{label}</span>
-		<Select.Root type="single" value={programId} onValueChange={(v) => (programId = v ?? '')}>
+		<Select.Root
+			type="single"
+			value={programId}
+			onValueChange={(v) => (programId = v ?? '')}
+			items={programs.map((p) => ({ value: p._id, label: `${p.name}${suffix(p)}` }))}
+		>
 			<Select.Trigger {id} class="w-full">
 				<Select.Value placeholder="Choose a program" />
 			</Select.Trigger>

@@ -236,6 +236,7 @@
 								semesterId = v ?? '';
 								data = null;
 							}}
+							items={semestersOrdered.map((s) => ({ value: s._id, label: `${s.name} · ${s.year}` }))}
 						>
 							<Select.Trigger id="tt-semester" class="w-full">
 								<Select.Value placeholder="Choose a semester" />
@@ -257,6 +258,10 @@
 							type="single"
 							value={yearFilter || 'all'}
 							onValueChange={(v) => (yearFilter = v === 'all' || !v ? '' : v)}
+							items={[
+								{ value: 'all', label: 'All years' },
+								...years.map((y) => ({ value: String(y), label: `Year ${y}` }))
+							]}
 						>
 							<Select.Trigger id="tt-year" class="w-full">
 								<Select.Value placeholder="All years" />

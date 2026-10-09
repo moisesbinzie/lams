@@ -127,7 +127,12 @@
 		<form class="flex flex-col gap-4" onsubmit={submit}>
 			<div class="flex flex-col gap-1.5">
 				<Label for="bp-course">Course</Label>
-				<Select.Root type="single" value={courseId} onValueChange={(v) => (courseId = v ?? '')}>
+				<Select.Root
+					type="single"
+					value={courseId}
+					onValueChange={(v) => (courseId = v ?? '')}
+					items={courses.map((c) => ({ value: c._id, label: `${c.code} — ${c.title}` }))}
+				>
 					<Select.Trigger id="bp-course" class="w-full">
 						<Select.Value placeholder="Choose a course" />
 					</Select.Trigger>
@@ -178,7 +183,12 @@
 				</div>
 				<div class="flex flex-col gap-1.5">
 					<Label for="bp-sem">Semester (all targets)</Label>
-					<Select.Root type="single" value={semesterId} onValueChange={(v) => (semesterId = v ?? '')}>
+					<Select.Root
+						type="single"
+						value={semesterId}
+						onValueChange={(v) => (semesterId = v ?? '')}
+						items={semestersOrdered.map((s) => ({ value: s._id, label: `${s.name} · ${s.year}` }))}
+					>
 						<Select.Trigger id="bp-sem" class="w-full">
 							<Select.Value placeholder="Choose a semester" />
 						</Select.Trigger>

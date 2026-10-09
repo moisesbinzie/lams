@@ -6,6 +6,7 @@ import {
 	ITERATIONS,
 	SCHEME,
 	SESSION_TTL_MS,
+	assertCanAccessOffering,
 	hashPin,
 	lecturerProgramIds,
 	logAudit,
@@ -166,6 +167,79 @@ export const importPeople = mutation({
 			added += 1;
 		}
 		return { added, skipped };
+	}
+});
+
+/**
+ * Register a brand-new student straight into one course offering.
+ *
+ * One mutation rather than `createPerson` followed by `assignForPerson`, so
+ * the two writes land together: a student with a program but no course (or a
+ * course enrolment the admin's Students tab cannot place) is never left
+ * behind when the second call fails. Both relations derive from the offering
+ * itself — membership in its program, enrolment carrying its course, program
+ * and semester (the year of study rides on the offering) — so the admin
+ * always sees the full chain: program, course, semester and year.
+ */
+export const registerAndEnrol = mutation({
+	args: {
+		token: v.string(),
+		fullName: v.string(),
+		regNumber: v.string(),
+		studentId: v.string(),
+		offeringId: v.id('offerings')
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const offering = await ctx.db.get('offerings', args.offeringId);
+		if (!offering) throw new Error('Course offering not found.');
+		if (!offering.programId) {
+			throw new Error('This course has no program yet — ask the admin to place it first.');
+		}
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
+		if (actor.kind !== 'staff') {
+			const repRows = await ctx.db
+				.query('programReps')
+				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+				.take(200);
+			if (!repRows.some((r: any) => String(r.programId) === String(offering.programId))) {
+				throw new Error('You are only a program rep for your own program.');
+			}
+		}
+		const fullName = args.fullName.trim();
+		const regNorm = normalizeReg(args.regNumber);
+		const idNorm = normalizeId(args.studentId);
+		if (fullName.length < 2) throw new Error('Full name is required.');
+		if (!regNorm) throw new Error('Registration number is required.');
+		if (!idNorm) throw new Error('Student ID is required.');
+
+		const clash = await ctx.db.query('people').withIndex('by_reg', (q) => q.eq('regNorm', regNorm)).unique();
+		if (clash) throw new Error('That registration number already exists. Add them from search instead.');
+
+		const personId = await ctx.db.insert('people', {
+			role: 'student',
+			fullName,
+			regNumber: args.regNumber.trim(),
+			regNorm,
+			studentId: args.studentId.trim(),
+			idNorm,
+			status: 'invited',
+			createdAt: Date.now()
+		});
+		await addMembership(ctx, personId, offering.programId);
+		await ctx.db.insert('enrolments', {
+			personId,
+			courseId: offering.courseId,
+			offeringId: offering._id,
+			semesterId: offering.semesterId,
+			programId: offering.programId,
+			status: 'active',
+			addedBy: actor.kind === 'staff' ? ('lecturer' as const) : ('rep' as const),
+			createdAt: Date.now()
+		});
+		return personId;
 	}
 });
 

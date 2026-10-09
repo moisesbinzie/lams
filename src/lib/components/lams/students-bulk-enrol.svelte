@@ -100,7 +100,15 @@
 			</div>
 			<div class="flex flex-col gap-1.5">
 				<span class="text-sm font-medium">Semester</span>
-				<Select.Root type="single" value={semesterId} onValueChange={(v) => (semesterId = v ?? 'all')}>
+				<Select.Root
+					type="single"
+					value={semesterId}
+					onValueChange={(v) => (semesterId = v ?? 'all')}
+					items={[
+						{ value: 'all', label: 'All semesters' },
+						...semestersOrdered.map((s) => ({ value: s._id, label: `${s.name} · ${s.year}` }))
+					]}
+				>
 					<Select.Trigger id="be-semester" class="w-full">
 						<Select.Value placeholder="All semesters" />
 					</Select.Trigger>

@@ -261,6 +261,10 @@
 					type="single"
 					value={offeringId}
 					onValueChange={(v) => (offeringId = v ?? '')}
+					items={courses.map((c) => ({
+						value: c.offeringId,
+						label: `${c.courseCode} — ${c.courseTitle} (Year ${c.yearOfStudy ?? '—'})`
+					}))}
 				>
 					<Select.Trigger id="ts-course" class="w-full" disabled={isEditing}>
 						<Select.Value placeholder="Choose a course" />
@@ -290,7 +294,12 @@
 				{#if kind === 'weekly'}
 					<div class="flex flex-col gap-1.5">
 						<Label for="ts-day">Day</Label>
-						<Select.Root type="single" value={dayOfWeek} onValueChange={(v) => (dayOfWeek = v ?? '1')}>
+						<Select.Root
+							type="single"
+							value={dayOfWeek}
+							onValueChange={(v) => (dayOfWeek = v ?? '1')}
+							items={DAYS.map((d, i) => ({ value: String(i), label: d }))}
+						>
 							<Select.Trigger id="ts-day" class="w-full">
 								<Select.Value placeholder="Choose a day" />
 							</Select.Trigger>

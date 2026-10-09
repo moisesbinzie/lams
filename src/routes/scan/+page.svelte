@@ -761,16 +761,22 @@
 									type="single"
 									value={editStatus}
 									onValueChange={(v) => (editStatus = (v ?? 'Present') as Status)}
+									items={[
+										{ value: 'Present', label: 'Present' },
+										{ value: 'Late', label: 'Late' },
+										{ value: 'Excused', label: 'Excused' },
+										{ value: 'Absent', label: 'Absent' }
+									]}
 								>
 									<Select.Trigger id="estatus" class="w-full">
 										<Select.Value placeholder="Present" />
 									</Select.Trigger>
 									<Select.Content>
 										<Select.Group>
-											<Select.Item value="Present">Present</Select.Item>
-											<Select.Item value="Late">Late</Select.Item>
-											<Select.Item value="Excused">Excused</Select.Item>
-											<Select.Item value="Absent">Absent</Select.Item>
+											<Select.Item value="Present" label="Present">Present</Select.Item>
+											<Select.Item value="Late" label="Late">Late</Select.Item>
+											<Select.Item value="Excused" label="Excused">Excused</Select.Item>
+											<Select.Item value="Absent" label="Absent">Absent</Select.Item>
 										</Select.Group>
 									</Select.Content>
 								</Select.Root>
@@ -812,17 +818,22 @@
 								type="single"
 								value={manualStatus}
 								onValueChange={(v) => (manualStatus = (v ?? 'Present') as AddedStatus)}
+								items={[
+									{ value: 'Present', label: 'Present' },
+									{ value: 'Late', label: 'Late' },
+									{ value: 'Excused', label: 'Excused' }
+								]}
 							>
 								<Select.Trigger id="mstatus" class="w-full">
 									<Select.Value placeholder="Present" />
 								</Select.Trigger>
-								<Select.Content>
-									<Select.Group>
-										<Select.Item value="Present">Present</Select.Item>
-										<Select.Item value="Late">Late</Select.Item>
-										<Select.Item value="Excused">Excused</Select.Item>
-									</Select.Group>
-								</Select.Content>
+									<Select.Content>
+										<Select.Group>
+											<Select.Item value="Present" label="Present">Present</Select.Item>
+											<Select.Item value="Late" label="Late">Late</Select.Item>
+											<Select.Item value="Excused" label="Excused">Excused</Select.Item>
+										</Select.Group>
+									</Select.Content>
 							</Select.Root>
 						</div>
 						<div class="flex items-end">

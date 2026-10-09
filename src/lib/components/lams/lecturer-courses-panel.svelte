@@ -24,8 +24,9 @@
 	 *
 	 * Adding is `assignForPerson` (enroll true), removing is the same call
 	 * with enroll false — a withdrawal, never a delete, so attendance history
-	 * is kept. Registering a student entirely is `createPerson` in the
-	 * course's program plus an immediate enrol, in one save.
+	 * is kept. Registering a student entirely is `registerAndEnrol`: the
+	 * student joins the course's program and the course in one transaction,
+	 * so the admin's Students tab always sees the full chain.
 	 */
 	let token = getToken();
 	let offerings = $state<Offering[]>([]);
@@ -257,19 +258,15 @@
 		registering = true;
 		try {
 			const client = requireConvexClient();
-			const personId = (await client.mutation(api.people.createPerson, {
+			// One call: the student joins the course's program and the course
+			// together, so the admin's Students tab always sees the full
+			// chain — program, course, semester and year — never half of it.
+			await client.mutation(api.people.registerAndEnrol, {
 				token,
 				fullName: newName.trim(),
 				regNumber: newReg.trim(),
 				studentId: newSid.trim(),
-				role: 'student',
-				programId: selected.programId as never
-			})) as string;
-			await client.mutation(api.enrolments.assignForPerson, {
-				token,
-				personId: personId as never,
-				offeringId: selected._id as never,
-				enroll: true
+				offeringId: selected._id as never
 			});
 			newName = '';
 			newReg = '';
@@ -279,7 +276,7 @@
 			await refreshCounts();
 			reportSuccess('Student registered and added to this course.');
 		} catch (err) {
-			reportError(err, 'Could not register that student. If the reg number exists, add them from search instead.');
+			reportError(err, 'Could not register that student.');
 		} finally {
 			registering = false;
 		}

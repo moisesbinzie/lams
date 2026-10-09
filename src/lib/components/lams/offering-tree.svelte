@@ -694,6 +694,17 @@
 																onValueChange={(v) => {
 																	offerCourse[key] = v === NO_COURSE ? '' : (v ?? '');
 																}}
+																items={[
+																	{ value: NO_COURSE, label: 'Choose a course' },
+																	...courses
+																		.filter(
+																			(s) =>
+																				!offeredCourseIds(String(p._id), year, String(sem._id)).has(
+																					String(s._id)
+																				)
+																		)
+																		.map((s) => ({ value: s._id, label: `${s.code} — ${s.title}` }))
+																]}
 															>
 																<Select.Trigger class="w-full">
 																	<Select.Value placeholder="Choose a course" />
