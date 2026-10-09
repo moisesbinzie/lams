@@ -55,6 +55,10 @@
 				return;
 			}
 			if (who.kind === 'staff') {
+				if ((who as { mustChangePassword?: boolean }).mustChangePassword === true) {
+					await goto('/settings');
+					return;
+				}
 				const isAdmin = (who as { isAdmin?: boolean }).isAdmin === true || who.role === 'admin';
 				await goto(isAdmin ? '/admin' : '/manage');
 				return;
@@ -104,9 +108,14 @@
 				return;
 			}
 			// Record the token in the shared session so the navbar is already
-			// signed in when the target page renders. Admins land on the admin
-			// console; lecturers land on their (scoped) console.
+			// signed in when the target page renders. A generated password
+			// goes straight to Settings until the owner picks their own;
+			// otherwise admins land on the admin console, lecturers on theirs.
 			await beginSession(res.token);
+			if ((res as { mustChangePassword?: boolean }).mustChangePassword === true) {
+				await goto('/settings');
+				return;
+			}
 			await goto(loggedInIsAdmin ? '/admin' : '/manage');
 		} catch (err) {
 			reportError(err, 'Could not sign you in.');

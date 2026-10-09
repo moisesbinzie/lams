@@ -11,6 +11,7 @@ export type Me =
 			role: 'lecturer' | 'admin';
 			staffRole?: 'lecturer' | 'admin';
 			isAdmin?: boolean;
+			mustChangePassword?: boolean;
 			fullName: string;
 			username: string;
 	  }
@@ -84,7 +85,6 @@ export interface Subject {
 	code: string;
 	title: string;
 	hoursPerWeek?: number;
-	lecturerId?: string;
 	openForEnrolment: boolean;
 }
 
@@ -261,6 +261,8 @@ export interface LectureSession {
 	className: string;
 	openForEnrolment: boolean;
 	status: 'open' | 'closed';
+	flaggedCount?: number;
+	disputedCount?: number;
 	startedAt: number;
 	closesAt: number;
 }

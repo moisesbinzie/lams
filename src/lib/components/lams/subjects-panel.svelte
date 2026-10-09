@@ -366,23 +366,21 @@
 											rosterFor = o;
 											rosterOpen = true;
 										}}>Roster ({o.studentCount})</Button>
+										{#if o.openForEnrolment}
+											<Badge class="bg-emerald-600 text-white">Open to students</Badge>
+											<Button variant="outline" size="sm" onclick={() => toggleOpen(o._id, false)}>
+												Close enrolment
+											</Button>
+										{:else}
+											<Badge variant="secondary">Closed</Badge>
+											<Button variant="secondary" size="sm" onclick={() => toggleOpen(o._id, true)}>
+												Let students join
+											</Button>
+										{/if}
 										{#if isAdmin}
-											{#if o.openForEnrolment}
-												<Badge class="bg-emerald-600 text-white">Open to students</Badge>
-												<Button variant="outline" size="sm" onclick={() => toggleOpen(o._id, false)}>
-													Close enrolment
-												</Button>
-											{:else}
-												<Badge variant="secondary">Closed</Badge>
-												<Button variant="secondary" size="sm" onclick={() => toggleOpen(o._id, true)}>
-													Let students join
-												</Button>
-											{/if}
 											<Button variant="ghost" size="sm" class="text-red-700" onclick={() => removeOffering(o._id)}>
 												Remove
 											</Button>
-										{:else}
-											<Badge variant="secondary">{o.openForEnrolment ? 'Open to students' : 'Closed'}</Badge>
 										{/if}
 									</div>
 								</li>
@@ -414,7 +412,17 @@
 											rosterFor = o;
 											rosterOpen = true;
 										}}>Roster ({o.studentCount})</Button>
-										<Badge variant="secondary">{o.openForEnrolment ? 'Open to students' : 'Closed'}</Badge>
+										{#if o.openForEnrolment}
+											<Badge class="bg-emerald-600 text-white">Open to students</Badge>
+											<Button variant="outline" size="sm" onclick={() => toggleOpen(o._id, false)}>
+												Close enrolment
+											</Button>
+										{:else}
+											<Badge variant="secondary">Closed</Badge>
+											<Button variant="secondary" size="sm" onclick={() => toggleOpen(o._id, true)}>
+												Let students join
+											</Button>
+										{/if}
 									</div>
 								</li>
 							{/each}

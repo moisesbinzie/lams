@@ -10,14 +10,14 @@ they are not in the room, and — just as importantly — **what it cannot stop.
 3. The student signs in with **registration number + student ID** and chooses their own PIN. Staff never see or choose it.
 4. That phone is **bound** to the account. Any other device is refused.
 5. The lecturer or rep opens the lecture, which mints a **per-lecture station secret** and puts a QR on the screen at the front of the hall.
-6. The screen shows a code derived from that secret, refreshed **every 30 seconds**, encoded as a URL.
+6. The screen shows a code derived from that secret, refreshed **every 10 seconds**, encoded as a URL.
 7. Students **scan it with their own phones**. The same phone reports its position at that moment, and the server refuses the scan unless it came from the one device the account is bound to. One scan per student per lecture.
 8. A missed scan becomes **Absent** when the lecture closes.
-9. The record stores: student, method, time, the student's own coordinates and distance, verification level, and any flag. The student can dispute it.
+9. The record stores: student, method, time, the student's own coordinates and distance, verification level, and any flag. The student can dispute it, and a lecturer or rep can mark the dispute reviewed.
 
 Students without a working phone are added by a rep or lecturer by hand, tagged with who entered them and why.
 
-Lecturers never go through the student path. They sign in at `/signin` → **I am a lecturer** with a username and password (seeded `admin` / `admin`), against the separate `staff` table.
+Staff never go through the student path. They sign in with a username and password against the separate `staff` table, through their own door: **I am an admin** (seeded `admin` / `admin` — change it immediately) or **I am a lecturer** (username plus the temporary password the admin issued, which must be changed in Settings before anything else). Admins see everything; lecturers only see offerings assigned to them, plus unassigned offerings in classes they already teach (sick-leave cover).
 
 Code: `src/convex/people.ts`, `src/convex/staff.ts`, `src/convex/attendance.ts`, `src/convex/station.ts`, `src/lib/lams/station.ts`.
 
@@ -71,7 +71,7 @@ That is the whole mechanism, and it is worth being blunt about its two halves:
 
 | Signal | Stops | Gap it leaves |
 | --- | --- | --- |
-| Station code, per-lecture secret, 30-second roll | Forwarding the link to someone who will use it minutes or days later | A code photographed at the hall is good for up to 90 seconds, so it can be sent to someone *nearby* — or forwarded instantly to someone far away |
+| Station code, per-lecture secret, 10-second roll | Forwarding the link to someone who will use it minutes or days later | A code photographed at the hall is good for about 30 seconds, so it can be sent to someone *nearby* — or forwarded instantly to someone far away |
 | Student's own reported distance | Redeeming that code from outside the hall | Spoofable; see the limits below |
 
 They cover each other. Neither is much use alone.
@@ -126,7 +126,7 @@ a cheater.
 | Device binding | `people.login` | Signing in as someone else **on a different phone**. Lending a phone still works — see the limits. |
 | **Scan-time device binding** | `auth.requirePersonOnDevice` → `helpers.judgeScanDevice` | **A token carried to another phone** and used to mark the owner present. `scannerDeviceId` is stored on the record. |
 | Station code guesses are throttled | `ratelimit.noteFailure` with `STATION_LIMITS` | Brute-forcing the six-digit code. Generous limits (40 / 5 min) so a student fumbling with a camera is not punished like a credential-guesser. |
-| Station code rolls every 30 s | `station.verifyStationCode` | Forwarding the link for use later. A photographed screen goes stale within a minute. |
+| Station code rolls every 10 s | `station.verifyStationCode` | Forwarding the link for use later. A photographed screen goes stale in about 30 seconds. |
 | Station secret is per-lecture | `station.stationCodeForSlot` + `attendance.startSession` | A code from this morning's lecture, or a code read off a screen in a different hall. |
 | Clock-skew window of one slot | `station.STATION_WINDOW` | Refusing everyone because the display's clock drifted — the skew that matters is display-vs-server, not student-vs-server. |
 | Code bound to the offering | `attendance.submitStationScan` | A station code being used to mark attendance for a different subject. |
@@ -147,7 +147,7 @@ a cheater.
 | Layer | Question it answers | Status |
 | --- | --- | --- |
 | Per-lecture station secret | Was this lecture's screen scanned? | Built |
-| 30-second roll | Was it scanned just now, not earlier? | Built |
+| 10-second roll | Was it scanned just now, not earlier? | Built |
 | Device binding | Was it their own phone? | Built |
 | **Scan-time device binding** | **Was this scan made on the phone the account is bound to?** | **Built** |
 | **Student's own reported distance** | **Was the student in the hall?** | **Built** |
@@ -180,8 +180,11 @@ Further honest limits:
 - **The bound phone plus the PIN is still the account.** See "What device binding
   does NOT close" above. Anyone holding both can act as the student.
 - **`deviceId` is a random string in `localStorage`, not a hardware attestation.**
-  It stops someone moving a token to another handset, but anyone who can write to
-  that storage — or who is already signed in on the bound phone — is past it.
+  Worse, the token (`lams_token`) lives in the same storage next to it. Copying
+  **both** values to another phone passes every device check, because the server
+  cannot tell a copied pair from the original. The binding stops casual and
+  mechanical routes (backup restore, profile sync, old session outliving a
+  rebind) — it does not stop deliberate copying by someone with both values.
 - **Geolocation needs a secure context.** Browsers only expose it over HTTPS (or
   `localhost`). Served over plain HTTP, every record comes through `unconfirmed`
   and flagged, and no distance check runs at all.
@@ -204,9 +207,15 @@ Further honest limits:
   hand, and override any record during the lecture. The audit trail, the reason
   field, the student's own visibility, and the lecturer's review afterwards are the
   checks on that — not a technical bar.
-- **One shared lecturer password.** Every lecturer account can change any
-  record, so whoever holds the password has full authority. Per-lecturer
-  usernames exist in Settings if you need to tell who was working.
+- **Lecturers hold real power over their own subjects.** A lecturer can add,
+  override and remove records for assigned offerings. The per-record stamps
+  (`recordedBy`, `recordedByStaffId`, `overriddenBy`, `prevStatus`), the
+  student's own visibility, and the admin's audit log are the checks on
+  that — not a technical bar.
+- **The student ID is a weak second factor.** Rosters and the students table
+  show it to lecturers and reps, so anyone with roster access learns both
+  halves needed to claim an account (reg number + student ID). Treat it as an
+  onboarding check, not a secret.
 - **No email or SMS.** PIN resets, disputes and flags are only seen by opening
   the app.
 
@@ -225,11 +234,55 @@ Further honest limits:
 - Keep rep passwords out of reach of students. A rep who can read a student's PIN
   can act as them.
 
+## Staff passwords and recovery
+
+- Lecturer and admin passwords are generated server-side (10 unambiguous
+  characters) and shown **once**. The account carries `mustChangePassword`
+  until the owner picks their own in Settings; first sign-in lands there
+  directly. Manually chosen passwords (`staff.createStaff`) get the same flag.
+- Passwords are salted, iterated SHA-256 (`sha2i`, 2048 rounds). Weaker than
+  argon2/scrypt, which Convex cannot call synchronously — it stops a leaked
+  database yielding plaintext, nothing more.
+- Keep **at least two active admins** (the console nags you to). If every
+  admin password is lost, the break-glass is a shell command with deployment
+  credentials — never app code (`migrations:resetStaffPassword`). It signs
+  the account out everywhere, reactivates it, and forces a change at next
+  sign-in.
+
+## Audit log
+
+Privileged actions outside per-record stamps are journaled in `auditLog`
+(admin-visible in the console, newest first): staff creation, password
+resets, activation switches, renames, lecturer assignments, rep grants and
+revokes, student suspends, PIN resets, device moves, and bulk status changes.
+Per-record attendance changes keep their own stamps (`recordedBy`,
+`recordedByStaffId`, `overriddenBy`, `prevStatus`, dispute resolution).
+
+## History is never deleted
+
+Anything with lecture records behind it cannot be removed: offerings with
+sessions, subjects/classes/semesters with sessions underneath. Deactivating a
+lecturer releases their offerings back to unassigned (reassign from the
+console) but keeps every record. Sessions stamp who opened them
+(`startedByStaffId`), so reassigning a subject or renaming an account never
+rewrites history; displayed names are snapshots, ids are links.
+
+## Known query limits
+
+List and report queries cap their scans (`take(200)`–`take(5000)` depending
+on the table) to stay inside Convex execution limits. Past those sizes,
+lists and percentages silently cover only the most recent rows. The caps to
+raise-or-paginate first when the school grows: `subjectReport` sessions
+(300), `lecturerStats` sessions (2000), `listPeople` (1000), `classMembers`
+per class (2000).
+
 ## What is stored
 
 - Student name, registration number, student ID, class.
-- Lecturer username, display name, and a salted, iterated SHA-256 hash of the shared password.
+- Staff username, display name, role, a salted iterated password hash, and whether a self-chosen password is still owed.
 - Account status, role, and the device a student is bound to.
+- Sessions stamp who opened them (`startedByStaffId`, `startedByName`).
+- The `auditLog` trail described above.
 - A per-lecture station secret — server-side only, returned only to a rep or
   lecturer who may already take that class's attendance.
 - Per attendance record: method (`station`, `scan`, `rep`, `manual`, `absent`),

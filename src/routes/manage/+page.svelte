@@ -48,13 +48,19 @@
 		}
 	});
 
-	const tabs = [
+	const allTabs = [
 		{ key: 'setup', label: 'Classes & semesters' },
 		{ key: 'people', label: 'Students' },
 		{ key: 'subjects', label: 'Subjects' },
 		{ key: 'timetable', label: 'Timetable' },
 		{ key: 'lectures', label: 'Lectures' }
 	] as const;
+
+	/**
+	 * Admins organise structure here; running lectures is a lecturer job, so
+	 * the Lectures tab is not shown to admins. Lecturers keep all five tabs.
+	 */
+	const tabs = $derived(isAdmin ? allTabs.filter((t) => t.key !== 'lectures') : allTabs);
 </script>
 
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 lg:max-w-5xl">
@@ -62,7 +68,7 @@
 		<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
 		<div>
 			<h1 class="flex flex-wrap items-center gap-2 text-xl font-bold text-lams-navy">
-				Lecturer console
+				{isAdmin ? 'Setup console' : 'Lecturer console'}
 				{#if isAdmin}
 					<Badge class="bg-amber-600 text-white">Admin account</Badge>
 				{:else}
@@ -70,7 +76,12 @@
 				{/if}
 			</h1>
 			<p class="text-xs text-muted-foreground">
-				Set up semesters, classes and subjects, add students, then start lectures and review records.
+				{#if isAdmin}
+					Organise semesters, classes, subjects and timetables. Lecturer accounts and their
+					assignments live in the admin console.
+				{:else}
+					Set up semesters, classes and subjects, add students, then start lectures and review records.
+				{/if}
 			</p>
 		</div>
 	</div>

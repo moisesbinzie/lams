@@ -1,14 +1,31 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
-import { lecturerClassIds, requireAdmin, requireActor } from './auth';
+import {
+	assertCanAccessOffering,
+	lecturerClassIds,
+	logAudit,
+	requireAdmin,
+	requireActor,
+	requireStaff
+} from './auth';
 
 // ---------------------------------------------------------------- semesters
 
 export const listSemesters = query({
 	args: { token: v.string() },
 	handler: async (ctx, args) => {
-		await requireActor(ctx, args.token);
-		return await ctx.db.query('semesters').order('desc').take(100);
+		const actor = await requireActor(ctx, args.token);
+		const all = await ctx.db.query('semesters').order('desc').take(100);
+		// Lecturers only see semesters their assigned offerings run in.
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = await ctx.db
+				.query('offerings')
+				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
+				.take(500);
+			const semIds = new Set(mine.map((o: any) => String(o.semesterId)));
+			return all.filter((s: any) => semIds.has(String(s._id)));
+		}
+		return all;
 	}
 });
 
@@ -53,6 +70,13 @@ export const removeSemester = mutation({
 		if (offerings.length > 0) throw new Error('This semester already has subjects. Remove them first.');
 		const classes = await ctx.db.query('classes').withIndex('by_semester', (q) => q.eq('semesterId', args.id)).take(1);
 		if (classes.length > 0) throw new Error('This semester already has classes. Remove them first.');
+		const sessions = await ctx.db
+			.query('sessions')
+			.withIndex('by_semester', (q) => q.eq('semesterId', args.id))
+			.take(1);
+		if (sessions.length > 0) {
+			throw new Error('This semester still has lecture records, which are kept as history.');
+		}
 		await ctx.db.delete('semesters', args.id);
 		return { ok: true };
 	}
@@ -146,6 +170,21 @@ export const removeClass = mutation({
 		await requireAdmin(ctx, args.token);
 		const offerings = await ctx.db.query('offerings').withIndex('by_class', (q) => q.eq('classId', args.id)).take(1);
 		if (offerings.length > 0) throw new Error('This class still has subjects. Remove them first.');
+		// Sessions carry the class only through their offering, so check every
+		// offering of this class — lecture records are history and block removal.
+		const allOfferings = await ctx.db
+			.query('offerings')
+			.withIndex('by_class', (q) => q.eq('classId', args.id))
+			.take(200);
+		for (const o of allOfferings) {
+			const sessions = await ctx.db
+				.query('sessions')
+				.withIndex('by_offering', (q) => q.eq('offeringId', o._id))
+				.take(1);
+			if (sessions.length > 0) {
+				throw new Error('This class still has lecture records, which are kept as history.');
+			}
+		}
 		await ctx.db.delete('classes', args.id);
 		return { ok: true };
 	}
@@ -176,8 +215,7 @@ export const createSubject = mutation({
 		token: v.string(),
 		code: v.string(),
 		title: v.string(),
-		hoursPerWeek: v.optional(v.number()),
-		lecturerId: v.optional(v.id('staff'))
+		hoursPerWeek: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
@@ -195,7 +233,6 @@ export const createSubject = mutation({
 			title,
 			openForEnrolment: false,
 			...(args.hoursPerWeek ? { hoursPerWeek: args.hoursPerWeek } : {}),
-			...(args.lecturerId ? { lecturerId: args.lecturerId } : {}),
 			createdAt: Date.now()
 		});
 	}
@@ -206,15 +243,13 @@ export const updateSubject = mutation({
 		token: v.string(),
 		id: v.id('subjects'),
 		title: v.optional(v.string()),
-		hoursPerWeek: v.optional(v.number()),
-		lecturerId: v.optional(v.id('staff'))
+		hoursPerWeek: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
 		const patch: Record<string, unknown> = {};
 		if (args.title?.trim()) patch.title = args.title.trim();
 		if (args.hoursPerWeek !== undefined) patch.hoursPerWeek = args.hoursPerWeek;
-		if (args.lecturerId !== undefined) patch.lecturerId = args.lecturerId;
 		if (Object.keys(patch).length === 0) return { ok: true };
 		await ctx.db.patch(args.id, patch);
 		return { ok: true };
@@ -230,6 +265,13 @@ export const removeSubject = mutation({
 			.withIndex('by_subject', (q) => q.eq('subjectId', args.id))
 			.take(1);
 		if (offerings.length > 0) throw new Error('This subject is offered to a class. Remove it there first.');
+		const sessions = await ctx.db
+			.query('sessions')
+			.withIndex('by_subject', (q) => q.eq('subjectId', args.id))
+			.take(1);
+		if (sessions.length > 0) {
+			throw new Error('This subject still has lecture records, which are kept as history.');
+		}
 		await ctx.db.delete('subjects', args.id);
 		return { ok: true };
 	}
@@ -248,10 +290,15 @@ export const listOfferings = query({
 		const actor = await requireActor(ctx, args.token);
 		let rows: any[];
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			rows = await ctx.db
-				.query('offerings')
-				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
-				.take(500);
+			// Own offerings plus unassigned ones in classes already taught
+			// (substitute cover) — mirroring `canAccessOffering`.
+			const mine = new Set(await lecturerClassIds(ctx, actor.id));
+			const all = await ctx.db.query('offerings').take(500);
+			rows = all.filter(
+				(o: any) =>
+					String(o.lecturerId ?? '') === String(actor.id) ||
+					(!o.lecturerId && mine.has(String(o.classId)))
+			);
 			if (args.classId) rows = rows.filter((o: any) => String(o.classId) === String(args.classId));
 			if (args.semesterId) rows = rows.filter((o: any) => String(o.semesterId) === String(args.semesterId));
 		} else if (args.classId && args.semesterId) {
@@ -341,24 +388,46 @@ export const createOffering = mutation({
 export const setOfferingLecturer = mutation({
 	args: { token: v.string(), id: v.id('offerings'), lecturerId: v.optional(v.union(v.id('staff'), v.null())) },
 	handler: async (ctx, args) => {
-		await requireAdmin(ctx, args.token);
+		const actor = await requireAdmin(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.id);
 		if (!offering) throw new Error('Subject offering not found.');
+		const subject = await ctx.db.get('subjects', offering.subjectId);
+		const classDoc = await ctx.db.get('classes', offering.classId);
+		let targetName: string | undefined;
 		if (args.lecturerId) {
 			const lecturer = await ctx.db.get('staff', args.lecturerId);
 			if (!lecturer || !lecturer.active) throw new Error('That lecturer account is not active.');
 			await ctx.db.patch(args.id, { lecturerId: args.lecturerId });
+			targetName = lecturer.username;
 		} else {
 			await ctx.db.patch(args.id, { lecturerId: undefined });
 		}
+		await logAudit(ctx, {
+			actorName: actor.name,
+			actorId: actor.id,
+			action: 'offering.assign-lecturer',
+			targetKind: 'offering',
+			targetId: args.id,
+			targetName: `${subject?.code ?? ''} · ${classDoc?.name ?? ''}`,
+			...(targetName ? { detail: targetName } : { detail: 'unassigned' })
+		});
 		return { ok: true };
 	}
 });
 
+/**
+ * Opening an offering to self-enrolment is the lecturer's decision; admins
+ * may do it for any offering.
+ */
 export const setOfferingOpen = mutation({
 	args: { token: v.string(), id: v.id('offerings'), open: v.boolean() },
 	handler: async (ctx, args) => {
-		await requireAdmin(ctx, args.token);
+		const actor = await requireStaff(ctx, args.token);
+		if (!actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', args.id);
+			if (!offering) throw new Error('Subject offering not found.');
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
 		await ctx.db.patch(args.id, { openForEnrolment: args.open });
 		return { ok: true };
 	}
@@ -368,6 +437,15 @@ export const removeOffering = mutation({
 	args: { token: v.string(), id: v.id('offerings') },
 	handler: async (ctx, args) => {
 		await requireAdmin(ctx, args.token);
+		// Lecture records are history: an offering that ever ran keeps its
+		// sessions and attendance, so it cannot be removed at all.
+		const sessions = await ctx.db
+			.query('sessions')
+			.withIndex('by_offering', (q) => q.eq('offeringId', args.id))
+			.take(1);
+		if (sessions.length > 0) {
+			throw new Error('This subject has lecture records, which are kept as history. It cannot be removed.');
+		}
 		const enrolments = await ctx.db
 			.query('enrolments')
 			.withIndex('by_offering', (q) => q.eq('offeringId', args.id))

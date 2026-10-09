@@ -1,9 +1,11 @@
-// Sign-in state for students, class reps and lecturers — all three use the
-// same registration-number + PIN sign-in.
+// Client sign-in state. Students and class reps use registration-number +
+// PIN; lecturers and admins use username + password (separate doors).
 //
-// The token is device-bound server-side: the first sign-in fixes the account to
-// that phone, and any other device is refused until staff move it. That is what
-// stops a borrowed phone from being signed in as somebody else.
+// A student's token is device-bound server-side: the first sign-in fixes the
+// account to that phone, and any other device is refused until staff move it.
+// That stops a borrowed phone being signed in as somebody else — but not
+// someone copying both the token and the device id to another phone, since
+// both live side by side in `localStorage` (see SECURITY.md).
 
 const TOKEN_KEY = 'lams_token';
 const DEVICE_KEY = 'lams_device_id';

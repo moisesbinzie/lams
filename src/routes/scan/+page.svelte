@@ -926,6 +926,7 @@
 										{#if r.verification === 'weak'}· location too imprecise to judge{/if}
 										{#if r.verification === 'unconfirmed'}· no location reported{/if}
 										{#if r.overriddenBy}· changed by {r.overriddenBy}{/if}
+										{#if r.disputed}· <strong class="text-red-700">student reports this is wrong{r.disputeNote ? `: “${r.disputeNote}”` : ''}</strong>{/if}
 									</span>
 								</span>
 								<span class="flex items-center gap-2">

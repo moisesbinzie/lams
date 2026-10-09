@@ -8,6 +8,7 @@ import {
 	SESSION_TTL_MS,
 	hashPin,
 	lecturerClassIds,
+	logAudit,
 	randomSalt,
 	requireAdmin,
 	requirePerson,
@@ -368,7 +369,17 @@ export const updateMyName = mutation({
 export const resetPin = mutation({
 	args: { token: v.string(), personId: v.id('people') },
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const memberships = await ctx.db
+				.query('classMembers')
+				.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
+				.take(100);
+			const mine = await lecturerClassIds(ctx, actor.id);
+			if (!memberships.some((m: any) => mine.includes(String(m.classId)))) {
+				throw new Error('That student is not in a class you teach.');
+			}
+		}
 		const person = await ctx.db.get('people', args.personId);
 		if (!person) throw new Error('Person not found.');
 		const sessions = await ctx.db
@@ -388,6 +399,14 @@ export const resetPin = mutation({
 					// if it is still open on someone's screen; activation mints a new one.
 					qrSecret: undefined
 				});
+				await logAudit(ctx, {
+					actorName: actor.name,
+					actorId: actor.id,
+					action: 'person.reset-pin',
+					targetKind: 'person',
+					targetId: args.personId,
+					targetName: person.fullName
+				});
 				return { ok: true };
 			}
 		});
@@ -404,7 +423,17 @@ export const resetPin = mutation({
 		export const clearDevice = mutation({
 			args: { token: v.string(), personId: v.id('people') },
 			handler: async (ctx, args) => {
-				await requireRecorder(ctx, args.token);
+				const actor = await requireRecorder(ctx, args.token);
+				if (actor.kind === 'staff' && !actor.isAdmin) {
+					const memberships = await ctx.db
+						.query('classMembers')
+						.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
+						.take(100);
+					const mine = await lecturerClassIds(ctx, actor.id);
+					if (!memberships.some((m: any) => mine.includes(String(m.classId)))) {
+						throw new Error('That student is not in a class you teach.');
+					}
+				}
 				const person = await ctx.db.get('people', args.personId);
 				if (!person) throw new Error('Person not found.');
 				const sessions = await ctx.db
@@ -416,6 +445,14 @@ export const resetPin = mutation({
 					boundDeviceId: undefined,
 					lastLoginAt: undefined,
 					qrSecret: randomHex(20)
+				});
+				await logAudit(ctx, {
+					actorName: actor.name,
+					actorId: actor.id,
+					action: 'person.clear-device',
+					targetKind: 'person',
+					targetId: args.personId,
+					targetName: person.fullName
 				});
 				return { ok: true };
 			}
@@ -441,8 +478,12 @@ export const updatePerson = mutation({
 				.withIndex('by_person', (q: any) => q.eq('personId', args.personId))
 				.take(100);
 			const mine = await lecturerClassIds(ctx, actor.id);
-			const overlap = memberships.some((m: any) => mine.includes(String(m.classId)));
-			if (!overlap) throw new Error('That student is not in a class you teach.');
+			// Class-less students are the onboarding queue: any lecturer may
+			// claim them into their own classes.
+			if (memberships.length > 0) {
+				const overlap = memberships.some((m: any) => mine.includes(String(m.classId)));
+				if (!overlap) throw new Error('That student is not in a class you teach.');
+			}
 			if (args.classIds !== undefined) {
 				const wanted = args.classIds.map(String);
 				if (!wanted.every((c) => mine.includes(c))) {
@@ -502,13 +543,27 @@ export const setBlocked = mutation({
 			for (const s of sessions) await ctx.db.delete('authSessions', s._id);
 		}
 		await ctx.db.patch(args.personId, { status: args.blocked ? 'blocked' : 'active' });
+		await logAudit(ctx, {
+			actorName: actor.name,
+			actorId: actor.id,
+			action: args.blocked ? 'person.set-blocked' : 'person.set-active',
+			targetKind: 'person',
+			targetId: args.personId,
+			targetName: person.fullName
+		});
 		return { ok: true };
 	}
 });
 
 /** People list — lecturers only see students in classes they teach. */
 export const listPeople = query({
-	args: { token: v.string(), classId: v.optional(v.id('classes')), status: v.optional(v.string()) },
+	args: {
+		token: v.string(),
+		classId: v.optional(v.id('classes')),
+		status: v.optional(v.string()),
+		/** Students with no class at all — the onboarding queue. */
+		withoutClass: v.optional(v.boolean())
+	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
@@ -518,7 +573,12 @@ export const listPeople = query({
 			}
 		}
 		let rows: any[];
-		if (args.classId) {
+		if (args.withoutClass) {
+			const all = await ctx.db.query('people').take(1000);
+			const everyMembership = await ctx.db.query('classMembers').take(2000);
+			const hasClass = new Set(everyMembership.map((m: any) => String(m.personId)));
+			rows = all.filter((p: any) => !hasClass.has(String(p._id)));
+		} else if (args.classId) {
 			const memberships = await ctx.db
 				.query('classMembers')
 				.withIndex('by_class', (q: any) => q.eq('classId', args.classId!))

@@ -24,6 +24,8 @@
 	let classes = $state<ClassRow[]>([]);
 	let classId = $state('');
 	let people = $state<PersonRow[]>([]);
+	let unassigned = $state<PersonRow[]>([]);
+	let showUnassigned = $state(false);
 	let repIds = $state<Set<string>>(new Set());
 	let search = $state('');
 	let showAdd = $state(false);
@@ -89,6 +91,23 @@
 	$effect(() => {
 		if (classId) void loadPeople();
 	});
+
+	async function loadUnassigned() {
+		try {
+			const client = requireConvexClient();
+			unassigned = (await client.query(api.people.listPeople, {
+				token,
+				withoutClass: true
+			})) as unknown as PersonRow[];
+		} catch (err) {
+			reportError(err, 'Could not load students without a class.');
+		}
+	}
+
+	async function toggleUnassigned() {
+		showUnassigned = !showUnassigned;
+		if (showUnassigned) await loadUnassigned();
+	}
 
 	async function addPerson(e: SubmitEvent) {
 		e.preventDefault();
@@ -212,6 +231,57 @@
 		<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 	{:else}
 		<ClassPicker {classes} bind:classId emptyHint="No classes yet — add one in “Classes & semesters”." />
+
+		<div>
+			<Button size="sm" variant="outline" onclick={toggleUnassigned}>
+				{showUnassigned ? 'Hide students with no class' : 'Show students with no class'}
+				{#if showUnassigned}
+					<Badge variant="secondary">{unassigned.length}</Badge>
+				{/if}
+			</Button>
+		</div>
+
+		{#if showUnassigned}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>Students with no class</Card.Title>
+					<Card.Description>
+						Created without a class. Use Edit to claim them into one of your classes.
+					</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					{#if unassigned.length === 0}
+						<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+							Nobody is waiting for a class.
+						</p>
+					{:else}
+						<ul class="flex flex-col divide-y divide-border rounded-md border">
+							{#each unassigned as p (p._id)}
+								<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
+									<span>
+										<strong>{p.fullName}</strong>
+										<span class="block text-xs text-muted-foreground">
+											{p.regNumber} ·
+											{p.status === 'invited' ? 'no PIN yet' : p.status}
+										</span>
+									</span>
+									<Button
+										variant="outline"
+										size="sm"
+										onclick={() => {
+											editing = p;
+											editOpen = true;
+										}}
+									>
+										Edit
+									</Button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		{/if}
 
 		{#if classId}
 			<Card.Root>
@@ -384,7 +454,16 @@
 	{/if}
 </div>
 
-<PersonEditDialog bind:open={editOpen} person={editing} {classes} {token} onsaved={loadPeople} />
+<PersonEditDialog
+	bind:open={editOpen}
+	person={editing}
+	{classes}
+	{token}
+	onsaved={async () => {
+		await loadPeople();
+		if (showUnassigned) await loadUnassigned();
+	}}
+/>
 
 <AlertDialog.Root bind:open={suspendOpen}>
 	<AlertDialog.Content>

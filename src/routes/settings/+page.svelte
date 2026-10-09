@@ -16,7 +16,13 @@
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	let token = getToken();
-	let me = $state<{ role: string; isAdmin?: boolean; username?: string; fullName?: string } | null>(null);
+	let me = $state<{
+		role: string;
+		isAdmin?: boolean;
+		mustChangePassword?: boolean;
+		username?: string;
+		fullName?: string;
+	} | null>(null);
 	let offerings = $state<Offering[]>([]);
 	let currentPassword = $state('');
 	let newPassword = $state('');
@@ -37,6 +43,7 @@
 				kind: string;
 				role: string;
 				isAdmin?: boolean;
+				mustChangePassword?: boolean;
 				username?: string;
 				fullName?: string;
 			} | null;
@@ -77,6 +84,7 @@
 			currentPassword = '';
 			newPassword = '';
 			confirmPassword = '';
+			if (me) me.mustChangePassword = false;
 			reportSuccess('Password changed. Use the new one next time you sign in.');
 		} catch (err) {
 			reportError(err, 'Could not change the password.');
@@ -96,6 +104,12 @@
 		<p class="text-sm text-muted-foreground">Loading…</p>
 	{:else if me}
 		<LecturerNav />
+		{#if me.mustChangePassword}
+			<p class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+				<strong>You are using a temporary password.</strong> Choose your own below — keep it private,
+				and don't reuse it anywhere else.
+			</p>
+		{/if}
 		<Card.Root>
 			<Card.Header>
 				<Card.Title>Change your password</Card.Title>

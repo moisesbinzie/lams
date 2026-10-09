@@ -37,6 +37,7 @@
 		flagReason: string | null;
 		disputed: boolean;
 		disputeNote: string | null;
+		disputeResolvedBy: string | null;
 		overriddenBy: string | null;
 		prevStatus: AttendanceStatus | null;
 	}
@@ -111,6 +112,20 @@
 			await onchanged?.();
 		} catch (err) {
 			reportError(err, 'Could not change the record.');
+		} finally {
+			busyId = '';
+		}
+	}
+
+	async function resolveDispute(r: RecordRow) {
+		busyId = r._id;
+		try {
+			const client = requireConvexClient();
+			await client.mutation(api.attendance.resolveDispute, { token, attendanceId: r._id as never });
+			await load();
+			await onchanged?.();
+		} catch (err) {
+			reportError(err, 'Could not resolve the dispute.');
 		} finally {
 			busyId = '';
 		}
@@ -207,7 +222,22 @@
 								<p class="rounded-md bg-muted/60 p-2 text-xs text-muted-foreground">
 									{#if r.disputeNote}Student says: “{r.disputeNote}”{/if}
 									{#if r.flagReason}{r.disputeNote ? ' — ' : ''}{r.flagReason}{/if}
+									{#if !r.disputed && r.disputeResolvedBy}
+										<span class="block">Reviewed by {r.disputeResolvedBy} — standing by this record.</span>
+									{/if}
 								</p>
+							{/if}
+							{#if r.disputed}
+								<div>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={busyId === r._id}
+										onclick={() => resolveDispute(r)}
+									>
+										Mark reviewed — record stands
+									</Button>
+								</div>
 							{/if}
 							<div class="flex flex-wrap items-center gap-2">
 								<Select.Root

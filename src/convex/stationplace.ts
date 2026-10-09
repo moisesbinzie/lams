@@ -19,7 +19,7 @@
 // legible audit trail, never a proof.
 
 import { mutation, query } from './_generated/server';
-import { canRecordFor, recorderFields, requireRecorder } from './auth';
+import { canRecordSession, recorderFields, requireRecorder } from './auth';
 import { toleranceFor } from './helpers';
 import { judgeStationPlacement } from './proximity';
 import { v } from 'convex/values';
@@ -44,7 +44,7 @@ export const reportStationPosition = mutation({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('This lecture could not be found.');
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		if (session.status !== 'open') return { ok: false as const, reason: 'closed' as const };
@@ -109,7 +109,7 @@ export const pinStation = mutation({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('This lecture could not be found.');
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		if (args.latitude < -90 || args.latitude > 90) throw new Error('Invalid latitude.');
@@ -153,7 +153,7 @@ export const stationPlacement = query({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		return {

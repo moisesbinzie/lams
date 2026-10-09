@@ -286,6 +286,11 @@
 						<span>
 							<strong>{s.subjectCode}</strong> — {s.subjectTitle}
 							<span class="text-xs text-muted-foreground">· {s.className}</span>
+							{#if (s.flaggedCount ?? 0) > 0 || (s.disputedCount ?? 0) > 0}
+								<span class="text-xs font-medium text-amber-700">
+									· needs review{#if (s.disputedCount ?? 0) > 0} ({s.disputedCount} disputed){/if}{#if (s.flaggedCount ?? 0) > 0} ({s.flaggedCount} flagged){/if}
+								</span>
+							{/if}
 						</span>
 						<span class="flex items-center gap-2">
 							<StatusBadge status="open" />
@@ -317,6 +322,9 @@
 							</span>
 							<span class="flex items-center gap-2">
 								<StatusBadge status={s.status} />
+								{#if (s.disputedCount ?? 0) > 0}
+									<span class="text-xs font-medium text-red-700">{s.disputedCount} disputed</span>
+								{/if}
 								<Button size="sm" variant="outline" href="/scan">Open</Button>
 							</span>
 						</li>

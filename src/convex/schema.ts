@@ -25,6 +25,23 @@ const statusValidator = v.union(
 const roleValidator = v.union(v.literal('student'), v.literal('rep'));
 
 export default defineSchema({
+	/**
+	 * Append-only trail of privileged actions: staff account lifecycle,
+	 * lecturer assignments, rep grants, blocks and PIN/device resets.
+	 * Per-record attendance changes already carry their own stamps; this is
+	 * the who-did-what for everything else. Admins read it in the console.
+	 */
+	auditLog: defineTable({
+		actorName: v.string(),
+		actorId: v.optional(v.string()),
+		action: v.string(),
+		targetKind: v.optional(v.string()),
+		targetId: v.optional(v.string()),
+		targetName: v.optional(v.string()),
+		detail: v.optional(v.string()),
+		createdAt: v.number()
+	}).index('by_created', ['createdAt']),
+
 	/** Failed sign-in and activation attempts, used for rate limiting. */
 		authAttempts: defineTable({
 			/** Normalised identifier being probed, e.g. a reg number or username. */
@@ -94,6 +111,11 @@ export default defineSchema({
 			 * account and lecturer for everyone else.
 			 */
 			role: v.optional(v.union(v.literal('admin'), v.literal('lecturer'))),
+			/**
+			 * Set when the password was generated or chosen by someone else.
+			 * Cleared when the owner picks their own. Missing reads as false.
+			 */
+			mustChangePassword: v.optional(v.boolean()),
 			/** Revoked accounts cannot sign in but keep their past records. */
 			active: v.boolean(),
 			lastLoginAt: v.optional(v.number()),
@@ -145,7 +167,12 @@ export default defineSchema({
 	subjects: defineTable({
 		code: v.string(),
 		title: v.string(),
-		/** Lecturer of record; may be set later. */
+		/**
+		 * Deprecated: nothing reads or writes this. Who teaches a subject is
+		 * decided per offering (`offerings.lecturerId`), set by the admin.
+		 * Kept in the schema only until existing rows are backfilled (see
+		 * `migrations.backfillSubjectsDropLecturer`), then it goes away.
+		 */
 		lecturerId: v.optional(v.id('staff')),
 		/** Optional: opening this to self-enrolment is a lecturer decision. */
 		openForEnrolment: v.boolean(),
@@ -308,6 +335,14 @@ export default defineSchema({
 		 * lecture opens, never reused, never returned to a student.
 		 */
 		stationSecret: v.optional(v.string()),
+		/**
+		 * Who opened the lecture. Stamped so history survives renames and
+		 * reassignments — counts and trails follow the starter, not whoever
+		 * happens to hold the offering today. Absent on old rows and on
+		 * rep-started lectures (reps are people, not staff).
+		 */
+		startedByStaffId: v.optional(v.id('staff')),
+		startedByName: v.optional(v.string()),
 		/** Within this many seconds of the start -> Present. Default 300 (5 min). */
 		onTimeSec: v.number(),
 		/** By this many seconds -> Late; after it, scans record Absent. Default 600 (10 min). */
@@ -347,6 +382,8 @@ export default defineSchema({
 		recordedBy: v.optional(v.string()),
 		recordedByRole: v.optional(v.union(v.literal('rep'), v.literal('lecturer'))),
 		recordedById: v.optional(v.id('people')),
+		/** Staff author, id-stamped so renames keep history linked. */
+		recordedByStaffId: v.optional(v.id('staff')),
 		/**
 		 * The handset a scan came from. For station scans this is the student's
 		 * own device, already checked against their bound device server-side.
@@ -386,7 +423,10 @@ export default defineSchema({
 		overriddenAt: v.optional(v.number()),
 		prevStatus: v.optional(statusValidator),
 		disputed: v.optional(v.boolean()),
-		disputeNote: v.optional(v.string())
+		disputeNote: v.optional(v.string()),
+		/** Set when someone reviews a dispute and stands by the record. */
+		disputeResolvedBy: v.optional(v.string()),
+		disputeResolvedAt: v.optional(v.number()),
 	})
 		.index('by_session', ['sessionId'])
 		.index('by_session_and_reg', ['sessionId', 'regNorm'])

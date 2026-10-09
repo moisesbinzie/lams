@@ -11,6 +11,9 @@
 	 */
 
 	const me = $derived(sessionMe());
+	const mustChange = $derived(
+		me?.kind === 'staff' && (me as { mustChangePassword?: boolean }).mustChangePassword === true
+	);
 
 	const info = $derived.by(() => {
 		if (!me) return null;
@@ -72,7 +75,7 @@
 		</span>
 		<span class="font-semibold">{info.label}</span>
 		<span class="hidden truncate text-muted-foreground min-[420px]:inline sm:inline">
-			{info.name} · {info.detail}
+			{info.name} · {info.detail}{mustChange ? ' · change your temporary password' : ''}
 		</span>
 		<span class="truncate text-muted-foreground min-[420px]:hidden">{info.name}</span>
 	</p>

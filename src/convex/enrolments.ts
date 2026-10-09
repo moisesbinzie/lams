@@ -1,6 +1,12 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
-import { requirePerson, requireRecorder, requireStaff } from './auth';
+import {
+	assertCanAccessOffering,
+	canAccessOffering,
+	requirePerson,
+	requireRecorder,
+	requireStaff
+} from './auth';
 
 /**
  * Two ways into a subject:
@@ -142,9 +148,7 @@ export const assignForPerson = mutation({
 
 		const addedBy = actor.kind === 'staff' ? ('lecturer' as const) : ('rep' as const);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			if (String(offering.lecturerId ?? '') !== String(actor.id)) {
-				throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
-			}
+			await assertCanAccessOffering(ctx, actor, offering);
 		}
 		if (actor.kind !== 'staff') {
 			// A rep may only touch their own class's subjects.
@@ -231,16 +235,14 @@ export const listMine = query({
 	}
 });
 
-/** Everyone enrolled in one offering — lecturers only see assigned offerings. */
+/** Everyone enrolled in one offering — lecturers only see offerings they may touch. */
 export const listForOffering = query({
 	args: { token: v.string(), offeringId: v.id('offerings') },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
 			const offering = await ctx.db.get('offerings', args.offeringId);
-			if (!offering || String(offering.lecturerId ?? '') !== String(actor.id)) {
-				throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
-			}
+			await assertCanAccessOffering(ctx, actor, offering);
 		}
 		const rows = await ctx.db
 			.query('enrolments')
@@ -265,21 +267,24 @@ export const listForOffering = query({
 	}
 });
 
-/** Enrolled people for a subject within a class — lecturers only see assigned offerings. */
+/** Enrolled people for a subject within a class — lecturers only see offerings they may touch. */
 export const listForSubject = query({
 	args: { token: v.string(), subjectId: v.id('subjects'), classId: v.optional(v.id('classes')) },
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		if (actor.kind === 'staff' && !actor.isAdmin) {
-			const mine = await ctx.db
+			const candidates = await ctx.db
 				.query('offerings')
-				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
-				.take(500);
-			const ok = mine.some(
-				(o: any) =>
-					String(o.subjectId) === String(args.subjectId) &&
-					(!args.classId || String(o.classId) === String(args.classId))
-			);
+				.withIndex('by_subject', (q) => q.eq('subjectId', args.subjectId))
+				.take(100);
+			let ok = false;
+			for (const o of candidates) {
+				if (args.classId && String(o.classId) !== String(args.classId)) continue;
+				if (await canAccessOffering(ctx, actor, o)) {
+					ok = true;
+					break;
+				}
+			}
 			if (!ok) throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
 		}
 		const rows = await ctx.db

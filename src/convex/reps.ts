@@ -1,6 +1,6 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
-import { lecturerClassIds, requireActor, requireRecorder, requireStaff } from './auth';
+import { lecturerClassIds, logAudit, requireActor, requireRecorder, requireStaff } from './auth';
 
 /**
  * Class-rep rights are scoped to a class, not a subject or person. A rep of a
@@ -45,11 +45,17 @@ export const listForPerson = query({
 	}
 });
 
-/** Everyone representing a class — for the lecturer's roster screen. */
+/** Everyone representing a class — lecturers only see classes they teach. */
 export const listForClass = query({
 	args: { token: v.string(), classId: v.id('classes') },
 	handler: async (ctx, args) => {
-		await requireRecorder(ctx, args.token);
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const mine = await lecturerClassIds(ctx, actor.id);
+			if (!mine.includes(String(args.classId))) {
+				throw new Error('That class is not assigned to you.');
+			}
+		}
 		const rows = await ctx.db
 			.query('classReps')
 			.withIndex('by_class', (q: any) => q.eq('classId', args.classId))
@@ -116,6 +122,15 @@ export const setRep = mutation({
 				await ctx.db.patch(args.personId, { role: 'student' });
 			}
 		}
+		await logAudit(ctx, {
+			actorName: actor.name,
+			actorId: actor.id,
+			action: args.isRep ? 'rep.grant' : 'rep.revoke',
+			targetKind: 'person',
+			targetId: args.personId,
+			targetName: person.fullName,
+			detail: cls.name
+		});
 		return { ok: true };
 	}
 });

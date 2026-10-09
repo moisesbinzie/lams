@@ -327,14 +327,35 @@ export async function lecturerClassIds(ctx: any, staffId: unknown): Promise<stri
 
 /**
  * True when the actor may touch this offering. Admins may touch anything;
- * lecturers only offerings assigned to them; reps never (they are class-scoped).
+ * lecturers their assigned offerings plus unassigned offerings in classes
+ * they already teach (sick-leave cover — nobody needs the admin at 7am);
+ * reps never (they are class-scoped).
  */
 export async function canAccessOffering(ctx: any, actor: Actor, offering: any): Promise<boolean> {
 	if (actor.kind === 'staff' && actor.isAdmin) return true;
 	if (actor.kind === 'staff') {
-		return String(offering?.lecturerId ?? '') === String(actor.id);
+		if (String(offering?.lecturerId ?? '') === String(actor.id)) return true;
+		if (!offering?.lecturerId) {
+			const classes = await lecturerClassIds(ctx, actor.id);
+			return classes.includes(String(offering?.classId));
+		}
+		return false;
 	}
 	return false;
+}
+
+/**
+ * Every offering id one lecturer may touch: assigned offerings plus
+ * unassigned ones in classes they already teach (substitute cover).
+ */
+export async function lecturerAccessibleOfferingIds(ctx: any, staffId: unknown): Promise<Set<string>> {
+	const all = await ctx.db.query('offerings').take(500);
+	const classes = new Set(await lecturerClassIds(ctx, staffId));
+	const ids = all.filter(
+		(o: any) =>
+			String(o.lecturerId ?? '') === String(staffId) || (!o.lecturerId && classes.has(String(o.classId)))
+	);
+	return new Set(ids.map((o: any) => String(o._id)));
 }
 
 /** Throws unless the actor may touch the offering. */
@@ -362,6 +383,21 @@ export async function canRecordFor(ctx: any, actor: Actor, classId: unknown): Pr
 	return await isRepFor(ctx, actor.id, classId);
 }
 
+/**
+ * True when the actor may touch this session. Admins and class-scoped reps
+ * use the class rule; lecturers are stricter — only sessions of offerings
+ * assigned to them, so two lecturers sharing a class never see each other's
+ * lectures.
+ */
+export async function canRecordSession(ctx: any, actor: Actor, session: any): Promise<boolean> {
+	if (actor.kind === 'staff' && !actor.isAdmin) {
+		if (!session?.offeringId) return false;
+		const offering = await ctx.db.get('offerings', session.offeringId);
+		return await canAccessOffering(ctx, actor, offering);
+	}
+	return await canRecordFor(ctx, actor, session?.classId);
+}
+
 /** Throws unless the actor may record for the class. */
 export async function assertCanRecordFor(ctx: any, actor: Actor, classId: unknown): Promise<void> {
 	if (await canRecordFor(ctx, actor, classId)) return;
@@ -372,14 +408,45 @@ export async function assertCanRecordFor(ctx: any, actor: Actor, classId: unknow
 	);
 }
 
+/**
+ * Append one row to the admin-visible audit trail. Fire-and-forget from the
+ * caller's perspective — a logging failure must never break the action — so
+ * callers wrap it where they cannot afford a throw... in practice inserts do
+ * not fail, and keeping it inline keeps every privileged mutation honest.
+ */
+export async function logAudit(
+	ctx: any,
+	entry: {
+		actorName: string;
+		actorId?: unknown;
+		action: string;
+		targetKind?: string;
+		targetId?: unknown;
+		targetName?: string;
+		detail?: string;
+	}
+): Promise<void> {
+	await ctx.db.insert('auditLog', {
+		actorName: entry.actorName,
+		...(entry.actorId !== undefined ? { actorId: String(entry.actorId) } : {}),
+		action: entry.action,
+		...(entry.targetKind ? { targetKind: entry.targetKind } : {}),
+		...(entry.targetId !== undefined ? { targetId: String(entry.targetId) } : {}),
+		...(entry.targetName ? { targetName: entry.targetName } : {}),
+		...(entry.detail ? { detail: entry.detail } : {}),
+		createdAt: Date.now()
+	});
+}
+
 /** The name and role to stamp on an attendance record. */
 export function recorderFields(actor: Actor): {
 	recordedBy: string;
 	recordedByRole: 'rep' | 'lecturer';
 	recordedById?: GenericId<'people'>;
+	recordedByStaffId?: GenericId<'staff'>;
 } {
 	if (actor.kind === 'staff') {
-		return { recordedBy: actor.name, recordedByRole: 'lecturer' };
+		return { recordedBy: actor.name, recordedByRole: 'lecturer', recordedByStaffId: actor.id };
 	}
 	return {
 		recordedBy: actor.name,

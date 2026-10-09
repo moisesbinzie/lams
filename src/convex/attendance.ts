@@ -1,8 +1,11 @@
 import { internalMutation, mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import {
-	assertCanRecordFor,
+	assertCanAccessOffering,
+	canAccessOffering,
 	canRecordFor,
+	canRecordSession,
+	lecturerClassIds,
 	recorderFields,
 	requireActor,
 	requirePerson,
@@ -100,7 +103,9 @@ export const startSession = mutation({
 		const actor = await requireRecorder(ctx, args.token);
 		const offering = await ctx.db.get('offerings', args.offeringId);
 		if (!offering) throw new Error('Subject not found.');
-		if (!(await canRecordFor(ctx, actor, offering.classId))) {
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		} else if (!(await canRecordFor(ctx, actor, offering.classId))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		if (args.lectureLat < -90 || args.lectureLat > 90) throw new Error('Invalid latitude.');
@@ -154,6 +159,9 @@ export const startSession = mutation({
 			subjectId: offering.subjectId,
 			semesterId: offering.semesterId,
 			classId: offering.classId,
+			...(actor.kind === 'staff'
+				? { startedByStaffId: actor.id, startedByName: actor.name }
+				: {}),
 			stationLat,
 			stationLng,
 			stationRadiusM,
@@ -233,7 +241,7 @@ export const getSession = query({
 		const actor = await requireActor(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		const subject = await ctx.db.get('subjects', session.subjectId);
@@ -271,7 +279,7 @@ export const stationFeed = query({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return null;
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		const subject = await ctx.db.get('subjects', session.subjectId);
@@ -555,7 +563,7 @@ export const addManually = mutation({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('This lecture could not be found.');
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		if (session.status !== 'open') throw new Error('This lecture is closed.');
@@ -627,11 +635,16 @@ export const undoOwnScan = mutation({
 		if (record.method === 'absent') {
 			throw new Error('Absent entries are settled when the lecture closes. Ask your lecturer.');
 		}
-		const isOwn = record.recordedById === actor.id;
-		if (!isOwn && actor.kind !== 'staff') {
-			throw new Error('You can only undo scans you made yourself.');
-		}
 		const session = await ctx.db.get('sessions', record.sessionId);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const offering = session ? await ctx.db.get('offerings', session.offeringId) : null;
+			await assertCanAccessOffering(ctx, actor, offering);
+		} else {
+			const isOwn = record.recordedById === actor.id;
+			if (!isOwn && actor.kind !== 'staff') {
+				throw new Error('You can only undo scans you made yourself.');
+			}
+		}
 		if (!session || session.status !== 'open') {
 			throw new Error('This lecture is closed. Ask your lecturer to change the record.');
 		}
@@ -659,7 +672,7 @@ export const override = mutation({
 		if (!record) throw new Error('Record not found.');
 		if (!actor.isAdmin) {
 			const offering = await ctx.db.get('offerings', record.offeringId);
-			if (!offering || String(offering.lecturerId ?? '') !== String(actor.id)) {
+			if (!(await canAccessOffering(ctx, actor, offering))) {
 				throw new Error('This record is not in a subject assigned to you.');
 			}
 		}
@@ -712,7 +725,7 @@ export const overrideDuringSession = mutation({
 		if (!record) throw new Error('That record no longer exists.');
 		const session = await ctx.db.get('sessions', record.sessionId);
 		if (!session) throw new Error('That lecture could not be found.');
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are only a class representative for your own class.');
 		}
 		if (session.status !== 'open') {
@@ -741,7 +754,7 @@ export const removeRecord = mutation({
 		if (!record) throw new Error('Record not found.');
 		if (!actor.isAdmin) {
 			const offering = await ctx.db.get('offerings', record.offeringId);
-			if (!offering || String(offering.lecturerId ?? '') !== String(actor.id)) {
+			if (!(await canAccessOffering(ctx, actor, offering))) {
 				throw new Error('This record is not in a subject assigned to you.');
 			}
 		}
@@ -756,7 +769,7 @@ export const closeSession = mutation({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('Lecture not found.');
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		if (session.status === 'closed') return { ok: true, absentAdded: 0 };
@@ -771,7 +784,7 @@ export const extendSession = mutation({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) throw new Error('Lecture not found.');
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		if (session.status !== 'open') throw new Error('This lecture is already closed.');
@@ -788,7 +801,7 @@ export const listBySession = query({
 		const actor = await requireRecorder(ctx, args.token);
 		const session = await ctx.db.get('sessions', args.sessionId);
 		if (!session) return [];
-		if (!(await canRecordFor(ctx, actor, session.classId))) {
+		if (!(await canRecordSession(ctx, actor, session))) {
 			throw new Error('You are not a class rep for this class.');
 		}
 		const rows = await ctx.db
@@ -828,16 +841,23 @@ export const listForRecordKeeper = query({
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
 		let classIds: string[];
+		let ownOfferingIds: Set<string> | null = null;
 		if (actor.kind === 'staff' && actor.isAdmin) {
 			const classes = await ctx.db.query('classes').take(200);
 			classIds = classes.map((c: any) => String(c._id));
 		} else if (actor.kind === 'staff') {
-			const offerings = await ctx.db
-				.query('offerings')
-				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
-				.take(500);
+			// Own offerings plus unassigned ones in classes already taught
+			// (substitute cover) — mirroring `canAccessOffering`.
+			const mine = new Set(await lecturerClassIds(ctx, actor.id));
+			const all = await ctx.db.query('offerings').take(500);
+			const offerings = all.filter(
+				(o: any) =>
+					String(o.lecturerId ?? '') === String(actor.id) ||
+					(!o.lecturerId && mine.has(String(o.classId)))
+			);
 			classIds = [...new Set(offerings.map((o: any) => String(o.classId)))];
-			if (args.offeringId && !offerings.some((o: any) => String(o._id) === String(args.offeringId))) {
+			ownOfferingIds = new Set(offerings.map((o: any) => String(o._id)));
+			if (args.offeringId && !ownOfferingIds.has(String(args.offeringId))) {
 				throw new Error('This subject is not assigned to you. Ask the admin to assign it.');
 			}
 		} else {
@@ -861,6 +881,22 @@ export const listForRecordKeeper = query({
 		const out: any[] = [];
 		for (const s of sessions) {
 			if (!classIds.includes(String(s.classId))) continue;
+			if (ownOfferingIds && !ownOfferingIds.has(String(s.offeringId))) continue;
+			const isOpen = s.status === 'open' && now < s.closesAt;
+			// Review counts only for live lectures — those are the ones
+			// needing action now, and closed history is reviewed per record.
+			let flaggedCount = 0;
+			let disputedCount = 0;
+			if (isOpen) {
+				const recs = await ctx.db
+					.query('attendance')
+					.withIndex('by_session', (q: any) => q.eq('sessionId', s._id))
+					.take(2000);
+				for (const r of recs) {
+					if (r.flagged) flaggedCount += 1;
+					if (r.disputed) disputedCount += 1;
+				}
+			}
 			const subject = await ctx.db.get('subjects', s.subjectId);
 			const classDoc = await ctx.db.get('classes', s.classId);
 			const offering = await ctx.db.get('offerings', s.offeringId);
@@ -872,7 +908,9 @@ export const listForRecordKeeper = query({
 				subjectTitle: subject?.title ?? '',
 				className: classDoc?.name ?? '',
 				openForEnrolment: offering?.openForEnrolment ?? false,
-				status: s.status === 'open' && now < s.closesAt ? 'open' : 'closed',
+				status: isOpen ? 'open' : 'closed',
+				flaggedCount,
+				disputedCount,
 				startedAt: s.startedAt,
 				closesAt: s.closesAt
 			});
@@ -942,6 +980,42 @@ export const dispute = mutation({
 	}
 });
 
+/**
+ * Mark a dispute as reviewed without changing the record: the lecturer
+ * checked and stands by the current status. Keeps the student's note and
+ * stamps who decided, so a dispute never reads as open forever.
+ *
+ * While the lecture is open any recorder for the session may resolve; once
+ * closed only lecturers (their own offerings) and admins may.
+ */
+export const resolveDispute = mutation({
+	args: { token: v.string(), attendanceId: v.id('attendance') },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const record = await ctx.db.get('attendance', args.attendanceId);
+		if (!record) throw new Error('Record not found.');
+		if (!record.disputed) return { ok: true };
+		const session = await ctx.db.get('sessions', record.sessionId);
+		if (!session) throw new Error('That lecture could not be found.');
+		const isOpen = session.status === 'open' && Date.now() < session.closesAt;
+		if (!isOpen) {
+			const staff = await requireStaff(ctx, args.token);
+			if (!staff.isAdmin) {
+				const offering = await ctx.db.get('offerings', session.offeringId);
+				await assertCanAccessOffering(ctx, staff, offering);
+			}
+		} else if (!(await canRecordSession(ctx, actor, session))) {
+			throw new Error('You are only a class representative for your own class.');
+		}
+		await ctx.db.patch(args.attendanceId, {
+			disputed: false,
+			disputeResolvedBy: actor.name,
+			disputeResolvedAt: Date.now()
+		});
+		return { ok: true };
+	}
+});
+
 /** Cron target: retire lapsed sessions and write their Absent rows. */
 		export const autoCloseExpired = internalMutation({
 	args: {},
@@ -985,10 +1059,15 @@ export const listRecordableOfferings = query({
 		if (actor.kind === 'staff' && actor.isAdmin) {
 			offerings = await ctx.db.query('offerings').take(500);
 		} else if (actor.kind === 'staff') {
-			offerings = await ctx.db
-				.query('offerings')
-				.withIndex('by_lecturer', (q: any) => q.eq('lecturerId', actor.id))
-				.take(500);
+			// Own offerings plus unassigned ones in classes already taught
+			// (substitute cover) — mirroring `canAccessOffering`.
+			const all = await ctx.db.query('offerings').take(500);
+			const mine = new Set(await lecturerClassIds(ctx, actor.id));
+			offerings = all.filter(
+				(o: any) =>
+					String(o.lecturerId ?? '') === String(actor.id) ||
+					(!o.lecturerId && mine.has(String(o.classId)))
+			);
 		} else {
 			const repClasses = await ctx.db
 				.query('classReps')

@@ -8,8 +8,14 @@
 
 import { internalMutation } from './_generated/server';
 import { DEFAULT_STATION_RADIUS_M, DEFAULT_STATION_TOLERANCE_M } from './helpers';
-import { normalizeUsername } from './auth';
-import { DEFAULT_STAFF_USERNAME } from './auth';
+import {
+	DEFAULT_STAFF_USERNAME,
+	ITERATIONS,
+	SCHEME,
+	hashSecret,
+	normalizeUsername,
+	randomSalt
+} from './auth';
 import { v } from 'convex/values';
 
 /**
@@ -69,6 +75,63 @@ export const backfillStaffRoles = internalMutation({
 			const role =
 				s.usernameNorm === normalizeUsername(DEFAULT_STAFF_USERNAME) ? ('admin' as const) : ('lecturer' as const);
 			await ctx.db.patch(s._id, { role });
+			patched += 1;
+		}
+		return { scanned: page.page.length, patched, cursor: page.continueCursor, isDone: page.isDone };
+	}
+});
+
+/**
+ * Break-glass admin recovery. If every admin password is lost, run from a
+ * shell with deployment credentials (never from app code — internal-only):
+ *
+ *   npx convex run migrations:resetStaffPassword '{"username":"admin","newPassword":"..."}'
+ *
+ * Signs the account out everywhere and forces a password change at next
+ * sign-in. Prefer keeping two active admins so this is never needed.
+ */
+export const resetStaffPassword = internalMutation({
+	args: { username: v.string(), newPassword: v.string() },
+	handler: async (ctx, args) => {
+		const usernameNorm = normalizeUsername(args.username);
+		if (args.newPassword.length < 8) throw new Error('Choose a password of at least 8 characters.');
+		const staff = await ctx.db
+			.query('staff')
+			.withIndex('by_username', (q) => q.eq('usernameNorm', usernameNorm))
+			.unique();
+		if (!staff) throw new Error('Account not found.');
+		const sessions = await ctx.db
+			.query('staffSessions')
+			.withIndex('by_staff', (q) => q.eq('staffId', staff._id))
+			.take(50);
+		for (const s of sessions) await ctx.db.delete('staffSessions', s._id);
+		const salt = randomSalt();
+		const passwordHash = await hashSecret(args.newPassword, salt);
+		await ctx.db.patch(staff._id, {
+			passwordHash,
+			salt,
+			scheme: SCHEME,
+			iterations: ITERATIONS,
+			mustChangePassword: true,
+			active: true
+		});
+		return { ok: true, username: staff.username };
+	}
+});
+
+/**
+ * Drops the retired `subjects.lecturerId` column. Nothing reads or writes it
+ * any more (teaching is decided per offering); run to completion, then the
+ * field can leave the schema. Idempotent.
+ */
+export const backfillSubjectsDropLecturer = internalMutation({
+	args: { cursor: v.optional(v.union(v.string(), v.null())) },
+	handler: async (ctx, args) => {
+		const page = await ctx.db.query('subjects').paginate({ cursor: args.cursor ?? null, numItems: 100 });
+		let patched = 0;
+		for (const s of page.page as any[]) {
+			if (s.lecturerId === undefined) continue;
+			await ctx.db.patch(s._id, { lecturerId: undefined });
 			patched += 1;
 		}
 		return { scanned: page.page.length, patched, cursor: page.continueCursor, isDone: page.isDone };
