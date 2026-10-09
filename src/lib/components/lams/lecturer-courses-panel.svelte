@@ -9,7 +9,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Table from '$lib/components/ui/table';
-	import { BookOpen, Plus, Search, UserPlus, UserMinus } from '@lucide/svelte';
+	import { BookOpen, Plus, Search, UserPlus, UserMinus, UserRoundCheck } from '@lucide/svelte';
 	import type { Meeting, Offering, ProgramRow } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
@@ -26,7 +26,9 @@
 	 * with enroll false — a withdrawal, never a delete, so attendance history
 	 * is kept. Registering a student entirely is `registerAndEnrol`: the
 	 * student joins the course's program and the course in one transaction,
-	 * so the admin's Students tab always sees the full chain.
+	 * so the admin's Students tab always sees the full chain. Any enrolled
+	 * student can also be made a program rep (`setRep`) for the course's
+	 * program — the same grant the Students tab offers.
 	 */
 	let token = getToken();
 	let offerings = $state<Offering[]>([]);
@@ -39,10 +41,13 @@
 			fullName: string;
 			regNumber: string;
 			studentId: string;
+			status: string;
 			addedBy: 'self' | 'rep' | 'lecturer';
 		}[]
 	>([]);
 	let meetings = $state<Meeting[]>([]);
+	/** Person ids currently representing the selected course's program. */
+	let repIds = $state<Set<string>>(new Set());
 	let loading = $state(true);
 	let rosterLoading = $state(false);
 
@@ -131,12 +136,14 @@
 		if (!token || !selectedId) {
 			roster = [];
 			meetings = [];
+			repIds = new Set();
 			return;
 		}
+		const offering = offerings.find((o) => o._id === selectedId) ?? null;
 		rosterLoading = true;
 		try {
 			const client = requireConvexClient();
-			const [rows, slots] = (await Promise.all([
+			const [rows, slots, reps] = (await Promise.all([
 				client.query(api.enrolments.listForOffering, {
 					token,
 					offeringId: selectedId as never
@@ -144,7 +151,13 @@
 				client.query(api.timetable.listForOffering, {
 					token,
 					offeringId: selectedId as never
-				})
+				}),
+				offering?.programId
+					? client.query(api.reps.listForProgram, {
+							token,
+							programId: offering.programId as never
+						})
+					: Promise.resolve([])
 			])) as [
 				{
 					_id: string;
@@ -152,12 +165,15 @@
 					fullName: string;
 					regNumber: string;
 					studentId: string;
+					status: string;
 					addedBy: 'self' | 'rep' | 'lecturer';
 				}[],
-				Meeting[]
+				Meeting[],
+				{ personId: string }[]
 			];
 			roster = rows;
 			meetings = slots;
+			repIds = new Set(reps.map((r) => String(r.personId)));
 		} catch (err) {
 			reportError(err, 'Could not load that course.');
 		} finally {
@@ -215,6 +231,35 @@
 			reportSuccess(`${fullName} added to ${selected?.courseCode ?? 'the course'}.`);
 		} catch (err) {
 			reportError(err, 'Could not add that student.');
+		} finally {
+			busyId = '';
+		}
+	}
+
+	/**
+	 * Make or remove a program rep for the selected course's program. A rep
+	 * takes attendance for everything their program takes, so this is scoped
+	 * to the program — not the course — exactly like the Students tab.
+	 */
+	async function toggleRep(personId: string, fullName: string) {
+		if (!token || !selected?.programId) return;
+		const isRep = repIds.has(String(personId));
+		busyId = personId;
+		try {
+			await requireConvexClient().mutation(api.reps.setRep, {
+				token,
+				programId: selected.programId as never,
+				personId: personId as never,
+				isRep: !isRep
+			});
+			await loadRoster();
+			reportSuccess(
+				isRep
+					? `${fullName} is no longer a program rep.`
+					: `${fullName} can now take attendance for everything ${selected.programName} takes.`
+			);
+		} catch (err) {
+			reportError(err, 'Could not change that.');
 		} finally {
 			busyId = '';
 		}
@@ -464,7 +509,8 @@
 					</Card.Title>
 					<Card.Description>
 						Everyone enrolled in {selected.courseCode}. Withdrawing removes them from the
-						register; attendance already recorded is kept.
+						register; attendance already recorded is kept. A program rep takes attendance
+						for everything {selected.programName} takes.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="flex flex-col gap-3">
@@ -504,13 +550,33 @@
 								{#each filteredRoster as r (r.personId)}
 									<Table.Row>
 										<Table.Cell class="font-medium whitespace-nowrap">
-											{r.fullName}
+											<span class="flex flex-wrap items-center gap-1.5">
+												{r.fullName}
+												{#if repIds.has(String(r.personId))}
+													<Badge class="bg-lams-navy text-white">
+														<UserRoundCheck class="size-3" aria-hidden="true" /> Rep
+													</Badge>
+												{/if}
+											</span>
 											<span class="block font-mono text-xs font-normal text-muted-foreground">
 												{r.regNumber} · {r.studentId}
 											</span>
 										</Table.Cell>
 										<Table.Cell class="text-xs text-muted-foreground">{r.addedBy}</Table.Cell>
 										<Table.Cell class="text-right whitespace-nowrap">
+											{#if r.status !== 'blocked'}
+												<Button
+													variant={repIds.has(String(r.personId)) ? 'secondary' : 'outline'}
+													size="sm"
+													disabled={busyId === r.personId}
+													title={repIds.has(String(r.personId))
+														? `Remove ${r.fullName} as a program rep`
+														: `Make ${r.fullName} a program rep for ${selected?.programName ?? 'this program'}`}
+													onclick={() => toggleRep(r.personId, r.fullName)}
+												>
+													{repIds.has(String(r.personId)) ? 'Remove rep' : 'Make rep'}
+												</Button>
+											{/if}
 											<Button
 												variant="ghost"
 												size="icon-sm"
