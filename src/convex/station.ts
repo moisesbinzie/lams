@@ -1,14 +1,14 @@
 // The stationary station code.
 //
 // The QR at the front of the hall stays in the same place all lecture, but the
-// code inside it does not: a fresh six-digit code every 10 seconds, derived
+// code inside it does not: a fresh six-digit code every 60 seconds, derived
 // from a secret minted when the session opened. A student who scans it with
 // their own phone establishes two things at once:
 //
 //   - they saw this screen as it is right now. A photograph of it is worthless
-//     within half a minute, so it cannot be sent to an absentee abroad and
-//     cashed in later — which is exactly what the old "show your own code to
-//     the rep" flow could not stop, because that code stayed valid for the
+//     within about three minutes, so it cannot be sent to an absentee abroad
+//     and cashed in later — which is exactly what the old "show your own code
+//     to the rep" flow could not stop, because that code stayed valid for the
 //     whole window.
 //   - their own handset reports where they are, so presence is judged from the
 //     student's phone instead of being a proxy from the class rep's.
@@ -30,7 +30,7 @@
 // The identical algorithm lives in `src/lib/lams/station.ts` for the display
 // side; the two must stay in step, so both are covered by tests.
 
-export const STATION_PERIOD_SEC = 10;
+export const STATION_PERIOD_SEC = 60;
 
 /**
  * Slots of drift accepted either side of "now".
@@ -42,10 +42,15 @@ export const STATION_PERIOD_SEC = 10;
  * buys that back, at the cost of a photographed code staying usable for up to
  * three periods.
  *
- * That cost is why the period is 10 seconds and not longer: at 30 the same
+ * That cost is why the period was 10 seconds and not longer: at 30 the same
  * window made a photo good for 90 seconds, which is long enough to leave the
- * room with. At 10 it is about 30 seconds, while the slack is still a full
- * period on each side — so the skew tolerance is unchanged.
+ * room with. At 10 it was about 30 seconds, while the slack stayed a full
+ * period on each side — so the skew tolerance was unchanged.
+ *
+ * Revised to 60 seconds on request (calmer screen, less re-scanning when a
+ * camera will not focus). The trade-off is explicit: a photographed code now
+ * stays usable for up to three minutes, so the distance check carries more of
+ * the weight — it was already the control that actually stops sharing.
  */
 export const STATION_WINDOW = 1;
 

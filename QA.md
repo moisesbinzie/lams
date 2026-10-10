@@ -10,7 +10,7 @@ and to record honestly what it does **not** do. Every claim points at the code.
 >
 > **The scan direction was then inverted (2026-10-04).** Attendance is no longer
 > "rep scans each student's rotating code". A QR now sits on a fixed screen at the
-> front of the hall, refreshing every 30 seconds, and students scan it with their
+> front of the hall, refreshing every 60 seconds, and students scan it with their
 > own phones; the record is judged on **how far the student's own phone was from
 > the station**. This matches §4 of the source PDF in `assessment/` more closely
 > than the previous flow did, but keeps the per-student accounts of §21.
@@ -138,7 +138,7 @@ inside `src/convex/`, so a `node:test` import there would break `convex dev`.
   a deterrent plus an audit trail for human review — **never** as proof of
   presence. See `SECURITY.md`.
 - **The station code is public, so it can be photographed.** It is good for up to
-  90 seconds. That is why the distance check is the control rather than the code —
+  3 minutes. That is why the distance check is the control rather than the code —
   do not disable it.
 - **Denying location is permitted.** A record with no fix is created and flagged
   (`unconfirmed`) rather than refused, because a phone with broken GPS is not a

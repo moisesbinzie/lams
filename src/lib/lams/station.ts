@@ -4,11 +4,11 @@
 // when the lecture opened. Both sides compute the same value, so the two files
 // are kept deliberately identical and both are covered by tests.
 //
-// Deriving on the display rather than fetching a new code every 30 seconds
+// Deriving on the display rather than fetching a new code every 60 seconds
 // means the screen refreshes on a timer with no network round trip — it keeps
 // working in exactly the lecture halls where the signal is worst.
 
-export const STATION_PERIOD_SEC = 10;
+export const STATION_PERIOD_SEC = 60;
 
 /** Kept in step with the server's window so both sides agree on what is stale. */
 export const STATION_WINDOW = 1;

@@ -425,7 +425,7 @@ export const submitStationScan = mutation({
 		}
 
 		// A photographed screen is refused, which is the whole point of the code
-		// rolling every 30 seconds.
+		// rolling every 60 seconds.
 		if (!verifyStationCode(args.code, session.stationSecret)) {
 			await noteFailure(ctx, limitKey, STATION_LIMITS);
 			throw new Error('That station code has expired. Scan the screen again.');

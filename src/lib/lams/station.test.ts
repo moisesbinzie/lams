@@ -118,10 +118,11 @@ describe('verification window', () => {
 	});
 
 	/**
-	 * The period was shortened from 30s to 10s specifically to shrink this
-	 * number. `STATION_WINDOW = 1` means a code is accepted for the slot it
-	 * belongs to plus one either side, so a photograph lives for exactly three
-	 * periods — and it was 90 seconds when the period was 30.
+	 * The period was 30s, then 10s, and is now 60s on request (calmer screen).
+	 * `STATION_WINDOW = 1` means a code is accepted for the slot it belongs to
+	 * plus one either side, so a photograph lives for exactly three periods —
+	 * 90 seconds when the period was 30, about 30 when it was 10, and three
+	 * minutes now. The distance check carries that weight, as it always has.
 	 *
 	 * Pinned as a ceiling so a future change to either constant cannot quietly
 	 * widen the replay window again.
@@ -140,12 +141,12 @@ describe('verification window', () => {
 
 		// The whole exposure window a student could forward a photo within.
 		const exposureSec = STATION_PERIOD_SEC * (STATION_WINDOW * 2 + 1);
-		assert.equal(exposureSec, 30);
-		assert.ok(exposureSec <= 30, `a photograph stays usable for ${exposureSec}s`);
+		assert.equal(exposureSec, 180);
+		assert.ok(exposureSec <= 180, `a photograph stays usable for ${exposureSec}s`);
 	});
 
-	it('rotates often enough that a code is stale within a minute', () => {
-		assert.equal(STATION_PERIOD_SEC, 10);
+	it('rotates every 60 seconds', () => {
+		assert.equal(STATION_PERIOD_SEC, 60);
 	});
 });
 

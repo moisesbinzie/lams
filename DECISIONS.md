@@ -135,12 +135,13 @@ Locked:
 
 Locked — the direction of the scan is the security decision, not the QR itself:
 - Session mints a per-lecture `stationSecret`; the display derives a 6-digit code
-  from it every 30s and encodes `https://<host>/a/<sessionId>?c=<code>`.
+  from it every 60s (was 30s, then 10s; lengthened on request for a calmer
+  screen) and encodes `https://<host>/a/<sessionId>?c=<code>`.
 - `station.verifyStationCode` accepts ±1 slot for display-vs-server clock skew
-  (90s worst-case replay, judged acceptable because the distance check covers it).
+  (3-minute worst-case replay at 60s, judged acceptable because the distance check covers it).
 - This reverses Q22's flow. Superseded: the rep no longer scans.
 
-### Q24: Is the 30-second rotation enough to stop sharing?
+### Q24: Is the rotation enough to stop sharing?
 **A:** No. It stops *delayed* use, not immediate forwarding.
 
 Locked — the two controls are complementary and each covers the other's gap:

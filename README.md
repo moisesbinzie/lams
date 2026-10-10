@@ -2,7 +2,7 @@
 
 Attend • Track • Succeed.
 
-A QR code sits on a screen at the front of the hall and refreshes every 30
+A QR code sits on a screen at the front of the hall and refreshes every 60
 seconds. Students scan it with their own phones; their name, the time and how far
 their phone was from the screen are recorded automatically. Built for phones
 first: attendance for a lecture hall takes a couple of minutes and nobody types a
@@ -57,7 +57,7 @@ Offering ──< Meeting (weekly slot or one-off makeup) ──< Session (live w
    secret** and pins the station's position and radius.
 2. The same page shows the QR for the front of the hall — full screen, with the
    rotating code in large type beside it and a countdown. It re-derives the code
-   locally every 30 seconds, so it keeps working with no signal.
+   locally every 60 seconds, so it keeps working with no signal.
 3. Students scan with their own phone cameras. The link opens the app, which asks
    for location and submits the code, the device id and the position fix in one
    request. **A scan is refused unless it came from the one device that student's
@@ -103,7 +103,7 @@ Both lecturers and class reps can start a lecture from the scanning screen; a
 rep only sees their own classes' subjects.
 
 1. Open the lecture (or start one), then scan each student's rotating code —
-   the code rolls every 30 seconds and is derived from a per-student secret.
+   the code rolls every 60 seconds and is derived from a per-student secret.
 2. Status is automatic: in range and on time → **Present**; after the on-time
    window → **Late**; after the late window → **Absent** (with a plain
    explanation). Weak or contradictory GPS flags the record for review instead

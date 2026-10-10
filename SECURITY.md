@@ -10,7 +10,7 @@ they are not in the room, and — just as importantly — **what it cannot stop.
 3. The student signs in with **registration number + student ID** and chooses their own PIN. Staff never see or choose it.
 4. That phone is **bound** to the account. Any other device is refused.
 5. The lecturer or rep opens the lecture, which mints a **per-lecture station secret** and puts a QR on the screen at the front of the hall.
-6. The screen shows a code derived from that secret, refreshed **every 10 seconds**, encoded as a URL.
+6. The screen shows a code derived from that secret, refreshed **every 60 seconds**, encoded as a URL.
 7. Students **scan it with their own phones**. The same phone reports its position at that moment, and the server refuses the scan unless it came from the one device the account is bound to. One scan per student per lecture.
 8. A missed scan becomes **Absent** when the lecture closes.
 9. The record stores: student, method, time, the student's own coordinates and distance, verification level, and any flag. The student can dispute it, and a lecturer or rep can mark the dispute reviewed.
@@ -71,7 +71,7 @@ That is the whole mechanism, and it is worth being blunt about its two halves:
 
 | Signal | Stops | Gap it leaves |
 | --- | --- | --- |
-| Station code, per-lecture secret, 10-second roll | Forwarding the link to someone who will use it minutes or days later | A code photographed at the hall is good for about 30 seconds, so it can be sent to someone *nearby* — or forwarded instantly to someone far away |
+| Station code, per-lecture secret, 60-second roll | Forwarding the link to someone who will use it minutes or days later | A code photographed at the hall is good for up to 3 minutes, so it can be sent to someone *nearby* — or forwarded instantly to someone far away |
 | Student's own reported distance | Redeeming that code from outside the hall | Spoofable; see the limits below |
 
 They cover each other. Neither is much use alone.
@@ -126,7 +126,7 @@ a cheater.
 | Device binding | `people.login` | Signing in as someone else **on a different phone**. Lending a phone still works — see the limits. |
 | **Scan-time device binding** | `auth.requirePersonOnDevice` → `helpers.judgeScanDevice` | **A token carried to another phone** and used to mark the owner present. `scannerDeviceId` is stored on the record. |
 | Station code guesses are throttled | `ratelimit.noteFailure` with `STATION_LIMITS` | Brute-forcing the six-digit code. Generous limits (40 / 5 min) so a student fumbling with a camera is not punished like a credential-guesser. |
-| Station code rolls every 10 s | `station.verifyStationCode` | Forwarding the link for use later. A photographed screen goes stale in about 30 seconds. |
+| Station code rolls every 60 s | `station.verifyStationCode` | Forwarding the link for use later. A photographed screen goes stale in up to 3 minutes. |
 | Station secret is per-lecture | `station.stationCodeForSlot` + `attendance.startSession` | A code from this morning's lecture, or a code read off a screen in a different hall. |
 | Clock-skew window of one slot | `station.STATION_WINDOW` | Refusing everyone because the display's clock drifted — the skew that matters is display-vs-server, not student-vs-server. |
 | Code bound to the offering | `attendance.submitStationScan` | A station code being used to mark attendance for a different subject. |
@@ -147,7 +147,7 @@ a cheater.
 | Layer | Question it answers | Status |
 | --- | --- | --- |
 | Per-lecture station secret | Was this lecture's screen scanned? | Built |
-| 10-second roll | Was it scanned just now, not earlier? | Built |
+| 60-second roll | Was it scanned just now, not earlier? | Built |
 | Device binding | Was it their own phone? | Built |
 | **Scan-time device binding** | **Was this scan made on the phone the account is bound to?** | **Built** |
 | **Student's own reported distance** | **Was the student in the hall?** | **Built** |
@@ -195,7 +195,7 @@ Further honest limits:
   multi-storey block, set the station radius as small as the building allows and
   expect to review Out of Range records by hand.
 - **The station code is visible to the whole room.** Anyone can photograph it and
-  replay it for up to 90 seconds. The distance check is what makes that useless;
+  replay it for up to 3 minutes. The distance check is what makes that useless;
   if you disable the distance check, sharing becomes trivial again.
 - **Denying location is allowed.** A student who blocks location permission is
   recorded and flagged rather than refused, so a genuine GPS failure is not
