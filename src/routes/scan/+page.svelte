@@ -82,6 +82,8 @@
 	let repinning = $state(false);
 	/** GPS uncertainty of the re-pin fix, when it came from a live reading. Typing clears it. */
 	let repinAccuracy = $state<number | null>(null);
+	/** Checked only after seeing the coarse-fix warning — the re-pin equivalent of "start anyway". */
+	let repinAnyway = $state(false);
 
 	/**
 	 * How often the screen tells the server where it is.
@@ -314,6 +316,7 @@
 			repinLat = String(pos.lat);
 			repinLng = String(pos.lng);
 			repinAccuracy = pos.accuracyM ?? null;
+			repinAnyway = false;
 		} catch (err) {
 			reportError(err, 'Could not read your location.');
 		}
@@ -363,6 +366,7 @@
 				latitude: Number(repinLat),
 				longitude: Number(repinLng),
 				...(repinAccuracy !== null ? { accuracyM: repinAccuracy } : {}),
+				...(repinAnyway ? { allowCoarsePin: true } : {}),
 				reason: repinReason.trim()
 			});
 			placement = { ...placement, moved: false, unverified: false, distanceM: 0 };
@@ -639,7 +643,10 @@
 									<Input
 										id="rinlat"
 										bind:value={repinLat}
-										oninput={() => (repinAccuracy = null)}
+										oninput={() => {
+											repinAccuracy = null;
+											repinAnyway = false;
+										}}
 										required
 									/>
 								</div>
@@ -648,7 +655,10 @@
 									<Input
 										id="rinlng"
 										bind:value={repinLng}
-										oninput={() => (repinAccuracy = null)}
+										oninput={() => {
+											repinAccuracy = null;
+											repinAnyway = false;
+										}}
 										required
 									/>
 								</div>
@@ -674,6 +684,14 @@
 									{#if live && repinAccuracy > live.stationRadiusM}
 										That is coarser than the {live.stationRadiusM} m allowed distance — wait for a
 										better fix or type the room's coordinates by hand, or the new pin will be refused.
+										<label class="mt-1 flex items-center gap-2 font-medium text-amber-900">
+											<input
+												type="checkbox"
+												bind:checked={repinAnyway}
+												class="size-4 accent-amber-600"
+											/>
+											Pin anyway with this fix
+										</label>
 									{/if}
 								</p>
 							{/if}

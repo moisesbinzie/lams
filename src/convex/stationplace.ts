@@ -105,6 +105,11 @@ export const pinStation = mutation({
 		longitude: v.number(),
 		/** GPS uncertainty of the new pin, when it came from a live reading. */
 		accuracyM: v.optional(v.number()),
+		/**
+		 * Explicit override for a coarse pin, offered by the UI only after
+		 * showing how coarse the fix is.
+		 */
+		allowCoarsePin: v.optional(v.boolean()),
 		reason: v.string()
 	},
 	handler: async (ctx, args) => {
@@ -117,7 +122,7 @@ export const pinStation = mutation({
 		if (args.latitude < -90 || args.latitude > 90) throw new Error('Invalid latitude.');
 		if (args.longitude < -180 || args.longitude > 180) throw new Error('Invalid longitude.');
 		const pinError = pinAccuracyError(args.accuracyM, session.stationRadiusM);
-		if (pinError) throw new Error(pinError);
+		if (pinError && !args.allowCoarsePin) throw new Error(pinError);
 		const reason = args.reason.trim();
 		if (reason.length < 3) {
 			throw new Error('Say why the station is being moved — it is kept on the record.');

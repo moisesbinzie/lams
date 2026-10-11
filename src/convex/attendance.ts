@@ -98,6 +98,12 @@ export const startSession = mutation({
 		/** GPS uncertainty of the station fix, when it came from a live reading. */
 		stationAccuracyM: v.optional(v.number()),
 		/**
+		 * Explicit override for a coarse pin. The UI only offers this after
+		 * showing how coarse the fix is, so setting it means the starter saw
+		 * the warning and chose to proceed — never a blind default.
+		 */
+		allowCoarsePin: v.optional(v.boolean()),
+		/**
 		 * How far the screen itself may sit from its pinned spot before scans stop
 		 * working. Defaults to a desk-sized tolerance rather than to
 		 * `stationRadiusM`, because a station that has to stay inside the whole
@@ -140,15 +146,16 @@ export const startSession = mutation({
 		if (stationLng < -180 || stationLng > 180) throw new Error('Invalid station longitude.');
 		// The pin is what every scan is measured against, so a fix coarser than
 		// the student radius is refused here rather than failing the whole hall
-		// one scan at a time. An explicit station fix is judged on its own
-		// accuracy; when the station falls back to the lecture position, the
+		// one scan at a time — unless the starter explicitly overrode after
+		// seeing the warning in the UI. An explicit station fix is judged on its
+		// own accuracy; when the station falls back to the lecture position, the
 		// lecture fix is what pinned it. Hand-typed coordinates carry no accuracy
 		// and stay the caller's responsibility.
 		const stationPinError = pinAccuracyError(
 			args.stationLat !== undefined ? (args.stationAccuracyM ?? args.accuracyM) : args.accuracyM,
 			stationRadiusM
 		);
-		if (stationPinError) throw new Error(stationPinError);
+		if (stationPinError && !args.allowCoarsePin) throw new Error(stationPinError);
 		const stationToleranceM = args.stationToleranceM ?? DEFAULT_STATION_TOLERANCE_M;
 		if (stationToleranceM < 1 || stationToleranceM > stationRadiusM) {
 			throw new Error('The station must be allowed to move less than the student radius.');

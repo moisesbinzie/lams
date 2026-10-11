@@ -22,6 +22,12 @@
 	let busy = $state(false);
 	let loading = $state(true);
 	let now = $state(Date.now());
+	/**
+	 * Second tap on Start with a coarse pin: the starter saw the warning and
+	 * chose to proceed anyway. Reset whenever the position changes, so the
+	 * acknowledgement never outlives the fix it was about.
+	 */
+	let confirmCoarse = $state(false);
 
 	let lat = $state('');
 	let lng = $state('');
@@ -108,6 +114,7 @@
 			lat = String(pos.lat);
 			lng = String(pos.lng);
 			pinAccuracy = pos.accuracyM ?? null;
+			confirmCoarse = false;
 			reportSuccess(
 							`Lecture location captured to within ${Math.round(pos.accuracyM ?? 0)} metres.`,
 							6000
@@ -123,6 +130,7 @@
 			stationLat = pos.lat.toFixed(6);
 			stationLng = pos.lng.toFixed(6);
 			stationPinAccuracy = pos.accuracyM ?? null;
+			confirmCoarse = false;
 			reportSuccess(
 				`Station pinned to where you are standing (±${Math.round(pos.accuracyM ?? 0)} m).`,
 				6000
@@ -134,6 +142,14 @@
 
 	async function start(e: SubmitEvent) {
 		e.preventDefault();
+		// A coarse pin would fail the whole hall one scan at a time, so the
+		// first tap stops here and says so — the second tap is the starter
+		// saying they saw the warning and accept the risk. The button itself
+		// always works: a warning must never strand a lecture.
+		if ((pinTooCoarse || stationTooCoarse) && !confirmCoarse) {
+			confirmCoarse = true;
+			return;
+		}
 		busy = true;
 		try {
 			const client = requireConvexClient();
@@ -156,7 +172,8 @@
 							...(stationPinAccuracy !== null ? { stationAccuracyM: stationPinAccuracy } : {})
 						}),
 				onTimeSec: Math.round(Number(onTimeMin) * 60),
-				lateUntilSec: Math.round(Number(lateUntilMin) * 60)
+				lateUntilSec: Math.round(Number(lateUntilMin) * 60),
+				...(confirmCoarse ? { allowCoarsePin: true } : {})
 			});
 			// Both variants are a receipt plus a next step ("now go and scan students
 			// in"), so they are held long enough to be read and acted on.
@@ -234,7 +251,10 @@
 							<Input
 								id="la"
 								bind:value={lat}
-								oninput={() => (pinAccuracy = null)}
+								oninput={() => {
+									pinAccuracy = null;
+									confirmCoarse = false;
+								}}
 								placeholder="-13.9626"
 								required
 							/>
@@ -244,7 +264,10 @@
 							<Input
 								id="lo"
 								bind:value={lng}
-								oninput={() => (pinAccuracy = null)}
+								oninput={() => {
+									pinAccuracy = null;
+									confirmCoarse = false;
+								}}
 								placeholder="33.7741"
 								required
 							/>
@@ -286,7 +309,10 @@
 									<Input
 										id="stla"
 										bind:value={stationLat}
-										oninput={() => (stationPinAccuracy = null)}
+										oninput={() => {
+											stationPinAccuracy = null;
+											confirmCoarse = false;
+										}}
 										placeholder="same as lecture"
 									/>
 								</div>
@@ -295,7 +321,10 @@
 									<Input
 										id="stlo"
 										bind:value={stationLng}
-										oninput={() => (stationPinAccuracy = null)}
+										oninput={() => {
+											stationPinAccuracy = null;
+											confirmCoarse = false;
+										}}
 										placeholder="same as lecture"
 									/>
 								</div>
@@ -340,12 +369,37 @@
 					</div>
 				</details>
 
+				{#if confirmCoarse && (pinTooCoarse || stationTooCoarse)}
+					<div
+						class="rounded-md border border-amber-300 bg-amber-50 p-3"
+						role="alert"
+					>
+						<p class="text-sm font-medium text-amber-900">Start anyway with this fix?</p>
+						<p class="mt-1 text-xs text-amber-900">
+							{#if pinTooCoarse}
+								The lecture position is only accurate to ±{Math.round(pinAccuracy ?? 0)} m, which is
+								coarser than the {radius} m allowed distance.
+							{/if}
+							{#if stationTooCoarse}
+								The screen position is only accurate to ±{Math.round(stationPinAccuracy ?? 0)} m,
+								which is coarser than the {radius} m allowed distance.
+							{/if}
+							Starting now may mark students out of range. Press Start lecture again to go ahead
+							anyway, or improve the fix above first.
+						</p>
+					</div>
+				{/if}
+
 				<form onsubmit={start}>
 					<Button
 						type="submit"
-						disabled={busy || !offeringId || !lat || !lng || pinTooCoarse || stationTooCoarse}
+						disabled={busy || !offeringId || !lat || !lng}
 					>
-						{busy ? 'Starting…' : 'Start lecture'}
+						{busy
+							? 'Starting…'
+							: confirmCoarse && (pinTooCoarse || stationTooCoarse)
+								? 'Start anyway'
+								: 'Start lecture'}
 					</Button>
 				</form>
 			{/if}

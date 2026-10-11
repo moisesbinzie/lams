@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatCountdown, formatDistance, getCurrentPosition } from './geo.ts';
+import { formatCountdown, formatDistance, getBestPosition, getCurrentPosition } from './geo.ts';
 
 describe('formatDistance', () => {
 	it('renders metres below a kilometre and kilometres above', () => {
@@ -31,5 +31,11 @@ describe('formatCountdown', () => {
 describe('getCurrentPosition', () => {
 	it('rejects when the browser exposes no geolocation API', async () => {
 		await assert.rejects(() => getCurrentPosition(50));
+	});
+});
+
+describe('getBestPosition', () => {
+	it('rejects when the browser exposes no geolocation API', async () => {
+		await assert.rejects(() => getBestPosition({ budgetMs: 50 }));
 	});
 });

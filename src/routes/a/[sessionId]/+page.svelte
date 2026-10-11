@@ -6,7 +6,7 @@
 	import { requireConvexClient } from '$lib/convexClient';
 	import { getDeviceId, getToken } from '$lib/lams/auth';
 	import { ensureSession, endSession, sessionStatus } from '$lib/lams/session.svelte';
-	import { formatDistance, getCurrentPosition } from '$lib/lams/geo';
+	import { formatDistance, getBestPosition } from '$lib/lams/geo';
 	import { stashPendingScan, takePendingScan } from '$lib/lams/station';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
@@ -38,6 +38,8 @@
 	let preview = $state<StationPreview | null>(null);
 	let result = $state<StationScanResult | null>(null);
 	let locationNote = $state('');
+	/** Best student fix seen so far while sampling, shown under the spinner. */
+	let locationBest = $state<string | null>(null);
 		let codeExpired = $state(false);
 	/** The screen has left its room, so the refusal is not the student's to fix. */
 	let stationMoved = $state(false);
@@ -147,13 +149,22 @@
 		stage = 'locating';
 		error = '';
 		locationNote = '';
+		locationBest = null;
 		codeExpired = false;
 		staleRecovered = false;
 		stationMoved = false;
 
 		let pos: { lat: number; lng: number; accuracyM?: number } | null = null;
 		try {
-			pos = await getCurrentPosition();
+			// A few seconds of sampling rather than one snapshot: the first fix
+			// indoors is usually the coarsest, and the scan is judged on the
+			// distance this reports — so the most accurate fix is what proves
+			// the student was at the station.
+			pos = await getBestPosition({
+				onFix: (fix) => {
+					if (fix.accuracyM !== undefined) locationBest = `±${Math.round(fix.accuracyM)} m`;
+				}
+			});
 		} catch (err) {
 			// The scan still goes through without a position. It is recorded as
 			// unconfirmed and flagged rather than silently counted as present.
@@ -330,6 +341,11 @@
 				<p class="text-sm text-muted-foreground">
 					Allow location access if your phone asks. That is what proves you are in the hall.
 				</p>
+				{#if locationBest}
+					<p class="text-xs text-muted-foreground" aria-live="polite">
+						Best fix so far {locationBest} — waiting a moment for it to settle.
+					</p>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 	{:else if stage === 'done' && result}
