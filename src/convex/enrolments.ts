@@ -208,6 +208,68 @@ export const assignForPerson = mutation({
 });
 
 /**
+ * Add (or withdraw) several existing students to one course in a single call.
+ *
+ * The Lectures hub and the admin roster dialog both select many rows and used
+ * to fire one `assignForPerson` per student — slow and half-applied when the
+ * network drops mid-list. One mutation keeps the permission check identical
+ * (offering-scoped, so finding someone never grants anything by itself) and
+ * reports how many landed vs were already there.
+ */
+export const assignManyForOffering = mutation({
+	args: {
+		token: v.string(),
+		offeringId: v.id('offerings'),
+		personIds: v.array(v.id('people')),
+		enroll: v.boolean()
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const offering = await ctx.db.get('offerings', args.offeringId);
+		if (!offering) throw new Error('Course offering not found.');
+
+		const addedBy = actor.kind === 'staff' ? ('lecturer' as const) : ('rep' as const);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
+		if (actor.kind !== 'staff') {
+			const repRows = await ctx.db
+				.query('programReps')
+				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+				.take(200);
+			if (!repRows.some((r: any) => r.programId === offering.programId)) {
+				throw new Error('You are only a program rep for your own program.');
+			}
+		}
+
+		// De-duplicate: a doubled id would otherwise count twice.
+		const seen = new Set<string>();
+		const uniqIds = args.personIds.filter((id) => {
+			const key = String(id);
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		}).slice(0, 500);
+
+		let added = 0;
+		let removed = 0;
+		let unchanged = 0;
+		for (const personId of uniqIds) {
+			const person = await ctx.db.get('people', personId);
+			if (!person) {
+				unchanged += 1;
+				continue;
+			}
+			const outcome = await assignOne(ctx, offering, personId, args.enroll, addedBy);
+			if (outcome === 'added') added += 1;
+			else if (outcome === 'removed') removed += 1;
+			else unchanged += 1;
+		}
+		return { added, removed, unchanged };
+	}
+});
+
+/**
  * Set several of one student's courses at once — the Students tab's tick list.
  *
  * Written as one mutation rather than N calls so a single Save is a single

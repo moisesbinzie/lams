@@ -20,7 +20,7 @@
 
 import { mutation, query } from './_generated/server';
 import { canRecordSession, recorderFields, requireRecorder } from './auth';
-import { toleranceFor } from './helpers';
+import { pinAccuracyError, toleranceFor } from './helpers';
 import { judgeStationPlacement } from './proximity';
 import { v } from 'convex/values';
 
@@ -103,6 +103,8 @@ export const pinStation = mutation({
 		sessionId: v.id('sessions'),
 		latitude: v.number(),
 		longitude: v.number(),
+		/** GPS uncertainty of the new pin, when it came from a live reading. */
+		accuracyM: v.optional(v.number()),
 		reason: v.string()
 	},
 	handler: async (ctx, args) => {
@@ -114,6 +116,8 @@ export const pinStation = mutation({
 		}
 		if (args.latitude < -90 || args.latitude > 90) throw new Error('Invalid latitude.');
 		if (args.longitude < -180 || args.longitude > 180) throw new Error('Invalid longitude.');
+		const pinError = pinAccuracyError(args.accuracyM, session.stationRadiusM);
+		if (pinError) throw new Error(pinError);
 		const reason = args.reason.trim();
 		if (reason.length < 3) {
 			throw new Error('Say why the station is being moved — it is kept on the record.');
@@ -123,6 +127,7 @@ export const pinStation = mutation({
 		await ctx.db.patch(session._id, {
 			stationLat: args.latitude,
 			stationLng: args.longitude,
+			...(args.accuracyM !== undefined ? { stationAccuracyM: args.accuracyM } : {}),
 			// Clear the moved flag: the point of the re-pin is that the station is
 			// now legitimately somewhere else.
 			stationMoved: undefined,

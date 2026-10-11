@@ -352,6 +352,14 @@ export default defineSchema({
 		/** Distance from the station at which a student's phone still counts as present. */
 		stationRadiusM: v.number(),
 		/**
+		 * The GPS uncertainty reported when the station was pinned, if it was
+		 * pinned from a live fix rather than typed by hand. Kept so a hall of
+		 * Out_of_Range scans can be traced back to a coarse pin.
+		 */
+		stationAccuracyM: v.optional(v.number()),
+		/** Same, for the lecture position the pin fell back to. */
+		lectureAccuracyM: v.optional(v.number()),
+		/**
 		 * How far the *station itself* may drift from its pinned spot before
 		 * scans are refused. Optional because sessions opened before this existed
 		 * have no value; the gate falls back to `stationRadiusM` when it is absent.

@@ -18,9 +18,14 @@ export type Proximity = {
 /**
  * Judges a single coordinate pair against the lecture location.
  *
- * `accuracyM` is the device's own reported uncertainty. When that is larger than
- * the radius, a point 40 m outside and one 40 m inside are indistinguishable,
- * so `inside` stays null rather than guessing.
+ * `accuracyM` is the device's own reported uncertainty. A fix coarser than the
+ * radius usually cannot tell inside from outside — a point 40 m outside and one
+ * 40 m inside are indistinguishable — so `inside` stays null and a human reviews
+ * it instead of the scan becoming a confident Out_of_Range on its own.
+ *
+ * One exception: when the whole error circle still lies outside the radius
+ * (`distance - accuracy > radius`), presence is disproved rather than
+ * undecidable, so that is a confident outside verdict.
  */
 export function judgeProximity(
 	lectureLat: number,
@@ -35,6 +40,9 @@ export function judgeProximity(
 	}
 	const distanceM = Math.round(haversineM(lectureLat, lectureLng, lat, lng));
 	if (accuracyM !== undefined && accuracyM > radiusM) {
+		if (distanceM - accuracyM > radiusM) {
+			return { distanceM, weak: false, inside: false };
+		}
 		return { distanceM, weak: true, inside: null };
 	}
 	return { distanceM, weak: false, inside: distanceM <= radiusM };
@@ -85,9 +93,10 @@ export function judgeStationPlacement(
 }
 
 /**
- * A student's own location is judged more strictly than the rep's: they are the
- * one whose attendance is in question, so a coarse fix is treated as suspicious
- * rather than accepted.
+ * How coarse a student fix may be before `submitStationScan` stops trusting it.
+ * Kept for compatibility; the verdict itself now comes from `judgeProximity`,
+ * which withholds judgement whenever the error circle still reaches the
+ * station instead of applying a separate multiple here.
  */
 export const STUDENT_ACCURACY_TOLERANCE = 2;
 

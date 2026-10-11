@@ -4,7 +4,7 @@ export interface GeoPoint {
 	accuracyM?: number;
 }
 
-export function getCurrentPosition(timeoutMs = 15000): Promise<GeoPoint> {
+export function getCurrentPosition(timeoutMs = 20000): Promise<GeoPoint> {
 	return new Promise((resolve, reject) => {
 		if (!('geolocation' in navigator)) {
 			reject(new Error('Geolocation not supported on this device.'));
@@ -13,7 +13,10 @@ export function getCurrentPosition(timeoutMs = 15000): Promise<GeoPoint> {
 		navigator.geolocation.getCurrentPosition(
 			(pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracyM: pos.coords.accuracy }),
 			(err) => reject(new Error(err.message || 'Location permission denied.')),
-			{ enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 10000 }
+			// A cached fix is what pins a room hundreds of metres off: the last
+			// reading may be from outside the building or another street entirely.
+			// Always take a fresh one here, even if it takes longer indoors.
+			{ enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
 		);
 	});
 }

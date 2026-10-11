@@ -62,6 +62,23 @@ describe('judgeProximity', () => {
 		assert.equal(result.distanceM, 0);
 	});
 
+	it('withholds judgement when a coarse fix still reaches the station', () => {
+		// ~56 m away with ±80 m: the error circle overlaps the 50 m radius, so
+		// this must never become a confident Out_of_Range on its own.
+		const result = judgeProximity(LAT, LNG, LAT + 0.0005, LNG, 80, RADIUS);
+		assert.ok(result.distanceM! > 50, `got ${result.distanceM}`);
+		assert.equal(result.weak, true);
+		assert.equal(result.inside, null);
+	});
+
+	it('still calls outside when the whole error circle lies beyond the radius', () => {
+		// ~1.1 km away with ±400 m: 1111 - 400 is still far past 50 m, so
+		// presence is disproved rather than undecidable.
+		const result = judgeProximity(LAT, LNG, LAT + 0.01, LNG, 400, RADIUS);
+		assert.equal(result.weak, false);
+		assert.equal(result.inside, false);
+	});
+
 	it('still judges a fix at exactly the radius, since it is not coarser', () => {
 		const result = judgeProximity(LAT, LNG, LAT, LNG, RADIUS, RADIUS);
 		assert.equal(result.weak, false);

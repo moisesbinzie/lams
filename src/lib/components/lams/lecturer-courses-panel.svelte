@@ -8,9 +8,12 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Textarea } from '$lib/components/ui/textarea';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Table from '$lib/components/ui/table';
 	import { BookOpen, Plus, Search, UserPlus, UserMinus, UserRoundCheck } from '@lucide/svelte';
 	import type { Meeting, Offering, ProgramRow } from '$lib/lams/types';
+	import { parseRosterCsv } from '$lib/lams/csv';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	/**
@@ -22,11 +25,12 @@
 	 * Students tab in the admin setup console). So the course list is the
 	 * picker, and everything below follows the selected course.
 	 *
-	 * Adding is `assignForPerson` (enroll true), removing is the same call
-	 * with enroll false — a withdrawal, never a delete, so attendance history
-	 * is kept. Registering a student entirely is `registerAndEnrol`: the
-	 * student joins the course's program and the course in one transaction,
-	 * so the admin's Students tab always sees the full chain. Any enrolled
+	 * Adding is `assignForPerson` (enroll true) for one student or
+	 * `assignManyForOffering` for a ticked set — a withdrawal, never a delete,
+	 * so attendance history is kept. Registering brand-new students is
+	 * `registerAndEnrol` (one) or `registerManyAndEnrol` (pasted list): the
+	 * student joins the course's program and the course together, so the
+	 * admin's Students tab always sees the full chain. Any enrolled
 	 * student can also be made a program rep (`setRep`) for the course's
 	 * program — the same grant the Students tab offers.
 	 */
@@ -71,6 +75,12 @@
 	let newSid = $state('');
 	let busyId = $state('');
 	let registering = $state(false);
+	/** Pasted "Full Name, Reg Number, Student ID" lines for bulk registration. */
+	let bulkRegisterText = $state('');
+	let registeringMany = $state(false);
+	/** Tick-box selection across the search results for one-tap bulk add. */
+	let selectedToAdd = $state<Set<string>>(new Set());
+	let addingMany = $state(false);
 	let togglingOpen = $state(false);
 	let openingAll = $state(false);
 
@@ -95,6 +105,11 @@
 	);
 
 	const addable = $derived(candidates.filter((c) => !enrolledIds.has(String(c._id))));
+	/** Usable pasted lines for the bulk-register box, so the button can show its count. */
+	const bulkRegisterRows = $derived(parseRosterCsv(bulkRegisterText));
+	const allAddableSelected = $derived(
+		addable.length > 0 && addable.every((c) => selectedToAdd.has(String(c._id)))
+	);
 
 	function programNamesOf(ids: string[]): string {
 		const names = ids
@@ -189,6 +204,8 @@
 		candidates = [];
 		searched = false;
 		showRegister = false;
+		bulkRegisterText = '';
+		selectedToAdd = new Set();
 		void loadRoster();
 	}
 
@@ -207,10 +224,57 @@
 				q: addSearch.trim()
 			})) as typeof candidates;
 			searched = true;
+			// Drop ticks for anyone who just landed in the course elsewhere.
+			const stillAddable = new Set(
+				candidates
+					.filter((c) => !enrolledIds.has(String(c._id)))
+					.map((c) => String(c._id))
+			);
+			selectedToAdd = new Set([...selectedToAdd].filter((id) => stillAddable.has(id)));
 		} catch (err) {
 			reportError(err, 'Could not search students.');
 		} finally {
 			searching = false;
+		}
+	}
+
+	function toggleSelect(id: string) {
+		const next = new Set(selectedToAdd);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		selectedToAdd = next;
+	}
+
+	function toggleSelectAll() {
+		if (allAddableSelected) selectedToAdd = new Set();
+		else selectedToAdd = new Set(addable.map((c) => String(c._id)));
+	}
+
+	async function addSelected() {
+		if (!token || !selectedId || selectedToAdd.size === 0) return;
+		addingMany = true;
+		try {
+			const client = requireConvexClient();
+			const res = (await client.mutation(api.enrolments.assignManyForOffering, {
+				token,
+				offeringId: selectedId as never,
+				personIds: [...selectedToAdd] as never[],
+				enroll: true
+			})) as { added: number; removed: number; unchanged: number };
+			selectedToAdd = new Set();
+			candidates = [];
+			searched = false;
+			addSearch = '';
+			await loadRoster();
+			await refreshCounts();
+			reportSuccess(
+				`${res.added} student${res.added === 1 ? '' : 's'} added to ${selected?.courseCode ?? 'the course'}.` +
+					(res.unchanged > 0 ? ` ${res.unchanged} already had it.` : '')
+			);
+		} catch (err) {
+			reportError(err, 'Could not add those students.');
+		} finally {
+			addingMany = false;
 		}
 	}
 
@@ -226,6 +290,9 @@
 				enroll: true
 			});
 			candidates = candidates.filter((c) => String(c._id) !== String(personId));
+			const next = new Set(selectedToAdd);
+			next.delete(String(personId));
+			selectedToAdd = next;
 			await loadRoster();
 			await refreshCounts();
 			reportSuccess(`${fullName} added to ${selected?.courseCode ?? 'the course'}.`);
@@ -327,6 +394,50 @@
 			reportError(err, 'Could not register that student.');
 		} finally {
 			registering = false;
+		}
+	}
+
+	/**
+	 * Paste a class list — one "Full Name, Reg Number, Student ID" per line —
+	 * and register every line straight into this course. Duplicates and
+	 * incomplete lines are skipped with a count, never fatal.
+	 */
+	async function registerMany() {
+		const rows = parseRosterCsv(bulkRegisterText);
+		if (rows.length === 0) {
+			reportError(
+				new Error('No usable lines.'),
+				'Use one per line: Full Name, Registration Number, Student ID.'
+			);
+			return;
+		}
+		if (!token || !selected) return;
+		if (!selected.programId) {
+			reportError(
+				new Error('No program.'),
+				'This course has no program yet — ask the admin to place it first.'
+			);
+			return;
+		}
+		registeringMany = true;
+		try {
+			const client = requireConvexClient();
+			const res = (await client.mutation(api.people.registerManyAndEnrol, {
+				token,
+				offeringId: selected._id as never,
+				rows
+			})) as { added: number; skipped: number };
+			bulkRegisterText = '';
+			await loadRoster();
+			await refreshCounts();
+			reportSuccess(
+				`Registered ${res.added} student${res.added === 1 ? '' : 's'} into ${selected.courseCode}.` +
+					(res.skipped > 0 ? ` ${res.skipped} skipped as duplicates or incomplete.` : '')
+			);
+		} catch (err) {
+			reportError(err, 'Could not register those students.');
+		} finally {
+			registeringMany = false;
 		}
 	}
 
@@ -604,8 +715,9 @@
 						<Plus class="size-4" aria-hidden="true" /> Add students to {selected.courseCode}
 					</Card.Title>
 					<Card.Description>
-						Search everyone — including repeats from other programs — and add them here. Or
-						register a brand-new student straight into this course.
+						Search everyone — including repeats from other programs — tick several and add
+						them together. Or register brand-new students straight into this course, one or
+						a whole pasted list.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="flex flex-col gap-3">
@@ -633,22 +745,51 @@
 								Nothing to add — everyone matching that search is already in this course.
 							</p>
 						{:else}
+							<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 p-2">
+								<label class="flex cursor-pointer items-center gap-2 text-xs font-medium">
+									<Checkbox
+										checked={allAddableSelected}
+										onCheckedChange={toggleSelectAll}
+										aria-label="Select all search results"
+									/>
+									Select all ({addable.length})
+									{#if selectedToAdd.size > 0}
+										<span class="text-muted-foreground">· {selectedToAdd.size} ticked</span>
+									{/if}
+								</label>
+								<Button
+									size="sm"
+									disabled={selectedToAdd.size === 0 || addingMany}
+									onclick={addSelected}
+								>
+									{addingMany ? 'Adding…' : `Add selected (${selectedToAdd.size})`}
+								</Button>
+							</div>
 							<ul class="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border">
 								{#each addable as c (c._id)}
 									<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-										<span class="min-w-0">
-											<span class="font-medium">{c.fullName}</span>
-											<span class="block text-xs text-muted-foreground">
-												<span class="font-mono">{c.regNumber}</span> · {c.studentId}
-												{#if programNamesOf(c.programIds)}
-													· {programNamesOf(c.programIds)}
-												{/if}
+										<span class="flex min-w-0 items-start gap-2">
+											<Checkbox
+												id={`lec-add-${c._id}`}
+												checked={selectedToAdd.has(String(c._id))}
+												onCheckedChange={() => toggleSelect(String(c._id))}
+												aria-label={`Select ${c.fullName}`}
+												class="mt-1"
+											/>
+											<span class="min-w-0">
+												<label for={`lec-add-${c._id}`} class="cursor-pointer font-medium">{c.fullName}</label>
+												<span class="block text-xs text-muted-foreground">
+													<span class="font-mono">{c.regNumber}</span> · {c.studentId}
+													{#if programNamesOf(c.programIds)}
+														· {programNamesOf(c.programIds)}
+													{/if}
+												</span>
 											</span>
 										</span>
 										<Button
 											variant="outline"
 											size="sm"
-											disabled={busyId === c._id}
+											disabled={busyId === c._id || addingMany}
 											onclick={() => addExisting(c._id, c.fullName)}
 										>
 											Add
@@ -688,6 +829,27 @@
 									</Button>
 								</div>
 							</form>
+							<div class="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+								<Label for="lr-bulk">Or register many at once — one per line</Label>
+								<Textarea
+									id="lr-bulk"
+									class="min-h-20"
+									bind:value={bulkRegisterText}
+									placeholder={'Amina Banda, BIT/2024/0123, 2024-0123\nJohn Phiri, BIT/2024/0124, 2024-0124'}
+								/>
+								<div>
+									<Button
+										variant="secondary"
+										size="sm"
+										disabled={registeringMany || bulkRegisterRows.length === 0}
+										onclick={registerMany}
+									>
+										{registeringMany
+											? 'Registering…'
+											: `Register + add these (${bulkRegisterRows.length})`}
+									</Button>
+								</div>
+							</div>
 						{/if}
 					</div>
 				</Card.Content>

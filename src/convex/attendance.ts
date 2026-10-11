@@ -21,10 +21,11 @@ import {
 	DEFAULT_STATION_TOLERANCE_M,
 	haversineM,
 	normalizeReg,
+	pinAccuracyError,
 	randomHex,
 	toleranceFor
 } from './helpers';
-import { judgeProximity, STUDENT_ACCURACY_TOLERANCE } from './proximity';
+import { judgeProximity } from './proximity';
 import { isBlocked, noteFailure, noteSuccess, CODE_FETCH_LIMITS, STATION_LIMITS } from './ratelimit';
 import { currentStationCode, verifyStationCode } from './station';
 
@@ -81,6 +82,8 @@ export const startSession = mutation({
 		lectureLat: v.number(),
 		lectureLng: v.number(),
 		radiusM: v.optional(v.number()),
+		/** GPS uncertainty of the lecture fix, when it came from a live reading. */
+		accuracyM: v.optional(v.number()),
 		onTimeSec: v.optional(v.number()),
 		lateUntilSec: v.optional(v.number()),
 		/**
@@ -92,6 +95,8 @@ export const startSession = mutation({
 		stationLng: v.optional(v.number()),
 		/** Defaults to the lecture position — a station in the room is the usual case. */
 		stationRadiusM: v.optional(v.number()),
+		/** GPS uncertainty of the station fix, when it came from a live reading. */
+		stationAccuracyM: v.optional(v.number()),
 		/**
 		 * How far the screen itself may sit from its pinned spot before scans stop
 		 * working. Defaults to a desk-sized tolerance rather than to
@@ -133,6 +138,17 @@ export const startSession = mutation({
 		const stationLng = args.stationLng ?? args.lectureLng;
 		if (stationLat < -90 || stationLat > 90) throw new Error('Invalid station latitude.');
 		if (stationLng < -180 || stationLng > 180) throw new Error('Invalid station longitude.');
+		// The pin is what every scan is measured against, so a fix coarser than
+		// the student radius is refused here rather than failing the whole hall
+		// one scan at a time. An explicit station fix is judged on its own
+		// accuracy; when the station falls back to the lecture position, the
+		// lecture fix is what pinned it. Hand-typed coordinates carry no accuracy
+		// and stay the caller's responsibility.
+		const stationPinError = pinAccuracyError(
+			args.stationLat !== undefined ? (args.stationAccuracyM ?? args.accuracyM) : args.accuracyM,
+			stationRadiusM
+		);
+		if (stationPinError) throw new Error(stationPinError);
 		const stationToleranceM = args.stationToleranceM ?? DEFAULT_STATION_TOLERANCE_M;
 		if (stationToleranceM < 1 || stationToleranceM > stationRadiusM) {
 			throw new Error('The station must be allowed to move less than the student radius.');
@@ -166,6 +182,8 @@ export const startSession = mutation({
 			stationLat,
 			stationLng,
 			stationRadiusM,
+			...(args.stationAccuracyM !== undefined ? { stationAccuracyM: args.stationAccuracyM } : {}),
+			...(args.accuracyM !== undefined ? { lectureAccuracyM: args.accuracyM } : {}),
 			stationToleranceM,
 			lectureLat: args.lectureLat,
 			lectureLng: args.lectureLng,
@@ -467,17 +485,17 @@ export const submitStationScan = mutation({
 		);
 		const distanceM = proximity.distanceM ?? undefined;
 
-		// A fix coarser than a small multiple of the radius cannot tell inside
-		// from outside — a phone reporting ±150 m for a 50 m radius is not
-		// evidence either way. So the distance is withheld from the status
-		// calculation entirely and the record is flagged for a human instead.
-		// Letting a coarse fix produce a confident verdict in either direction
-		// would either fail honest students or wave through absent ones.
+		// A fix coarser than the radius usually cannot tell inside from outside —
+		// a phone reporting ±150 m for a 50 m radius is not evidence either way.
+		// So the distance is withheld from the status calculation entirely unless
+		// `judgeProximity` reached a confident verdict, and the record is flagged
+		// for a human instead. Letting a coarse fix produce a confident verdict
+		// in either direction would either fail honest students sitting in the
+		// hall or wave through absent ones. The one exception lives inside
+		// `judgeProximity`: a fix whose whole error circle still lies outside the
+		// radius disproves presence and stays a confident Out_of_Range.
 		const noFix = proximity.distanceM === null;
-		const positionUsable =
-			!noFix &&
-			(args.accuracyM === undefined ||
-				args.accuracyM <= session.stationRadiusM * STUDENT_ACCURACY_TOLERANCE);
+		const positionUsable = proximity.inside !== null;
 
 		const elapsedSec = Math.floor((Date.now() - session.startedAt) / 1000);
 		const status = computeAutoStatus(
@@ -531,6 +549,7 @@ export const submitStationScan = mutation({
 			courseTitle: course?.title ?? '',
 			status,
 			distanceM: distanceM ?? null,
+			accuracyM: args.accuracyM ?? null,
 			positionUsable,
 			flagged: Boolean(flagReason),
 			lateByMinutes:

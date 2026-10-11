@@ -72,6 +72,9 @@
 	// position, which is right for the ordinary case of both being in the room.
 	let stationLat = $state('');
 	let stationLng = $state('');
+	/** GPS uncertainty of each fix above, when it came from a live reading. Typing clears it. */
+	let pinAccuracy = $state<number | null>(null);
+	let stationPinAccuracy = $state<number | null>(null);
 	let radius = $state('50');
 	// How far the screen may be carried from its spot before scanning stops.
 	let tolerance = $state('15');
@@ -82,6 +85,15 @@
 
 	/** Blank station fields mean "same as the lecture", so the API omits them. */
 	const usesLectureSpot = $derived(stationLat.trim() === '' && stationLng.trim() === '');
+	/**
+	 * A pin captured from a fix coarser than the radius would fail the whole
+	 * hall one scan at a time, so the server refuses it — this is the same
+	 * check up front, with the way out spelt out (better fix or wider radius).
+	 */
+	const pinTooCoarse = $derived(pinAccuracy !== null && pinAccuracy > Number(radius));
+	const stationTooCoarse = $derived(
+		!usesLectureSpot && stationPinAccuracy !== null && stationPinAccuracy > Number(radius)
+	);
 
 	onMount(async () => {
 		try {
@@ -112,7 +124,11 @@
 			const pos = await getCurrentPosition();
 			lat = pos.lat.toFixed(6);
 			lng = pos.lng.toFixed(6);
-			reportSuccess('Using your current location as the lecture position.', 6000);
+			pinAccuracy = pos.accuracyM ?? null;
+			reportSuccess(
+				`Using your current location as the lecture position (±${Math.round(pos.accuracyM ?? 0)} m).`,
+				6000
+			);
 		} catch (err) {
 			reportError(err, 'Could not read your location.');
 		} finally {
@@ -127,7 +143,11 @@
 			const pos = await getCurrentPosition();
 			stationLat = pos.lat.toFixed(6);
 			stationLng = pos.lng.toFixed(6);
-			reportSuccess('Station pinned to where you are standing.', 6000);
+			stationPinAccuracy = pos.accuracyM ?? null;
+			reportSuccess(
+				`Station pinned to where you are standing (±${Math.round(pos.accuracyM ?? 0)} m).`,
+				6000
+			);
 		} catch (err) {
 			reportError(err, 'Could not read your location.');
 		} finally {
@@ -145,12 +165,19 @@
 				offeringId: offeringId as never,
 				lectureLat: Number(lat),
 				lectureLng: Number(lng),
+				...(pinAccuracy !== null ? { accuracyM: pinAccuracy } : {}),
 				radiusM: Number(radius),
 				stationRadiusM: Number(radius),
 				stationToleranceM: Number(tolerance),
 				// Omitted entirely when blank, so the server falls back to the
 				// lecture position rather than being handed an empty coordinate.
-				...(usesLectureSpot ? {} : { stationLat: Number(stationLat), stationLng: Number(stationLng) }),
+				...(usesLectureSpot
+					? {}
+					: {
+							stationLat: Number(stationLat),
+							stationLng: Number(stationLng),
+							...(stationPinAccuracy !== null ? { stationAccuracyM: stationPinAccuracy } : {})
+						}),
 				onTimeSec: Math.round(Number(onTimeMin) * 60),
 				lateUntilSec: Math.round(Number(lateUntilMin) * 60)
 			})) as { sessionId: string };
@@ -216,11 +243,23 @@
 					<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
 						<div class="flex flex-col gap-1">
 							<Label for="sla">Latitude</Label>
-							<Input id="sla" bind:value={lat} placeholder="-13.9626" required />
+							<Input
+								id="sla"
+								bind:value={lat}
+								oninput={() => (pinAccuracy = null)}
+								placeholder="-13.9626"
+								required
+							/>
 						</div>
 						<div class="flex flex-col gap-1">
 							<Label for="slo">Longitude</Label>
-							<Input id="slo" bind:value={lng} placeholder="33.7741" required />
+							<Input
+								id="slo"
+								bind:value={lng}
+								oninput={() => (pinAccuracy = null)}
+								placeholder="33.7741"
+								required
+							/>
 						</div>
 						<div class="flex items-end">
 							<Button type="button" variant="outline" onclick={useGps} disabled={locating}>
@@ -228,6 +267,19 @@
 							</Button>
 						</div>
 					</div>
+					{#if pinAccuracy !== null}
+						<p class="mt-2 text-xs text-muted-foreground">
+							This fix is accurate to ±{Math.round(pinAccuracy)} m.
+						</p>
+					{/if}
+					{#if pinTooCoarse}
+						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+							This fix (±{Math.round(pinAccuracy ?? 0)} m) is coarser than the {radius} m allowed
+							distance, so starting now would mark students out of range. Wait for a better fix,
+							move near a window or doorway, type the room's coordinates by hand, or widen the
+							allowed distance below.
+						</p>
+					{/if}
 				</div>
 
 				<div class="rounded-md border border-border p-3">
@@ -239,11 +291,21 @@
 					<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
 						<div class="flex flex-col gap-1">
 							<Label for="sstlat">Station latitude</Label>
-							<Input id="sstlat" bind:value={stationLat} placeholder="same as lecture" />
+							<Input
+								id="sstlat"
+								bind:value={stationLat}
+								oninput={() => (stationPinAccuracy = null)}
+								placeholder="same as lecture"
+							/>
 						</div>
 						<div class="flex flex-col gap-1">
 							<Label for="sstlng">Station longitude</Label>
-							<Input id="sstlng" bind:value={stationLng} placeholder="same as lecture" />
+							<Input
+								id="sstlng"
+								bind:value={stationLng}
+								oninput={() => (stationPinAccuracy = null)}
+								placeholder="same as lecture"
+							/>
 						</div>
 						<div class="flex items-end">
 							<Button
@@ -260,6 +322,13 @@
 						<Label for="stol">Screen may move (m)</Label>
 						<Input id="stol" type="number" min="1" max={radius} bind:value={tolerance} />
 					</div>
+					{#if stationTooCoarse}
+						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+							This screen fix (±{Math.round(stationPinAccuracy ?? 0)} m) is coarser than the {radius} m
+							allowed distance. Wait for a better fix, type the screen's spot by hand, or widen the
+							allowed distance below.
+						</p>
+					{/if}
 					<p class="mt-2 text-xs text-muted-foreground">
 						The screen checks it is still in this room. If it is carried more than {tolerance} m away,
 						scanning stops and students are told why — nobody is marked absent because of it. Keep this small:
@@ -291,7 +360,10 @@
 				</div>
 
 				<div>
-					<Button type="submit" disabled={busy || !offeringId || !lat || !lng}>
+					<Button
+						type="submit"
+						disabled={busy || !offeringId || !lat || !lng || pinTooCoarse || stationTooCoarse}
+					>
 						{busy ? 'Starting…' : 'Start lecture'}
 					</Button>
 				</div>

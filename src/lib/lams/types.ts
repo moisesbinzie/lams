@@ -311,6 +311,8 @@ export interface StationScanResult {
 	courseTitle: string;
 	status: AttendanceStatus;
 	distanceM: number | null;
+	/** The phone's own reported uncertainty, so the result can show ± alongside the distance. */
+	accuracyM: number | null;
 	/** False when the fix was missing or too coarse to judge. */
 	positionUsable: boolean;
 	flagged: boolean;

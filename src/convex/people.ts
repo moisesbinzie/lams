@@ -244,6 +244,83 @@ export const registerAndEnrol = mutation({
 });
 
 /**
+ * Register several brand-new students straight into one course offering.
+ *
+ * The bulk twin of `registerAndEnrol`: each pasted line becomes a student in
+ * the offering's program plus an enrolment carrying its course, program and
+ * semester — the same full chain the admin's Students tab expects. Duplicate
+ * or incomplete lines are skipped (counted, never fatal) so a 40-name class
+ * list with two typos still lands the other 38.
+ */
+export const registerManyAndEnrol = mutation({
+	args: {
+		token: v.string(),
+		offeringId: v.id('offerings'),
+		rows: v.array(v.object({ fullName: v.string(), regNumber: v.string(), studentId: v.string() }))
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const offering = await ctx.db.get('offerings', args.offeringId);
+		if (!offering) throw new Error('Course offering not found.');
+		if (!offering.programId) {
+			throw new Error('This course has no program yet — ask the admin to place it first.');
+		}
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
+		if (actor.kind !== 'staff') {
+			const repRows = await ctx.db
+				.query('programReps')
+				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+				.take(200);
+			if (!repRows.some((r: any) => String(r.programId) === String(offering.programId))) {
+				throw new Error('You are only a program rep for your own program.');
+			}
+		}
+		const addedBy = actor.kind === 'staff' ? ('lecturer' as const) : ('rep' as const);
+		let added = 0;
+		let skipped = 0;
+		for (const row of args.rows.slice(0, 200)) {
+			const fullName = row.fullName.trim();
+			const regNorm = normalizeReg(row.regNumber);
+			const idNorm = normalizeId(row.studentId);
+			if (fullName.length < 2 || !regNorm || !idNorm) {
+				skipped += 1;
+				continue;
+			}
+			const clash = await ctx.db.query('people').withIndex('by_reg', (q) => q.eq('regNorm', regNorm)).unique();
+			if (clash) {
+				skipped += 1;
+				continue;
+			}
+			const personId = await ctx.db.insert('people', {
+				role: 'student',
+				fullName,
+				regNumber: row.regNumber.trim(),
+				regNorm,
+				studentId: row.studentId.trim(),
+				idNorm,
+				status: 'invited',
+				createdAt: Date.now()
+			});
+			await addMembership(ctx, personId, offering.programId);
+			await ctx.db.insert('enrolments', {
+				personId,
+				courseId: offering.courseId,
+				offeringId: offering._id,
+				semesterId: offering.semesterId,
+				programId: offering.programId,
+				status: 'active',
+				addedBy,
+				createdAt: Date.now()
+			});
+			added += 1;
+		}
+		return { added, skipped };
+	}
+});
+
+/**
  * First sign-in. Claims an `invited` record by proving both identities, then
  * sets the PIN. The two-factor requirement is what stops someone else claiming
  * an account from a guessable registration number alone.

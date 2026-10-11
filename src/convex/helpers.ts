@@ -69,6 +69,29 @@ export async function sha256Hex(text: string): Promise<string> {
 export type AutoStatus = 'Present' | 'Late' | 'Out_of_Range' | 'Absent';
 
 /**
+ * Refuses a station pin taken from a GPS fix coarser than the radius it has to
+ * prove. A pin captured at ±300 m for a 50 m room can sit streets away from the
+ * hall, and every honest scan then reads as hundreds of metres Out_of_Range —
+ * the failure mode that only "widen the radius to 1000 m" papers over.
+ *
+ * Returns the refusal message, or null when the pin may be used. A pin with no
+ * reported accuracy (typed by hand) is the caller's responsibility and passes.
+ */
+export function pinAccuracyError(
+	accuracyM: number | undefined,
+	radiusM: number
+): string | null {
+	if (accuracyM === undefined) return null;
+	if (accuracyM <= radiusM) return null;
+	return (
+		`This location is only accurate to ±${Math.round(accuracyM)} m, which is coarser ` +
+		`than the ${radiusM} m allowed distance. Wait for a better fix, move near a ` +
+		`window or doorway, or widen the allowed distance first — otherwise every ` +
+		`student will scan as out of range.`
+	);
+}
+
+/**
  * Whether a scan may be recorded for a person, given which phone it came from.
  *
  * Split out from the guard in `auth.ts` so the decision itself is testable

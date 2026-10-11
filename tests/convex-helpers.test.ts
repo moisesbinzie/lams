@@ -11,6 +11,7 @@ import {
 	judgeScanDevice,
 	normalizeId,
 	normalizeReg,
+	pinAccuracyError,
 	randomHex,
 	sha256Hex,
 	toleranceFor
@@ -116,6 +117,22 @@ describe('randomHex / sha256Hex', () => {
 	it('hashes deterministically (SHA-256 of "abc")', async () => {
 		const out = await sha256Hex('abc');
 		assert.equal(out, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+	});
+});
+
+describe('pinAccuracyError', () => {
+	it('accepts a pin with no reported accuracy (typed by hand)', () => {
+		assert.equal(pinAccuracyError(undefined, 50), null);
+	});
+
+	it('accepts a fix at least as precise as the radius', () => {
+		assert.equal(pinAccuracyError(10, 50), null);
+		assert.equal(pinAccuracyError(50, 50), null);
+	});
+
+	it('refuses a fix coarser than the radius, naming both numbers', () => {
+		const err = pinAccuracyError(300, 50);
+		assert.ok(typeof err === 'string' && err.includes('±300 m') && err.includes('50 m'));
 	});
 });
 

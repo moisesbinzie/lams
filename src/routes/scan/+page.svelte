@@ -80,6 +80,8 @@
 	let repinLng = $state('');
 	let repinReason = $state('');
 	let repinning = $state(false);
+	/** GPS uncertainty of the re-pin fix, when it came from a live reading. Typing clears it. */
+	let repinAccuracy = $state<number | null>(null);
 
 	/**
 	 * How often the screen tells the server where it is.
@@ -311,6 +313,7 @@
 			const pos = await getCurrentPosition();
 			repinLat = String(pos.lat);
 			repinLng = String(pos.lng);
+			repinAccuracy = pos.accuracyM ?? null;
 		} catch (err) {
 			reportError(err, 'Could not read your location.');
 		}
@@ -359,6 +362,7 @@
 				sessionId: live._id as never,
 				latitude: Number(repinLat),
 				longitude: Number(repinLng),
+				...(repinAccuracy !== null ? { accuracyM: repinAccuracy } : {}),
 				reason: repinReason.trim()
 			});
 			placement = { ...placement, moved: false, unverified: false, distanceM: 0 };
@@ -632,11 +636,21 @@
 							<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
 								<div class="flex flex-col gap-1">
 									<Label for="rinlat">Room latitude</Label>
-									<Input id="rinlat" bind:value={repinLat} required />
+									<Input
+										id="rinlat"
+										bind:value={repinLat}
+										oninput={() => (repinAccuracy = null)}
+										required
+									/>
 								</div>
 								<div class="flex flex-col gap-1">
 									<Label for="rinlng">Room longitude</Label>
-									<Input id="rinlng" bind:value={repinLng} required />
+									<Input
+										id="rinlng"
+										bind:value={repinLng}
+										oninput={() => (repinAccuracy = null)}
+										required
+									/>
 								</div>
 								<div class="flex items-end">
 									<Button type="button" variant="outline" onclick={useGpsForRepin}>
@@ -654,6 +668,15 @@
 									required
 								/>
 							</div>
+							{#if repinAccuracy !== null}
+								<p class="text-xs text-muted-foreground">
+									This fix is accurate to ±{Math.round(repinAccuracy)} m.
+									{#if live && repinAccuracy > live.stationRadiusM}
+										That is coarser than the {live.stationRadiusM} m allowed distance — wait for a
+										better fix or type the room's coordinates by hand, or the new pin will be refused.
+									{/if}
+								</p>
+							{/if}
 							<div>
 								<Button type="submit" disabled={repinning}>
 									{repinning ? 'Moving…' : 'Pin to this room'}

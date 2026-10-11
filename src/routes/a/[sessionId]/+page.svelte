@@ -352,7 +352,7 @@
 
 				<p class="text-sm text-muted-foreground">
 					{#if result.positionUsable}
-						Your phone was {formatDistance(result.distanceM)} from the station when you scanned.
+						Your phone was {formatDistance(result.distanceM)} from the station when you scanned{#if result.accuracyM !== null && result.accuracyM !== undefined} (±{Math.round(result.accuracyM)} m){/if}.
 					{:else}
 						Your location could not be checked, so your lecturer will confirm this record.
 					{/if}
