@@ -376,8 +376,15 @@
 
 				{#if result.status === 'Out_of_Range'}
 					<p class="text-sm text-amber-900">
-						Your phone reported being {formatDistance(result.distanceM)} away. If that is wrong, ask your
-						class rep or lecturer — they can change it.
+						{#if (result.distanceM ?? 0) > 1000}
+							Your phone reported being {formatDistance(result.distanceM)} away — that far means the
+							station itself was probably started in the wrong place, not that you were absent.
+							Tell your class rep to check the station screen; they can pin it to this room, and
+							your lecturer can correct your record.
+						{:else}
+							Your phone reported being {formatDistance(result.distanceM)} away. If that is wrong, ask your
+							class rep or lecturer — they can change it.
+						{/if}
 					</p>
 				{:else if result.lateByMinutes}
 					<p class="text-sm text-amber-900">

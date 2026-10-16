@@ -5,7 +5,7 @@
 	import { requireConvexClient } from '$lib/convexClient';
 	import { endSession } from '$lib/lams/session.svelte';
 	import { getToken } from '$lib/lams/auth';
-	import { getCurrentPosition } from '$lib/lams/geo';
+	import { getBestPosition, haversineM } from '$lib/lams/geo';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -96,8 +96,19 @@
 	let quickLocating = $state(false);
 	let quickBusy = $state(false);
 	let quickAccuracy = $state<number | null>(null);
+	/** Best fix seen while sampling, shown under the button while locating. */
+	let quickBest = $state<string | null>(null);
 	let confirmQuickCoarse = $state(false);
 	const quickTooCoarse = $derived(quickAccuracy !== null && quickAccuracy > 50);
+	/**
+	 * Metres from the sampled fix to where this course usually meets, when the
+	 * usual room is known and the fix sits far from it. Armed by the pre-check
+	 * below — or by the server refusing the start, which is the same warning
+	 * arriving late.
+	 */
+	let quickFarM = $state<number | null>(null);
+	let confirmFarPin = $state(false);
+	const FAR_PIN_WARN_M = 500;
 
 	/** Blank station fields mean "same as the lecture", so the API omits them. */
 	const usesLectureSpot = $derived(stationLat.trim() === '' && stationLng.trim() === '');
@@ -137,7 +148,10 @@
 	async function useGps() {
 		locating = true;
 		try {
-			const pos = await getCurrentPosition();
+			// Best-of sampling, not one snapshot: the first fix indoors is
+			// usually a stale or coarse one from wherever the phone last had
+			// signal, and that is what pins a room kilometres off.
+			const pos = await getBestPosition();
 			lat = pos.lat.toFixed(6);
 			lng = pos.lng.toFixed(6);
 			pinAccuracy = pos.accuracyM ?? null;
@@ -157,7 +171,7 @@
 	async function fillStationWithGps() {
 		locating = true;
 		try {
-			const pos = await getCurrentPosition();
+			const pos = await getBestPosition();
 			stationLat = pos.lat.toFixed(6);
 			stationLng = pos.lng.toFixed(6);
 			stationPinAccuracy = pos.accuracyM ?? null;
@@ -174,9 +188,15 @@
 	}
 
 	/**
-	 * One-tap start: uses the current GPS fix and lets the server enforce the
+	 * One-tap start: samples the current position the hardened way (best fix
+	 * over a few seconds, as student scans do) and lets the server enforce the
 	 * 50 m radius, 15 m station tolerance and 5/10 min windows. No coordinates
 	 * to type and no radius to choose — the ordinary lecture just starts.
+	 *
+	 * Two warnings can still stop the first tap: a fix coarser than the room,
+	 * and a fix far from where this course usually meets (a stale fix from
+	 * wherever the phone last had signal). Each takes a second, knowing tap to
+	 * override — the server re-checks both and remains the authority.
 	 */
 	async function startQuick() {
 		if (!offeringId || quickBusy || quickLocating) return;
@@ -187,13 +207,30 @@
 			confirmQuickCoarse = true;
 			return;
 		}
+		if (quickFarM !== null && quickFarM > FAR_PIN_WARN_M && !confirmFarPin) {
+			confirmFarPin = true;
+			return;
+		}
 		quickLocating = true;
+		quickBest = null;
 		try {
-			const pos = await getCurrentPosition();
+			const pos = await getBestPosition({
+				onFix: (fix) => {
+					if (fix.accuracyM !== undefined) quickBest = `±${Math.round(fix.accuracyM)} m`;
+				}
+			});
 			quickAccuracy = pos.accuracyM ?? null;
 			if (quickAccuracy !== null && quickAccuracy > 50 && !confirmQuickCoarse) {
 				confirmQuickCoarse = true;
 				return;
+			}
+			if (!confirmFarPin) {
+				const farM = await distanceFromUsualRoom(pos.lat, pos.lng);
+				if (farM !== null && farM > FAR_PIN_WARN_M) {
+					quickFarM = farM;
+					return;
+				}
+				quickFarM = null;
 			}
 			quickBusy = true;
 			try {
@@ -204,7 +241,8 @@
 					lectureLat: pos.lat,
 					lectureLng: pos.lng,
 					...(pos.accuracyM !== undefined ? { accuracyM: pos.accuracyM } : {}),
-					...(confirmQuickCoarse ? { allowCoarsePin: true } : {})
+					...(confirmQuickCoarse ? { allowCoarsePin: true } : {}),
+					...(confirmFarPin ? { allowFarPin: true } : {})
 				})) as { sessionId: string };
 				reportSuccess(
 					`Lecture started here (±${Math.round(pos.accuracyM ?? 0)} m, 50 m radius).`,
@@ -215,13 +253,43 @@
 				quickBusy = false;
 			}
 		} catch (err) {
+			// The server re-checks the usual-room distance and remains the
+			// authority: if it refused on those grounds, arm the same warning
+			// the pre-check would have shown, so the next tap confirms it.
+			if (/usually meets/i.test(err instanceof Error ? err.message : String(err))) {
+				confirmFarPin = true;
+			}
 			reportError(err, 'Could not start the lecture.');
 		} finally {
 			quickLocating = false;
 		}
 	}
 
-	async function start(e: SubmitEvent) {		e.preventDefault();
+	/**
+	 * Metres from a candidate pin to where the selected course usually meets,
+	 * or null when the course has no history yet. Client-side courtesy only —
+	 * the server enforces the same check on start.
+	 */
+	async function distanceFromUsualRoom(latNow: number, lngNow: number): Promise<number | null> {
+		if (!offeringId) return null;
+		try {
+			const usual = (await requireConvexClient().query(api.attendance.usualMeetingPlace, {
+				token,
+				offeringId: offeringId as never
+			})) as { lat: number; lng: number } | null;
+			if (!usual) return null;
+			return haversineM(usual.lat, usual.lng, latNow, lngNow);
+		} catch {
+			return null;
+		}
+	}
+
+	function formatFarM(m: number): string {
+		return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+	}
+
+	async function start(e: SubmitEvent) {
+		e.preventDefault();
 		// A coarse pin would fail the whole hall one scan at a time, so the
 		// first tap stops here and says so — the second tap is the starter
 		// saying they saw the warning and accept the risk. The button itself
@@ -253,10 +321,14 @@
 						}),
 				onTimeSec: Math.round(Number(onTimeMin) * 60),
 				lateUntilSec: Math.round(Number(lateUntilMin) * 60),
-				...(confirmCoarse ? { allowCoarsePin: true } : {})
+				...(confirmCoarse ? { allowCoarsePin: true } : {}),
+				...(confirmFarPin ? { allowFarPin: true } : {})
 			})) as { sessionId: string };
 			await onstarted(res.sessionId);
 		} catch (err) {
+			if (/usually meets/i.test(err instanceof Error ? err.message : String(err))) {
+				confirmFarPin = true;
+			}
 			reportError(err, 'Could not start the lecture.');
 		} finally {
 			busy = false;
@@ -288,7 +360,12 @@
 					<Select.Root
 						type="single"
 						value={offeringId}
-						onValueChange={(v) => (offeringId = v ?? '')}
+						onValueChange={(v) => {
+							offeringId = v ?? '';
+							quickFarM = null;
+							confirmFarPin = false;
+							confirmQuickCoarse = false;
+						}}
 						items={offerings.map((o) => ({
 							value: o._id,
 							label: `${o.courseCode} — ${o.courseTitle} · ${o.programName}`
@@ -329,6 +406,25 @@
 							ahead anyway, or use Advanced settings below to type the room's coordinates.
 						</p>
 					{/if}
+					{#if confirmFarPin && quickFarM !== null && quickFarM > FAR_PIN_WARN_M}
+						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+							This is {formatFarM(quickFarM)} from where this course usually meets — you may be
+							pinning the wrong place (a stale location from outside the hall does this). Move
+							into the hall and press Start again for a fresh fix, or press Start again to start
+							here anyway because the lecture genuinely moved rooms.
+						</p>
+					{:else if confirmFarPin}
+						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+							This is far from where this course usually meets. Press Start again to start here
+							anyway because the lecture genuinely moved rooms — otherwise move into the hall
+							and start again for a fresh fix.
+						</p>
+					{/if}
+					{#if quickLocating && quickBest}
+						<p class="mt-1 text-xs text-muted-foreground" aria-live="polite">
+							Best fix so far {quickBest} — waiting a moment for it to settle.
+						</p>
+					{/if}
 					<div class="mt-2">
 						<Button
 							type="button"
@@ -339,7 +435,7 @@
 								? 'Reading your location…'
 								: quickBusy
 									? 'Starting…'
-									: confirmQuickCoarse && quickTooCoarse
+									: (confirmQuickCoarse && quickTooCoarse) || confirmFarPin
 										? 'Start anyway (50 m)'
 										: 'Start here — 50 m'}
 						</Button>
@@ -506,9 +602,23 @@
 					</div>
 				{/if}
 
+				{#if confirmFarPin}
+					<div
+						class="rounded-md border border-amber-300 bg-amber-50 p-3"
+						role="alert"
+					>
+						<p class="text-sm font-medium text-amber-900">Start here anyway?</p>
+						<p class="mt-1 text-xs text-amber-900">
+							These coordinates are far from where this course usually meets. If the lecture
+							genuinely moved rooms, press Start lecture again to go ahead. Otherwise check the
+							coordinates above first — starting in the wrong place marks students out of range.
+						</p>
+					</div>
+				{/if}
+
 				<div>
 					<Button type="submit" disabled={busy || !offeringId || !lat || !lng}>
-						{busy ? 'Starting…' : confirmCoarse && (pinTooCoarse || stationTooCoarse) ? 'Start anyway' : 'Start lecture'}
+						{busy ? 'Starting…' : confirmCoarse && (pinTooCoarse || stationTooCoarse) ? 'Start anyway' : confirmFarPin ? 'Start here anyway' : 'Start lecture'}
 					</Button>
 				</div>
 			</form>

@@ -5,7 +5,7 @@
 	import { api } from '../../convex/_generated/api.js';
 	import { requireConvexClient } from '$lib/convexClient';
 	import { getToken } from '$lib/lams/auth';
-	import { formatCountdown, formatDistance, getCurrentPosition } from '$lib/lams/geo';
+	import { formatCountdown, formatDistance, getBestPosition, getCurrentPosition } from '$lib/lams/geo';
 	import {
 		buildStationUrl,
 		currentStationCode,
@@ -111,9 +111,20 @@
 			'Scanner read the wrong student'
 		];
 
-		const flagged = $derived(records.filter((r) => r.flagged));
+ 		const flagged = $derived(records.filter((r) => r.flagged));
+	const outOfRange = $derived(records.filter((r) => r.status === 'Out_of_Range'));
 	const closed = $derived(live ? live.status === 'closed' || now >= live.closesAt : true);
 	const remaining = $derived(secondsRemaining(now));
+	/**
+	 * The pin itself is probably wrong — not the students' phones. One stray
+	 * out-of-range scan is an ordinary GPS wobble, but when most of the room
+	 * lands far away, the lecture was almost certainly started outside this
+	 * room (a stale location fix does exactly this). Surfaced early, while the
+	 * lecture is still open and the re-pin below can still save it.
+	 */
+	const pinSuspect = $derived(
+		!closed && records.length >= 3 && outOfRange.length / records.length > 0.5
+	);
 
 	/**
 	 * A lecture is only usable while the server says it is open *and* its window
@@ -312,7 +323,9 @@
 	/** Fill the re-pin fields with this device's position. */
 	async function useGpsForRepin() {
 		try {
-			const pos = await getCurrentPosition();
+			// Best-of sampling: a re-pin from a stale single fix would just move
+			// the wrong pin to a different wrong room.
+			const pos = await getBestPosition();
 			repinLat = String(pos.lat);
 			repinLng = String(pos.lng);
 			repinAccuracy = pos.accuracyM ?? null;
@@ -608,33 +621,52 @@
 			a rep who does not notice has left a queue of students scanning a dead
 			QR with no idea why.
 		-->
-		{#if !closed && placement.moved}
+		{#if !closed && (placement.moved || pinSuspect)}
 			<Card.Root class="border-red-300 bg-red-50">
 				<Card.Header>
 					<Card.Title class="flex items-center gap-2 text-base text-red-900">
-						<TriangleAlert class="size-4" aria-hidden="true" /> This screen has left its room — scanning is
-						stopped
+						<TriangleAlert class="size-4" aria-hidden="true" />
+						{#if placement.moved}
+							This screen has left its room — scanning is stopped
+						{:else}
+							Most scans are landing far away — the pin may be wrong
+						{/if}
 					</Card.Title>
 					<Card.Description class="text-red-900">
-						{#if placement.distanceM !== null}
-							It is {formatDistance(placement.distanceM)} from where it was set up, which is further than the
-							{placement.toleranceM} m it is allowed to move. Students are not being marked present until this
-							is put back, so nobody is recorded as absent because of it.
+						{#if placement.moved}
+							{#if placement.distanceM !== null}
+								It is {formatDistance(placement.distanceM)} from where it was set up, which is further than the
+								{placement.toleranceM} m it is allowed to move. Students are not being marked present until this
+								is put back, so nobody is recorded as absent because of it.
+							{:else}
+								It has been reported outside the room it belongs to. Students are not being marked present until
+								this is put back.
+							{/if}
 						{:else}
-							It has been reported outside the room it belongs to. Students are not being marked present until
-							this is put back.
+							{outOfRange.length} of {records.length} scans so far are out of range. The lecture was
+							probably started outside this room — a stale location when starting does exactly
+							this. Pin the station to this room below; records already marked can be corrected
+							by the lecturer under Records.
 						{/if}
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="flex flex-col gap-3">
-					<p class="text-sm font-medium">Put it back in the room</p>
-					<p class="text-xs text-muted-foreground">
-						Walking it back to its spot clears this on the next check. If the lecture really has moved rooms,
-						pin it to the new room instead — the reason is kept on the record.
-					</p>
-					<details>
+					{#if placement.moved}
+						<p class="text-sm font-medium">Put it back in the room</p>
+						<p class="text-xs text-muted-foreground">
+							Walking it back to its spot clears this on the next check. If the lecture really has moved rooms,
+							pin it to the new room instead — the reason is kept on the record.
+						</p>
+					{:else}
+						<p class="text-sm font-medium">Pin the station to this room</p>
+						<p class="text-xs text-muted-foreground">
+							The screen is already where it should be — it is the pin that is wrong. Pin it here
+							with a reason, and new scans will land correctly.
+						</p>
+					{/if}
+					<details open={!placement.moved}>
 						<summary class="cursor-pointer text-sm font-medium text-lams-navy">
-							The lecture moved rooms — pin it here instead
+							{placement.moved ? 'The lecture moved rooms — pin it here instead' : 'Pin it to this room'}
 						</summary>
 						<form class="mt-3 flex flex-col gap-3" onsubmit={repin}>
 							<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">

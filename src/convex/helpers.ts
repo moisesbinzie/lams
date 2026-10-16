@@ -69,6 +69,25 @@ export async function sha256Hex(text: string): Promise<string> {
 export type AutoStatus = 'Present' | 'Late' | 'Out_of_Range' | 'Absent';
 
 /**
+ * How far a new station pin may sit from where an offering usually meets
+ * before the start is refused as a probable wrong-room pin. A single-shot GPS
+ * fix on a phone that just woke its radio is often a stale fix from wherever
+ * the phone last had signal — kilometres away with a plausible accuracy — and
+ * nothing else catches it, because the display device then agrees with the pin
+ * it was started from. History is the only witness: a course meets in the same
+ * room week after week, so a pin half a kilometre from every previous one is
+ * almost certainly not the hall.
+ */
+export const FAR_PIN_WARN_M = 500;
+
+/**
+ * Above this student distance the pin itself is the likelier fault than the
+ * student's phone: nobody's handset is a kilometre wrong while claiming ±80 m.
+ * The result page says so instead of implying the student was not there.
+ */
+export const STATION_WRONG_SUSPECT_M = 1000;
+
+/**
  * Whether the newest-first statuses of the last `required` closed lectures
  * form an unbroken no-show streak that withdraws a student from a course.
  *

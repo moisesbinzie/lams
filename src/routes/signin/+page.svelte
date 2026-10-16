@@ -80,6 +80,27 @@
 		password = '';
 	}
 
+	/**
+	 * Hall networks drop single requests. A refusal (wrong PIN, unknown name)
+	 * arrives as data and is never retried; a thrown failure — the request
+	 * itself never completing — is tried once more after a short pause before
+	 * the student is told it failed.
+	 */
+	function isNetFailure(err: unknown): boolean {
+		const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+		return /fetch|network|websocket|offline|timeout|failed to|load failed|connection|econn|socket/i.test(m);
+	}
+
+	async function withNetRetry<T>(fn: () => Promise<T>): Promise<T> {
+		try {
+			return await fn();
+		} catch (err) {
+			if (!isNetFailure(err)) throw err;
+			await new Promise((r) => setTimeout(r, 1500));
+			return await fn();
+		}
+	}
+
 	/** Staff sign-in shared by both staff doors. `adminOnly` refuses lecturers. */
 	async function staffSignIn(e: SubmitEvent, adminOnly = false) {
 		e.preventDefault();
@@ -87,11 +108,13 @@
 		try {
 			const client = requireConvexClient();
 			// Idempotent: creates the default admin account on first ever run.
-			await client.mutation(api.staff.ensureSeed, {});
-			const res = await client.mutation(api.staff.login, {
-				username: username.trim(),
-				password
-			});
+			await withNetRetry(() => client.mutation(api.staff.ensureSeed, {}));
+			const res = await withNetRetry(() =>
+				client.mutation(api.staff.login, {
+					username: username.trim(),
+					password
+				})
+			);
 			// A refused sign-in arrives as a message rather than a thrown error:
 			// wrong details are an ordinary event, and logging them as server
 			// faults buried the failures that are real. The wording is the
@@ -137,11 +160,13 @@
 		busy = true;
 		try {
 			const client = requireConvexClient();
-			const res = await client.mutation(api.people.login, {
-				regNumber: regNumber.trim(),
-				pin: pin.trim(),
-				deviceId: getDeviceId()
-			});
+			const res = await withNetRetry(() =>
+				client.mutation(api.people.login, {
+					regNumber: regNumber.trim(),
+					pin: pin.trim(),
+					deviceId: getDeviceId()
+				})
+			);
 			// Same contract as the lecturer door: a refusal is a message, not a
 			// thrown error, because a mistyped PIN is not a fault.
 			if (!res.ok) {
@@ -168,11 +193,13 @@
 		busy = true;
 		try {
 			const client = requireConvexClient();
-			const activated = await client.mutation(api.people.activate, {
-				regNumber: regNumber.trim(),
-				studentId: studentId.trim(),
-				pin: pin.trim()
-			});
+			const activated = await withNetRetry(() =>
+				client.mutation(api.people.activate, {
+					regNumber: regNumber.trim(),
+					studentId: studentId.trim(),
+					pin: pin.trim()
+				})
+			);
 			// Wrong details are answered, not thrown, so they land here. Staying
 			// on the form with the server's own sentence is the useful response:
 			// the registration number or the student ID is the thing to fix.
@@ -185,11 +212,13 @@
 			const createdPin = pin.trim();
 			pin = '';
 			confirmPin = '';
-			const res = await client.mutation(api.people.login, {
-				regNumber: regNumber.trim(),
-				pin: createdPin,
-				deviceId: getDeviceId()
-			});
+			const res = await withNetRetry(() =>
+				client.mutation(api.people.login, {
+					regNumber: regNumber.trim(),
+					pin: createdPin,
+					deviceId: getDeviceId()
+				})
+			);
 			// A refusal here is not a mistyped PIN — the PIN was set a moment
 			// ago — so it is a failure of the setup itself and is raised as one.
 			if (!res.ok) throw new Error(res.message);

@@ -7,6 +7,7 @@ import {
 	computeAutoStatus,
 	DEFAULT_STATION_RADIUS_M,
 	DEFAULT_STATION_TOLERANCE_M,
+	FAR_PIN_WARN_M,
 	haversineM,
 	isNoShowStreak,
 	judgeScanDevice,
@@ -15,6 +16,7 @@ import {
 	pinAccuracyError,
 	randomHex,
 	sha256Hex,
+	STATION_WRONG_SUSPECT_M,
 	toleranceFor
 } from '../src/convex/helpers.ts';
 
@@ -217,5 +219,18 @@ describe('isNoShowStreak', () => {
 		assert.equal(isNoShowStreak([], 4), false);
 		assert.equal(isNoShowStreak(['Absent', 'Absent', 'Absent', 'Absent'], 0), false);
 		assert.equal(isNoShowStreak(['Absent', 'mystery', 'Absent', 'Absent'], 4), false);
+	});
+});
+
+describe('wrong-pin thresholds', () => {
+	it('warns on a pin far beyond any hall-sized error', () => {
+		// A stale fix from another neighbourhood must trip the usual-room guard.
+		assert.ok(FAR_PIN_WARN_M >= 200 && FAR_PIN_WARN_M <= 1000);
+		assert.equal(FAR_PIN_WARN_M, 500);
+	});
+
+	it('suspects the station pin, not the student, at kilometre distances', () => {
+		assert.equal(STATION_WRONG_SUSPECT_M, 1000);
+		assert.ok(STATION_WRONG_SUSPECT_M > DEFAULT_STATION_RADIUS_M * 10);
 	});
 });

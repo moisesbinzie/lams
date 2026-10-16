@@ -19,6 +19,7 @@ import {
 	computeAutoStatus,
 	DEFAULT_STATION_RADIUS_M,
 	DEFAULT_STATION_TOLERANCE_M,
+	FAR_PIN_WARN_M,
 	haversineM,
 	normalizeReg,
 	pinAccuracyError,
@@ -31,6 +32,44 @@ import { currentStationCode, verifyStationCode } from './station';
 
 const DEFAULT_ON_TIME_SEC = 300;
 const DEFAULT_LATE_UNTIL_SEC = 600;
+
+function formatFarM(m: number): string {
+	return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+}
+
+/**
+ * Refuses a station pin sitting far from every room an offering has ever met
+ * in. History is the only witness against a stale GPS fix: a phone that just
+ * woke its radio often reports where it last had signal — kilometres away
+ * with a plausible accuracy — and the coarse-pin gate cannot see that. A
+ * course meets in the same room week after week, so a pin half a kilometre
+ * from all previous ones is almost certainly not the hall, and starting there
+ * would mark the whole room out of range one scan at a time.
+ *
+ * Returns the refusal message, or null when the pin may be used. No history
+ * (a course meeting for the first time) always passes — there is nothing to
+ * compare against yet.
+ */
+async function farPinError(ctx: any, offeringId: unknown, lat: number, lng: number): Promise<string | null> {
+	const past = await ctx.db
+		.query('sessions')
+		.withIndex('by_offering', (q: any) => q.eq('offeringId', offeringId))
+		.take(20);
+	if (past.length === 0) return null;
+	let nearest = Number.POSITIVE_INFINITY;
+	for (const s of past) {
+		if (typeof s.stationLat !== 'number' || typeof s.stationLng !== 'number') continue;
+		const d = haversineM(s.stationLat, s.stationLng, lat, lng);
+		if (d < nearest) nearest = d;
+	}
+	if (!Number.isFinite(nearest) || nearest <= FAR_PIN_WARN_M) return null;
+	return (
+		`This is ${formatFarM(nearest)} from where this course usually meets. ` +
+		`If you are standing in the hall, wait for a better fix and try again — ` +
+		`starting here would mark students out of range. ` +
+		`If the lecture genuinely moved rooms, confirm to start here anyway.`
+	);
+}
 
 /**
  * Closes a session and marks every enrolled student with no record as Absent.
@@ -104,6 +143,12 @@ export const startSession = mutation({
 		 */
 		allowCoarsePin: v.optional(v.boolean()),
 		/**
+		 * Explicit override for a pin far from where this course usually meets.
+		 * Same contract as `allowCoarsePin`: the UI only offers it after showing
+		 * how far the pin is from the usual room.
+		 */
+		allowFarPin: v.optional(v.boolean()),
+		/**
 		 * How far the screen itself may sit from its pinned spot before scans stop
 		 * working. Defaults to a desk-sized tolerance rather than to
 		 * `stationRadiusM`, because a station that has to stay inside the whole
@@ -156,6 +201,10 @@ export const startSession = mutation({
 			stationRadiusM
 		);
 		if (stationPinError && !args.allowCoarsePin) throw new Error(stationPinError);
+		// The pin every scan is judged against is the station's, which falls
+		// back to the lecture position — so that is what is compared to history.
+		const farError = await farPinError(ctx, offering._id, stationLat, stationLng);
+		if (farError && !args.allowFarPin) throw new Error(farError);
 		const stationToleranceM = args.stationToleranceM ?? DEFAULT_STATION_TOLERANCE_M;
 		if (stationToleranceM < 1 || stationToleranceM > stationRadiusM) {
 			throw new Error('The station must be allowed to move less than the student radius.');
@@ -227,7 +276,13 @@ export const startSessionQuick = mutation({
 		 * showing how coarse the fix is, so setting it means the starter saw
 		 * the warning and chose to proceed — never a blind default.
 		 */
-		allowCoarsePin: v.optional(v.boolean())
+		allowCoarsePin: v.optional(v.boolean()),
+		/**
+		 * Explicit override for a pin far from where this course usually meets.
+		 * Same contract as `allowCoarsePin`: the UI only offers it after showing
+		 * how far the pin is from the usual room.
+		 */
+		allowFarPin: v.optional(v.boolean())
 	},
 	handler: async (ctx, args) => {
 		const actor = await requireRecorder(ctx, args.token);
@@ -251,6 +306,9 @@ export const startSessionQuick = mutation({
 		const stationLng = args.lectureLng;
 		const stationPinError = pinAccuracyError(args.accuracyM, stationRadiusM);
 		if (stationPinError && !args.allowCoarsePin) throw new Error(stationPinError);
+		// The quick pin doubles as the station pin, so it is compared to history too.
+		const farError = await farPinError(ctx, offering._id, stationLat, stationLng);
+		if (farError && !args.allowFarPin) throw new Error(farError);
 
 		const open = await ctx.db
 			.query('sessions')
@@ -289,6 +347,29 @@ export const startSessionQuick = mutation({
 			createdAt: now
 		});
 		return { sessionId: id, closedOthers: closed };
+	}
+});
+
+/**
+ * Where an offering usually meets: the station pin of its most recent session.
+ * The start form uses this to warn before pinning far from the usual room —
+ * the server re-checks on start and remains the authority.
+ */
+export const usualMeetingPlace = query({
+	args: { token: v.string(), offeringId: v.id('offerings') },
+	handler: async (ctx, args) => {
+		await requireRecorder(ctx, args.token);
+		const past = await ctx.db
+			.query('sessions')
+			.withIndex('by_offering', (q) => q.eq('offeringId', args.offeringId))
+			.order('desc')
+			.take(20);
+		for (const s of past) {
+			if (typeof s.stationLat === 'number' && typeof s.stationLng === 'number') {
+				return { lat: s.stationLat, lng: s.stationLng, sessions: past.length };
+			}
+		}
+		return null;
 	}
 });
 

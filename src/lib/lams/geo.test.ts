@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatCountdown, formatDistance, getBestPosition, getCurrentPosition } from './geo.ts';
+import { formatCountdown, formatDistance, getBestPosition, getCurrentPosition, haversineM } from './geo.ts';
 
 describe('formatDistance', () => {
 	it('renders metres below a kilometre and kilometres above', () => {
@@ -37,5 +37,21 @@ describe('getCurrentPosition', () => {
 describe('getBestPosition', () => {
 	it('rejects when the browser exposes no geolocation API', async () => {
 		await assert.rejects(() => getBestPosition({ budgetMs: 50 }));
+	});
+});
+
+describe('haversineM', () => {
+	it('is zero for identical points', () => {
+		assert.equal(haversineM(-13.9626, 33.7741, -13.9626, 33.7741), 0);
+	});
+
+	it('matches the known 1-degree latitude distance (~111.19 km)', () => {
+		const d = haversineM(0, 0, 1, 0);
+		assert.ok(Math.abs(d - 111194.9) < 1, `got ${d}`);
+	});
+
+	it('measures a few metres within a hall', () => {
+		const d = haversineM(-13.9626, 33.7741, -13.96265, 33.77415);
+		assert.ok(d > 1 && d < 20, `got ${d}`);
 	});
 });
