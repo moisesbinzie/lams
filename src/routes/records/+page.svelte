@@ -153,10 +153,11 @@
 
 	function exportCsv() {
 		const csv = toCsv(
-			['Name', 'Registration number', 'On time', 'Late', 'Out of range', 'Absent', 'Excused', 'Attendance %'],
+			['Name', 'Registration number', 'Status', 'On time', 'Late', 'Out of range', 'Absent', 'Excused', 'Attendance %'],
 			visible.map((r) => [
 				r.fullName,
 				r.regNumber,
+				r.withdrawn ? 'Withdrawn' : 'Enrolled',
 				r.present,
 				r.late,
 				r.outOfRange,
@@ -327,10 +328,22 @@
 							{#each visible as r (r.regNumber)}
 								<Table.Row class={r.attendPct < 75 ? 'bg-amber-50' : ''}>
 									<Table.Cell class="font-medium whitespace-nowrap">
-										{r.fullName}
+										<span class="flex flex-wrap items-center gap-1.5">
+											{r.fullName}
+											{#if r.withdrawn}
+												<span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800" title={r.withdrawReason ?? 'Withdrawn after 4 consecutive absences'}>
+													Withdrawn
+												</span>
+											{/if}
+										</span>
 										<span class="block font-mono text-xs font-normal text-muted-foreground">
 											{r.regNumber} · {r.studentId}
 										</span>
+										{#if r.withdrawn && r.withdrawReason}
+											<span class="block text-[11px] font-normal text-red-700">
+												{r.withdrawReason}
+											</span>
+										{/if}
 									</Table.Cell>
 									<Table.Cell class="text-xs">{r.present}</Table.Cell>
 									<Table.Cell class="text-xs">{r.late}</Table.Cell>

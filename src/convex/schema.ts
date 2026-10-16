@@ -277,9 +277,13 @@ export default defineSchema({
 		classId: v.optional(v.id('classes')),
 		courseId: v.optional(v.id('courses')),
 		programId: v.optional(v.id('programs')),
-		status: v.union(v.literal('active'), v.literal('dropped')),
-		/** 'self' chose it themselves; 'rep' or 'lecturer' assigned it. */
-		addedBy: v.union(v.literal('self'), v.literal('rep'), v.literal('lecturer')),
+		status: v.union(v.literal('active'), v.literal('dropped'), v.literal('withdrawn')),
+		/** 'self' chose it themselves; 'rep' or 'lecturer' assigned it; 'system' withdrew it. */
+		addedBy: v.union(v.literal('self'), v.literal('rep'), v.literal('lecturer'), v.literal('system')),
+		/** Set when status becomes 'withdrawn': 4 consecutive absences or a manual withdrawal. */
+		withdrawnAt: v.optional(v.number()),
+		withdrawReason: v.optional(v.string()),
+		withdrawnBy: v.optional(v.string()),
 		createdAt: v.number()
 	})
 		.index('by_person', ['personId'])
@@ -307,6 +311,27 @@ export default defineSchema({
 	})
 		.index('by_person', ['personId'])
 		.index('by_class', ['classId']),
+
+	/**
+	 * A student's request to join a course outside their programs. A direct
+	 * `enrolSelf` is refused there, so the request waits for a lecturer or
+	 * admin to approve it — which enrols them without needing program
+	 * membership first.
+	 */
+	joinRequests: defineTable({
+		personId: v.id('people'),
+		offeringId: v.id('offerings'),
+		courseId: v.optional(v.id('courses')),
+		programId: v.optional(v.id('programs')),
+		semesterId: v.id('semesters'),
+		status: v.union(v.literal('pending'), v.literal('approved'), v.literal('rejected')),
+		decidedBy: v.optional(v.string()),
+		decidedAt: v.optional(v.number()),
+		createdAt: v.number()
+	})
+		.index('by_person', ['personId'])
+		.index('by_offering', ['offeringId'])
+		.index('by_status', ['status']),
 
 	/**
 	 * When a course meets. `kind: 'weekly'` repeats on `dayOfWeek` at

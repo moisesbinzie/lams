@@ -208,6 +208,91 @@ export const startSession = mutation({
 });
 
 /**
+ * One-tap lecture start. The lecturer picks a course and presses Start: the
+ * client sends its current GPS fix and the server enforces a 50 m station
+ * radius, 15 m station tolerance, 5 min on-time and 10 min late windows.
+ * No caller-supplied radius or window is accepted, so a wide pin can never
+ * be smuggled in from the client.
+ */
+export const startSessionQuick = mutation({
+	args: {
+		token: v.string(),
+		offeringId: v.id('offerings'),
+		lectureLat: v.number(),
+		lectureLng: v.number(),
+		/** GPS uncertainty of the lecture fix, when it came from a live reading. */
+		accuracyM: v.optional(v.number()),
+		/**
+		 * Explicit override for a coarse pin. The UI only offers this after
+		 * showing how coarse the fix is, so setting it means the starter saw
+		 * the warning and chose to proceed — never a blind default.
+		 */
+		allowCoarsePin: v.optional(v.boolean())
+	},
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const offering = await ctx.db.get('offerings', args.offeringId);
+		if (!offering) throw new Error('Course not found.');
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		} else if (!(await canRecordFor(ctx, actor, offering.programId))) {
+			throw new Error('You are not a program rep for this program.');
+		}
+		if (args.lectureLat < -90 || args.lectureLat > 90) throw new Error('Invalid latitude.');
+		if (args.lectureLng < -180 || args.lectureLng > 180) throw new Error('Invalid longitude.');
+
+		// Enforced server-side: the quick path is always a 50 m room pin.
+		const radiusM = 50;
+		const stationRadiusM = DEFAULT_STATION_RADIUS_M;
+		const stationToleranceM = DEFAULT_STATION_TOLERANCE_M;
+		const onTimeSec = DEFAULT_ON_TIME_SEC;
+		const lateUntilSec = DEFAULT_LATE_UNTIL_SEC;
+		const stationLat = args.lectureLat;
+		const stationLng = args.lectureLng;
+		const stationPinError = pinAccuracyError(args.accuracyM, stationRadiusM);
+		if (stationPinError && !args.allowCoarsePin) throw new Error(stationPinError);
+
+		const open = await ctx.db
+			.query('sessions')
+			.withIndex('by_offering', (q) => q.eq('offeringId', offering._id))
+			.take(50);
+		let closed = 0;
+		for (const s of open) {
+			if (s.status !== 'open') continue;
+			await closeWithAbsents(ctx, s);
+			closed += 1;
+		}
+		const now = Date.now();
+		const id = await ctx.db.insert('sessions', {
+			offeringId: offering._id,
+			courseId: offering.courseId,
+			semesterId: offering.semesterId,
+			programId: offering.programId,
+			...(actor.kind === 'staff'
+				? { startedByStaffId: actor.id, startedByName: actor.name }
+				: {}),
+			stationLat,
+			stationLng,
+			stationRadiusM,
+			...(args.accuracyM !== undefined ? { stationAccuracyM: args.accuracyM } : {}),
+			...(args.accuracyM !== undefined ? { lectureAccuracyM: args.accuracyM } : {}),
+			stationToleranceM,
+			lectureLat: args.lectureLat,
+			lectureLng: args.lectureLng,
+			radiusM,
+			stationSecret: randomHex(16),
+			onTimeSec,
+			lateUntilSec,
+			status: 'open',
+			startedAt: now,
+			closesAt: now + lateUntilSec * 1000,
+			createdAt: now
+		});
+		return { sessionId: id, closedOthers: closed };
+	}
+});
+
+/**
  * The code the station is showing right now, for a student whose own scan of it
  * went stale on the way here.
  *

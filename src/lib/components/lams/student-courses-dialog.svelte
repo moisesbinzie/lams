@@ -33,6 +33,19 @@
 
 	let options = $state<StudentCourseOption[]>([]);
 	let enrolled = $state<StudentCourse[]>([]);
+	let withdrawnHistory = $state<
+		{
+			enrolmentId: string;
+			offeringId: string;
+			courseCode: string;
+			courseTitle: string;
+			programName: string;
+			semesterName: string;
+			withdrawReason: string;
+			withdrawnAt: number | null;
+			withdrawnBy: string;
+		}[]
+	>([]);
 	let loading = $state(false);
 	let saving = $state(false);
 	let search = $state('');
@@ -88,16 +101,19 @@
 		search = '';
 		try {
 			const client = requireConvexClient();
-			const [mine, every] = (await Promise.all([
+			const [mine, every, gone] = (await Promise.all([
 				client.query(api.enrolments.listForPerson, { token, personId: person._id as never }),
-				client.query(api.enrolments.listStudentCourses, { token, personId: person._id as never })
-			])) as [StudentCourse[], StudentCourseOption[]];
+				client.query(api.enrolments.listStudentCourses, { token, personId: person._id as never }),
+				client.query(api.enrolments.listWithdrawnForPerson, { token, personId: person._id as never })
+			])) as [StudentCourse[], StudentCourseOption[], typeof withdrawnHistory];
 			enrolled = mine;
 			options = every;
+			withdrawnHistory = gone;
 		} catch (err) {
 			reportError(err, 'Could not load that student’s courses.');
 			enrolled = [];
 			options = [];
+			withdrawnHistory = [];
 		} finally {
 			loading = false;
 		}
@@ -222,6 +238,32 @@
 						</ul>
 					{/if}
 				</section>
+
+				{#if withdrawnHistory.length > 0}
+					<section class="flex flex-col gap-2">
+						<h3 class="flex flex-wrap items-center gap-2 text-sm font-semibold text-red-800">
+							Withdrawn
+							<Badge class="bg-red-600 text-white">{withdrawnHistory.length}</Badge>
+						</h3>
+						<p class="text-xs text-red-700">
+							Automatically withdrawn after 4 consecutive absences. Past attendance is kept.
+							Adding the course again re-admits the student.
+						</p>
+						<ul class="flex flex-col divide-y divide-red-100 rounded-md border border-red-200 bg-red-50/50">
+							{#each withdrawnHistory as w (w.enrolmentId)}
+								<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
+									<span class="min-w-0">
+										<span class="font-mono font-medium">{w.courseCode}</span> — {w.courseTitle}
+										<span class="block text-xs text-red-700">
+											{w.programName} · {w.semesterName} · {w.withdrawReason}
+										</span>
+									</span>
+									<Button variant="outline" size="sm" onclick={() => add(w.offeringId)}>Re-admit</Button>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
 
 				<section class="flex flex-col gap-2">
 					<h3 class="flex flex-wrap items-center gap-2 text-sm font-semibold">

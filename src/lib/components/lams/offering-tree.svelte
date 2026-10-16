@@ -15,7 +15,9 @@
 		OpenCourse,
 		ProgramRow,
 		Semester,
+		SemesterCourseResult,
 		StaffRow,
+		WithdrawnEnrolment,
 		Course
 	} from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
@@ -54,6 +56,12 @@
 	// Student tree data.
 	let enrolments = $state<MyEnrolment[]>([]);
 	let openCourses = $state<OpenCourse[]>([]);
+	let withdrawnCourses = $state<WithdrawnEnrolment[]>([]);
+	/** Semester-scoped search results (all programmes) for joining by semester. */
+	let semesterResults = $state<SemesterCourseResult[]>([]);
+	let studentSemesters = $state<Semester[]>([]);
+	let studentSemesterId = $state('');
+	let searchingSemester = $state(false);
 
 	let loading = $state(true);
 	let busy = $state(false);
@@ -201,12 +209,20 @@
 		try {
 			const client = requireConvexClient();
 			if (student) {
-				const [mine, open] = (await Promise.all([
+				const [mine, open, gone, sems] = (await Promise.all([
 					client.query(api.enrolments.listMine, { token }),
-					client.query(api.enrolments.listOpenForStudent, { token })
-				])) as [MyEnrolment[], OpenCourse[]];
+					client.query(api.enrolments.listOpenForStudent, { token }),
+					client.query(api.enrolments.listMyWithdrawn, { token }),
+					client.query(api.academics.listSemesters, { token })
+				])) as [MyEnrolment[], OpenCourse[], WithdrawnEnrolment[], Semester[]];
 				enrolments = mine;
 				openCourses = open;
+				withdrawnCourses = gone;
+				studentSemesters = [...sems].sort((a, b) => b.year - a.year || a.number - b.number);
+				if (!studentSemesterId && studentSemesters.length > 0) {
+					studentSemesterId = studentSemesters[0]._id;
+				}
+				await searchSemester();
 			} else {
 				const base = [
 					client.query(api.academics.listSemesters, { token }),
@@ -400,30 +416,103 @@
 			busyId = '';
 		}
 	}
+
+	/**
+	 * Semester-scoped search across every programme: the student picks a
+	 * semester and searches by code or title. Courses in their own programmes
+	 * join directly; anything else goes through a join request.
+	 */
+	async function searchSemester() {
+		if (!student) return;
+		searchingSemester = true;
+		try {
+			const client = requireConvexClient();
+			semesterResults = (await client.query(api.enrolments.searchOpenOfferings, {
+				token,
+				...(studentSemesterId ? { semesterId: studentSemesterId as never } : {}),
+				...(studentSearch.trim() ? { q: studentSearch.trim() } : {})
+			})) as SemesterCourseResult[];
+		} catch (err) {
+			reportError(err, 'Could not search courses.');
+		} finally {
+			searchingSemester = false;
+		}
+	}
+
+	async function requestJoin(offeringId: string, label: string) {
+		busyId = offeringId;
+		try {
+			const client = requireConvexClient();
+			await client.mutation(api.enrolments.requestToJoin, { token, offeringId: offeringId as never });
+			await searchSemester();
+			reportSuccess(`Request sent for ${label}. Your lecturer will approve it.`);
+		} catch (err) {
+			reportError(err, 'Could not request that course.');
+		} finally {
+			busyId = '';
+		}
+	}
 </script>
 
 <div class="flex flex-col gap-4">
 	{#if loading}
 		<div class="h-24 animate-pulse rounded-md bg-muted"></div>
 	{:else if student}
-		{#if enrolledByProgram.length === 0 && joinable.length === 0}
+		{#if enrolledByProgram.length === 0 && joinable.length === 0 && semesterResults.length === 0 && withdrawnCourses.length === 0}
 			<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-				No courses yet. Ask your program rep or lecturer to add you to your program.
+				No courses yet. Ask your program rep or lecturer to add you to your program, or search
+				for a course below and request to join it.
 			</p>
 		{:else}
-			<div class="relative">
-				<Search
-					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-					aria-hidden="true"
-				/>
-				<Input
-					class="pl-9"
-					bind:value={studentSearch}
-					placeholder="Search your courses or find one to join"
-					aria-label="Search courses"
-				/>
+			<div class="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+				<div class="flex flex-col gap-1">
+					<Label for="stusem">Semester</Label>
+					<Select.Root
+						type="single"
+						value={studentSemesterId}
+						onValueChange={(v) => {
+							studentSemesterId = v ?? '';
+							void searchSemester();
+						}}
+						items={studentSemesters.map((s) => ({ value: s._id, label: `${s.name} ${s.year}` }))}
+					>
+						<Select.Trigger id="stusem" class="w-full">
+							<Select.Value placeholder="Choose a semester" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each studentSemesters as s (s._id)}
+									<Select.Item value={s._id} label={`${s.name} ${s.year}`}>
+										{s.name} {s.year}
+									</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
+				</div>
+				<div class="flex flex-col gap-1">
+					<Label for="stusearch">Search courses for this semester</Label>
+					<div class="relative">
+						<Search
+							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+							aria-hidden="true"
+						/>
+						<Input
+							id="stusearch"
+							class="pl-9"
+							bind:value={studentSearch}
+							placeholder="Search by course code or title"
+							aria-label="Search courses"
+						/>
+					</div>
+				</div>
+				<div class="flex items-end">
+					<Button variant="secondary" disabled={searchingSemester} onclick={() => searchSemester()}>
+						{searchingSemester ? 'Searching…' : 'Search'}
+					</Button>
+				</div>
 			</div>
-			{#if visibleEnrolledByProgram.length === 0 && visibleJoinable.length === 0}
+			{#if visibleEnrolledByProgram.length === 0 && visibleJoinable.length === 0 && semesterResults.length === 0 && withdrawnCourses.length === 0}
 				<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
 					No course matches that search.
 				</p>
@@ -463,30 +552,75 @@
 				</details>
 			{/each}
 
-			{#if visibleJoinable.length > 0}
+			{#if semesterResults.length > 0}
 				<div class="rounded-lg border border-lams-green/40">
-					<p class="px-4 pt-3 text-sm font-bold text-lams-navy">Open to join</p>
+					<p class="px-4 pt-3 text-sm font-bold text-lams-navy">
+						Courses for this semester ({semesterResults.length})
+					</p>
 					<p class="px-4 text-xs text-muted-foreground">
-						Courses open for self-enrolment — including repeats from earlier semesters.
+						Join courses in your programmes directly. For courses in other programmes,
+						send a request — your lecturer approves it.
 					</p>
 					<ul class="flex flex-col divide-y divide-border px-4 pb-2">
-						{#each visibleJoinable as o (o._id)}
+						{#each semesterResults as o (o._id)}
 							<li class="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
 								<div>
 									<p class="text-sm font-semibold">{o.courseCode} — {o.courseTitle}</p>
 									<p class="text-xs text-muted-foreground">
-										{o.programName} · {o.semesterName}{o.hoursPerWeek ? ` · ${o.hoursPerWeek} h/week` : ''}
+										{o.programName}{o.yearOfStudy ? ` · Year ${o.yearOfStudy}` : ''} · {o.semesterName}{o.hoursPerWeek ? ` · ${o.hoursPerWeek} h/week` : ''}
 									</p>
 								</div>
-								<Button
-									variant="secondary"
-									size="sm"
-									class="self-start sm:self-center"
-									disabled={busyId === o._id}
-									onclick={() => join(o._id)}
-								>
-									{busyId === o._id ? 'Joining…' : 'Join'}
-								</Button>
+								{#if o.alreadyEnrolled}
+									<Badge variant="secondary">Joined</Badge>
+								{:else if o.withdrawn}
+									<Badge class="bg-red-600 text-white">Withdrawn</Badge>
+								{:else if o.requestPending}
+									<Badge variant="outline">Request sent</Badge>
+								{:else if o.inMyProgram}
+									<Button
+										variant="secondary"
+										size="sm"
+										class="self-start sm:self-center"
+										disabled={busyId === o._id}
+										onclick={() => join(o._id)}
+									>
+										{busyId === o._id ? 'Joining…' : 'Join'}
+									</Button>
+								{:else}
+									<Button
+										variant="outline"
+										size="sm"
+										class="self-start sm:self-center"
+										disabled={busyId === o._id}
+										onclick={() => requestJoin(o._id, o.courseCode)}
+									>
+										{busyId === o._id ? 'Sending…' : 'Request to join'}
+									</Button>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{:else if !searchingSemester}
+				<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+					No open courses in this semester{studentSearch.trim() ? ' match that search' : ''}. Try another
+					semester or search.
+				</p>
+			{/if}
+			{#if withdrawnCourses.length > 0}
+				<div class="rounded-lg border border-red-200 bg-red-50/50">
+					<p class="px-4 pt-3 text-sm font-bold text-red-800">Withdrawn ({withdrawnCourses.length})</p>
+					<p class="px-4 text-xs text-red-700">
+						Withdrawn after 4 consecutive absences. Past attendance is kept. Speak to your
+						lecturer to rejoin.
+					</p>
+					<ul class="flex flex-col divide-y divide-red-100 px-4 pb-2">
+						{#each withdrawnCourses as w (w._id)}
+							<li class="py-2">
+								<p class="text-sm font-semibold">{w.courseCode} — {w.courseTitle}</p>
+								<p class="text-xs text-red-700">
+									{w.programName} · {w.semesterName} · {w.withdrawReason}
+								</p>
 							</li>
 						{/each}
 					</ul>

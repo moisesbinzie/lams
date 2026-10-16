@@ -1,13 +1,18 @@
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import {
 	assertCanAccessOffering,
 	canAccessOffering,
 	lecturerProgramIds,
+	logAudit,
 	requirePerson,
 	requireRecorder,
 	requireStaff
 } from './auth';
+import { isNoShowStreak } from './helpers';
+
+/** Consecutive Absent lectures that trigger an automatic withdrawal. */
+export const WITHDRAW_AFTER_CONSECUTIVE_ABSENTS = 4;
 
 /**
  * Two ways into a course:
@@ -93,10 +98,17 @@ export const enrolSelf = mutation({
 			.take(300);
 		const dup = existing.find((e: any) => e.offeringId === args.offeringId && e.status === 'active');
 		if (dup) throw new Error('You are already enrolled in that course.');
-		// Re-adding after dropping reuses the row rather than piling up history.
-		const dropped = existing.find((e: any) => e.offeringId === args.offeringId && e.status === 'dropped');
+		// Re-adding after dropping (or an automatic withdrawal) reuses the row
+		// rather than piling up history.
+		const dropped = existing.find(
+			(e: any) => e.offeringId === args.offeringId && (e.status === 'dropped' || e.status === 'withdrawn')
+		);
 		if (dropped) {
-			await ctx.db.patch(dropped._id, { status: 'active', createdAt: Date.now(), addedBy: 'self' });
+			await ctx.db.patch(dropped._id, {
+				status: 'active',
+				createdAt: Date.now(),
+				addedBy: 'self'
+			});
 			return { ok: true };
 		}
 		await ctx.db.insert('enrolments', {
@@ -660,5 +672,387 @@ export const listForCourse = query({
 			});
 		}
 		return out;
+	}
+});
+
+/**
+ * Courses one student was automatically withdrawn from: 4 consecutive
+ * absences. Returned separately from `listMine` so the student sees a clear
+ * "Withdrawn" section with the reason instead of the course silently
+ * disappearing.
+ */
+export const listMyWithdrawn = query({
+	args: { token: v.string() },
+	handler: async (ctx, args) => {
+		const person = await requirePerson(ctx, args.token);
+		const rows = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', person._id))
+			.take(300);
+		const out: any[] = [];
+		for (const e of rows) {
+			if (e.status !== 'withdrawn') continue;
+			const course = e.courseId ? await ctx.db.get('courses', e.courseId) : null;
+			const semester = await ctx.db.get('semesters', e.semesterId);
+			const programDoc = e.programId ? await ctx.db.get('programs', e.programId) : null;
+			out.push({
+				_id: e._id,
+				offeringId: e.offeringId,
+				courseId: e.courseId,
+				courseCode: course?.code ?? '',
+				courseTitle: course?.title ?? '',
+				semesterName: semester?.name ?? '',
+				programName: programDoc?.name ?? '',
+				withdrawReason: (e as any).withdrawReason ?? 'No attendance recorded for 4 consecutive lectures.',
+				withdrawnAt: (e as any).withdrawnAt ?? null
+			});
+		}
+		return out;
+	}
+});
+
+/**
+ * Withdrawn students for one offering's roster. Lecturers and admins use this
+ * to see who was removed automatically (and why); active enrolments still come
+ * from `listForOffering`.
+ */
+export const listWithdrawnForOffering = query({	args: { token: v.string(), offeringId: v.id('offerings') },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			const offering = await ctx.db.get('offerings', args.offeringId);
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
+		const rows = await ctx.db
+			.query('enrolments')
+			.withIndex('by_offering', (q) => q.eq('offeringId', args.offeringId))
+			.take(1000);
+		const out: any[] = [];
+		for (const e of rows) {
+			if (e.status !== 'withdrawn') continue;
+			const person = await ctx.db.get('people', e.personId);
+			if (!person) continue;
+			out.push({
+				_id: e._id,
+				personId: person._id,
+				fullName: person.fullName,
+				regNumber: person.regNumber,
+				studentId: person.studentId,
+				withdrawReason: (e as any).withdrawReason ?? 'No attendance recorded for 4 consecutive lectures.',
+				withdrawnAt: (e as any).withdrawnAt ?? null,
+				withdrawnBy: (e as any).withdrawnBy ?? 'system'
+			});
+		}
+		return out;
+	}
+});
+
+/** Withdrawn courses for one student (admin/lecturer view) — history with reasons. */
+export const listWithdrawnForPerson = query({
+	args: { token: v.string(), personId: v.id('people') },
+	handler: async (ctx, args) => {
+		await requireRecorder(ctx, args.token);
+		const rows = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', args.personId))
+			.take(300);
+		const out: any[] = [];
+		for (const e of rows) {
+			if (e.status !== 'withdrawn') continue;
+			const course = e.courseId ? await ctx.db.get('courses', e.courseId) : null;
+			const program = e.programId ? await ctx.db.get('programs', e.programId) : null;
+			const semester = await ctx.db.get('semesters', e.semesterId);
+			out.push({
+				enrolmentId: e._id,
+				offeringId: e.offeringId,
+				courseCode: course?.code ?? '',
+				courseTitle: course?.title ?? '',
+				programName: program?.name ?? '',
+				semesterName: semester?.name ?? '',
+				withdrawReason: (e as any).withdrawReason ?? 'No attendance recorded for 4 consecutive lectures.',
+				withdrawnAt: (e as any).withdrawnAt ?? null,
+				withdrawnBy: (e as any).withdrawnBy ?? 'system'
+			});
+		}
+		return out;
+	}
+});
+
+/**
+ * Semester-scoped course finder for students. Unlike `listOpenForStudent`
+ * (which only covers the student's own programs), this searches every open
+ * offering in the chosen semester so a student can find courses by code or
+ * title and either join directly (own program) or request to join (outside
+ * programs). Filtering happens server-side with a bounded take.
+ */
+export const searchOpenOfferings = query({
+	args: {
+		token: v.string(),
+		semesterId: v.optional(v.id('semesters')),
+		q: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		const person = await requirePerson(ctx, args.token);
+		const memberships = await ctx.db
+			.query('programMembers')
+			.withIndex('by_person', (q: any) => q.eq('personId', person._id))
+			.take(50);
+		const myProgramIds = new Set(memberships.map((m: any) => String(m.programId)));
+		const mine = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', person._id))
+			.take(300);
+		const activeIds = new Set(
+			mine.filter((e: any) => e.status === 'active').map((e: any) => String(e.offeringId))
+		);
+		const withdrawnIds = new Set(
+			mine.filter((e: any) => e.status === 'withdrawn').map((e: any) => String(e.offeringId))
+		);
+		const pendingRequests = await ctx.db
+			.query('joinRequests')
+			.withIndex('by_person', (q: any) => q.eq('personId', person._id))
+			.take(200);
+		const pendingIds = new Set(
+			pendingRequests.filter((r: any) => r.status === 'pending').map((r: any) => String(r.offeringId))
+		);
+
+		const needle = (args.q ?? '').trim().toLowerCase();
+		const offerings = args.semesterId
+			? await ctx.db
+					.query('offerings')
+					.withIndex('by_semester', (q) => q.eq('semesterId', args.semesterId!))
+					.take(300)
+			: await ctx.db.query('offerings').take(300);
+		const out: any[] = [];
+		for (const o of offerings) {
+			if (!o.openForEnrolment) continue;
+			const course = o.courseId ? await ctx.db.get('courses', o.courseId) : null;
+			if (!course) continue;
+			if (
+				needle &&
+				!course.code.toLowerCase().includes(needle) &&
+				!course.title.toLowerCase().includes(needle)
+			) {
+				continue;
+			}
+			const semester = await ctx.db.get('semesters', o.semesterId);
+			const programDoc = o.programId ? await ctx.db.get('programs', o.programId) : null;
+			const inMyProgram = o.programId ? myProgramIds.has(String(o.programId)) : false;
+			out.push({
+				_id: o._id,
+				courseId: o.courseId,
+				courseCode: course.code,
+				courseTitle: course.title,
+				hoursPerWeek: course.hoursPerWeek ?? null,
+				semesterId: o.semesterId,
+				semesterName: semester?.name ?? '',
+				semesterYear: semester?.year ?? null,
+				semesterNumber: semester?.number ?? null,
+				programId: o.programId ?? null,
+				programName: programDoc?.name ?? '',
+				yearOfStudy: o.yearOfStudy ?? null,
+				inMyProgram,
+				alreadyEnrolled: activeIds.has(String(o._id)),
+				withdrawn: withdrawnIds.has(String(o._id)),
+				requestPending: pendingIds.has(String(o._id))
+			});
+			if (out.length >= 100) break;
+		}
+		out.sort((a, b) => a.courseCode.localeCompare(b.courseCode));
+		return out;
+	}
+});
+
+/**
+ * A student requests to join a course outside their programs. Direct
+ * `enrolSelf` stays refused there; the request waits in `pending` for a
+ * lecturer or admin to approve.
+ */
+export const requestToJoin = mutation({
+	args: { token: v.string(), offeringId: v.id('offerings') },
+	handler: async (ctx, args) => {
+		const person = await requirePerson(ctx, args.token);
+		const offering = await ctx.db.get('offerings', args.offeringId);
+		if (!offering) throw new Error('That course is no longer available.');
+		if (!offering.openForEnrolment) {
+			throw new Error('Your lecturer has closed enrolment for this course. Please see them.');
+		}
+		const existing = await ctx.db
+			.query('enrolments')
+			.withIndex('by_person', (q) => q.eq('personId', person._id))
+			.take(300);
+		if (existing.some((e: any) => e.offeringId === args.offeringId && e.status === 'active')) {
+			throw new Error('You are already enrolled in that course.');
+		}
+		const dup = await ctx.db
+			.query('joinRequests')
+			.withIndex('by_person', (q: any) => q.eq('personId', person._id))
+			.take(200);
+		if (dup.some((r: any) => r.offeringId === args.offeringId && r.status === 'pending')) {
+			throw new Error('Your request for that course is already waiting for approval.');
+		}
+		await ctx.db.insert('joinRequests', {
+			personId: person._id,
+			offeringId: offering._id,
+			courseId: offering.courseId,
+			programId: offering.programId,
+			semesterId: offering.semesterId,
+			status: 'pending',
+			createdAt: Date.now()
+		});
+		return { ok: true };
+	}
+});
+
+/** Pending join requests, scoped like the rest of enrolment: own offerings for lecturers, everything for admins. */
+export const listJoinRequests = query({
+	args: { token: v.string(), offeringId: v.optional(v.id('offerings')) },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const rows = args.offeringId
+			? await ctx.db
+					.query('joinRequests')
+					.withIndex('by_offering', (q: any) => q.eq('offeringId', args.offeringId!))
+					.take(500)
+			: await ctx.db.query('joinRequests').withIndex('by_status', (q: any) => q.eq('status', 'pending')).take(200);
+		const out: any[] = [];
+		for (const r of rows) {
+			if (r.status !== 'pending') continue;
+			const offering = await ctx.db.get('offerings', r.offeringId);
+			if (!offering) continue;
+			if (actor.kind === 'staff' && !actor.isAdmin) {
+				if (!(await canAccessOffering(ctx, actor, offering))) continue;
+			}
+			if (actor.kind !== 'staff') {
+				const repRows = await ctx.db
+					.query('programReps')
+					.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+					.take(200);
+				if (!repRows.some((x: any) => String(x.programId) === String(offering.programId))) continue;
+			}
+			const person = await ctx.db.get('people', r.personId);
+			const course = r.courseId ? await ctx.db.get('courses', r.courseId) : null;
+			if (!person) continue;
+			out.push({
+				_id: r._id,
+				personId: person._id,
+				fullName: person.fullName,
+				regNumber: person.regNumber,
+				studentId: person.studentId,
+				offeringId: r.offeringId,
+				courseCode: course?.code ?? '',
+				courseTitle: course?.title ?? '',
+				createdAt: r.createdAt
+			});
+		}
+		return out;
+	}
+});
+
+/**
+ * Approve or reject a join request. Approving enrols the student directly
+ * (tagged by who approved) even though they belong to no program offering
+ * this course — that is the whole point of the request flow.
+ */
+export const decideJoinRequest = mutation({
+	args: { token: v.string(), requestId: v.id('joinRequests'), approve: v.boolean() },
+	handler: async (ctx, args) => {
+		const actor = await requireRecorder(ctx, args.token);
+		const req = await ctx.db.get('joinRequests', args.requestId);
+		if (!req) throw new Error('That request no longer exists.');
+		if (req.status !== 'pending') throw new Error('That request was already decided.');
+		const offering = await ctx.db.get('offerings', req.offeringId);
+		if (!offering) throw new Error('That course is no longer available.');
+		if (actor.kind === 'staff' && !actor.isAdmin) {
+			await assertCanAccessOffering(ctx, actor, offering);
+		}
+		if (actor.kind !== 'staff') {
+			const repRows = await ctx.db
+				.query('programReps')
+				.withIndex('by_person', (q: any) => q.eq('personId', actor.id))
+				.take(200);
+			if (!repRows.some((r: any) => String(r.programId) === String(offering.programId))) {
+				throw new Error('You are only a program rep for your own program.');
+			}
+		}
+		if (!args.approve) {
+			await ctx.db.patch(req._id, { status: 'rejected', decidedBy: actor.name, decidedAt: Date.now() });
+			return { ok: true, approved: false };
+		}
+		const addedBy = actor.kind === 'staff' ? ('lecturer' as const) : ('rep' as const);
+		await assignOne(ctx, offering, req.personId, true, addedBy);
+		await ctx.db.patch(req._id, { status: 'approved', decidedBy: actor.name, decidedAt: Date.now() });
+		await logAudit(ctx, {
+			actorName: actor.name,
+			actorId: actor.id,
+			action: 'join_request.approved',
+			targetKind: 'person',
+			targetId: req.personId,
+			detail: `Approved join request for offering ${String(req.offeringId)}`
+		});
+		return { ok: true, approved: true };
+	}
+});
+
+/** Cron target: withdraw students with 4 consecutive Absent lectures in one offering. */
+export const autoWithdrawNoShows = internalMutation({
+	args: {},
+	handler: async (ctx) => {
+		const active = await ctx.db.query('enrolments').take(500);
+		let withdrawn = 0;
+		let checked = 0;
+		for (const e of active) {
+			if (e.status !== 'active') continue;
+			checked += 1;
+			const sessions = await ctx.db
+				.query('sessions')
+				.withIndex('by_offering', (q: any) => q.eq('offeringId', e.offeringId))
+				.take(300);
+			// Closed lectures since they joined, newest first. Excused time off
+			// never counts against the student; anything else present does.
+			const inScope = sessions
+				.filter((s: any) => s.status === 'closed' && s.startedAt >= e.createdAt)
+				.sort((a: any, b: any) => b.startedAt - a.startedAt);
+			if (inScope.length < WITHDRAW_AFTER_CONSECUTIVE_ABSENTS) continue;
+			const last = inScope.slice(0, WITHDRAW_AFTER_CONSECUTIVE_ABSENTS);
+			const statuses: (string | null)[] = [];
+			let personMissing = false;
+			for (const s of last) {
+				const rec = await ctx.db
+					.query('attendance')
+					.withIndex('by_session_and_reg', (q: any) => q.eq('sessionId', s._id))
+					.take(2000);
+				const person = await ctx.db.get('people', e.personId);
+				if (!person) {
+					personMissing = true;
+					break;
+				}
+				const mine = rec.find((r: any) => r.regNorm === (person as any).regNorm);
+				// No row after close means absent (close writes Absent rows, but an
+				// enrolment created after the close has none) — either way the
+				// student was not there.
+				statuses.push(mine?.status ?? 'Absent');
+			}
+			if (personMissing) continue;
+			if (!isNoShowStreak(statuses, WITHDRAW_AFTER_CONSECUTIVE_ABSENTS)) continue;
+			const person = await ctx.db.get('people', e.personId);
+			await ctx.db.patch(e._id, {
+				status: 'withdrawn',
+				withdrawnAt: Date.now(),
+				withdrawReason: `No attendance recorded for ${WITHDRAW_AFTER_CONSECUTIVE_ABSENTS} consecutive lectures.`,
+				withdrawnBy: 'system'
+			});
+			await logAudit(ctx, {
+				actorName: 'system',
+				action: 'enrolment.auto_withdrawn',
+				targetKind: 'person',
+				targetId: e.personId,
+				targetName: (person as any)?.fullName ?? undefined,
+				detail: `Withdrawn from offering ${String(e.offeringId)} after ${WITHDRAW_AFTER_CONSECUTIVE_ABSENTS} consecutive absences.`
+			});
+			withdrawn += 1;
+			if (withdrawn >= 50) break;
+		}
+		return { checked, withdrawn };
 	}
 });

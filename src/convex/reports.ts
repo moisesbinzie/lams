@@ -67,9 +67,12 @@ export const courseReport = query({
 
 		const rows: any[] = [];
 		for (const e of enrolments) {
-			if (e.status !== 'active') continue;
 			const person = await ctx.db.get('people', e.personId);
 			if (!person) continue;
+			const withdrawn = e.status === 'withdrawn';
+			// Withdrawn students stay visible with their history: the register
+			// shows them flagged rather than silently dropping them.
+			if (e.status !== 'active' && !withdrawn) continue;
 			// Only lectures since they joined count — joining mid-term no
 			// longer backdates absences for lectures that ran before.
 			const inScope = closed.filter((s) => s.startedAt >= e.createdAt);
@@ -95,6 +98,8 @@ export const courseReport = query({
 			fullName: person.fullName,
 			regNumber: person.regNumber,
 			studentId: person.studentId,
+			withdrawn,
+			withdrawReason: withdrawn ? ((e as any).withdrawReason ?? null) : null,
 				present,
 				late,
 				outOfRange,
@@ -133,15 +138,17 @@ export const personReport = query({
 			allowedOfferingIds = await lecturerAccessibleOfferingIds(ctx, actor.id);
 		}
 
-		// Active enrolments bound the denominator: lectures that ran before
-		// the person joined an offering never count against them.
+		// Active and withdrawn enrolments bound the denominator: lectures that
+		// ran before the person joined an offering never count against them.
+		// Withdrawn students keep their history — withdrawal stops future
+		// lectures counting, it never erases the past.
 		const enrolRows = await ctx.db
 			.query('enrolments')
 			.withIndex('by_person', (q) => q.eq('personId', args.personId))
 			.take(300);
 		const enrolledAt = new Map<string, number>();
 		for (const e of enrolRows) {
-			if (e.status !== 'active') continue;
+			if (e.status !== 'active' && e.status !== 'withdrawn') continue;
 			const key = String(e.offeringId);
 			const prev = enrolledAt.get(key);
 			if (prev === undefined || e.createdAt < prev) enrolledAt.set(key, e.createdAt);

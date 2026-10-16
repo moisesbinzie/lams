@@ -331,6 +331,64 @@ export interface OpenCourse {
 	alreadyEnrolled: boolean;
 }
 
+/** One semester-scoped result from `enrolments.searchOpenOfferings`. */
+export interface SemesterCourseResult {
+	_id: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
+	hoursPerWeek: number | null;
+	semesterId: string;
+	semesterName: string;
+	semesterYear: number | null;
+	semesterNumber: number | null;
+	programId: string | null;
+	programName: string;
+	yearOfStudy: number | null;
+	inMyProgram: boolean;
+	alreadyEnrolled: boolean;
+	withdrawn: boolean;
+	requestPending: boolean;
+}
+
+/** A course the student was withdrawn from, with the reason. */
+export interface WithdrawnEnrolment {
+	_id: string;
+	offeringId: string;
+	courseId: string;
+	courseCode: string;
+	courseTitle: string;
+	semesterName: string;
+	programName: string;
+	withdrawReason: string;
+	withdrawnAt: number | null;
+}
+
+/** A withdrawn student on a roster, with the reason. */
+export interface WithdrawnRosterEntry {
+	_id: string;
+	personId: string;
+	fullName: string;
+	regNumber: string;
+	studentId: string;
+	withdrawReason: string;
+	withdrawnAt: number | null;
+	withdrawnBy: string;
+}
+
+/** A pending request from a student to join a course outside their programmes. */
+export interface JoinRequest {
+	_id: string;
+	personId: string;
+	fullName: string;
+	regNumber: string;
+	studentId: string;
+	offeringId: string;
+	courseCode: string;
+	courseTitle: string;
+	createdAt: number;
+}
+
 export interface MyEnrolment {
 	_id: string;
 	offeringId: string;
@@ -446,4 +504,7 @@ export interface ReportRow {
 	absent: number;
 	excused: number;
 	attendPct: number;
+	/** True when the student was automatically withdrawn (4 consecutive absences). */
+	withdrawn?: boolean;
+	withdrawReason?: string | null;
 }

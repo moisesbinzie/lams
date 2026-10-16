@@ -31,7 +31,7 @@
 	 * Navigation is built from the signed-in role so nobody hunts for tools
 	 * they cannot use and nobody sees tools they should not:
 	 *
-	 *   anon     -> How it works
+	 *   anon     -> How to use
 	 *   admin    -> Admin console, Set up, Records, Settings, How
 	 *   lecturer -> Take attendance, Lectures, Records, Timetable, Settings, How
 	 *   rep      -> My account, Take attendance, How
@@ -44,7 +44,7 @@
 	 */
 	const hasBodyNav = $derived(path !== '/' && path !== '/how-it-works' && !path.startsWith('/signin'));
 	const nav = $derived.by(() => {
-		const how = { href: '/how-it-works', label: 'How it works', icon: Info };
+		const how = { href: '/how-it-works', label: 'How to use', icon: Info };
 		const dashboard = { href: '/home', label: 'My account', icon: House };
 		if (!me) return [how];
 		if (me.kind === 'staff') {
@@ -210,7 +210,7 @@
 			<p class="font-semibold text-lams-navy">Attend • Track • Succeed</p>
 			<p>Scan the screen at the front of the hall, and the rest is recorded for you.</p>
 			<a href="/how-it-works" class="underline underline-offset-2 hover:text-foreground"
-				>How it works</a
+				>How to use</a
 			>
 		</div>
 	</footer>

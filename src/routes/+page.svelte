@@ -167,7 +167,7 @@
 
 	<div class="-mt-4 flex justify-center">
 		<Button variant="outline" size="sm" href="/how-it-works">
-			See the whole flow as diagrams
+			How to use LAMS
 			<ArrowRight class="size-3.5" />
 		</Button>
 	</div>

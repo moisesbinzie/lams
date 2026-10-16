@@ -12,7 +12,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Table from '$lib/components/ui/table';
 	import { BookOpen, Plus, Search, UserPlus, UserMinus, UserRoundCheck } from '@lucide/svelte';
-	import type { Meeting, Offering, ProgramRow } from '$lib/lams/types';
+	import type { Meeting, Offering, ProgramRow, WithdrawnRosterEntry, JoinRequest } from '$lib/lams/types';
 	import { parseRosterCsv } from '$lib/lams/csv';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
@@ -52,6 +52,10 @@
 	let meetings = $state<Meeting[]>([]);
 	/** Person ids currently representing the selected course's program. */
 	let repIds = $state<Set<string>>(new Set());
+	/** Students automatically withdrawn from the selected course (4 consecutive absences). */
+	let withdrawnRoster = $state<WithdrawnRosterEntry[]>([]);
+	/** Pending requests to join the selected course from outside its programmes. */
+	let joinRequests = $state<JoinRequest[]>([]);
 	let loading = $state(true);
 	let rosterLoading = $state(false);
 
@@ -152,13 +156,15 @@
 			roster = [];
 			meetings = [];
 			repIds = new Set();
+			withdrawnRoster = [];
+			joinRequests = [];
 			return;
 		}
 		const offering = offerings.find((o) => o._id === selectedId) ?? null;
 		rosterLoading = true;
 		try {
 			const client = requireConvexClient();
-			const [rows, slots, reps] = (await Promise.all([
+			const [rows, slots, reps, gone, requests] = (await Promise.all([
 				client.query(api.enrolments.listForOffering, {
 					token,
 					offeringId: selectedId as never
@@ -172,7 +178,15 @@
 							token,
 							programId: offering.programId as never
 						})
-					: Promise.resolve([])
+					: Promise.resolve([]),
+				client.query(api.enrolments.listWithdrawnForOffering, {
+					token,
+					offeringId: selectedId as never
+				}),
+				client.query(api.enrolments.listJoinRequests, {
+					token,
+					offeringId: selectedId as never
+				})
 			])) as [
 				{
 					_id: string;
@@ -184,11 +198,15 @@
 					addedBy: 'self' | 'rep' | 'lecturer';
 				}[],
 				Meeting[],
-				{ personId: string }[]
+				{ personId: string }[],
+				WithdrawnRosterEntry[],
+				JoinRequest[]
 			];
 			roster = rows;
 			meetings = slots;
 			repIds = new Set(reps.map((r) => String(r.personId)));
+			withdrawnRoster = gone;
+			joinRequests = requests;
 		} catch (err) {
 			reportError(err, 'Could not load that course.');
 		} finally {
@@ -360,8 +378,34 @@
 		}
 	}
 
-	async function registerAndEnrol(e: SubmitEvent) {
-		e.preventDefault();
+	async function decideRequest(requestId: string, fullName: string, approve: boolean) {
+		if (!token) return;
+		if (!confirm(`${approve ? 'Admit' : 'Reject'} ${fullName} ${approve ? 'into' : 'from'} ${selected?.courseCode ?? 'this course'}?`)) {
+			return;
+		}
+		busyId = requestId;
+		try {
+			const client = requireConvexClient();
+			await client.mutation(api.enrolments.decideJoinRequest, {
+				token,
+				requestId: requestId as never,
+				approve
+			});
+			await loadRoster();
+			await refreshCounts();
+			reportSuccess(
+				approve
+					? `${fullName} admitted to ${selected?.courseCode ?? 'the course'}.`
+					: `${fullName}'s request was rejected.`
+			);
+		} catch (err) {
+			reportError(err, 'Could not decide that request.');
+		} finally {
+			busyId = '';
+		}
+	}
+
+	async function registerAndEnrol(e: SubmitEvent) {		e.preventDefault();
 		if (!token || !selected) return;
 		if (!selected.programId) {
 			reportError(
@@ -704,6 +748,78 @@
 								{/each}
 								</Table.Body>
 							</Table.Root>
+						</div>
+					{/if}
+					{#if !rosterLoading && joinRequests.length > 0}
+						<div class="rounded-md border border-lams-green/40 bg-lams-green/5 p-3">
+							<p class="text-sm font-semibold text-lams-navy">
+								Join requests ({joinRequests.length})
+							</p>
+							<p class="text-xs text-muted-foreground">
+								Students from other programmes asking to join {selected.courseCode}. Approving
+								enrols them immediately; their past records are unaffected.
+							</p>
+							<ul class="mt-2 flex flex-col divide-y divide-border rounded-md border border-border bg-background">
+								{#each joinRequests as j (j._id)}
+									<li class="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
+										<span class="min-w-0">
+											<span class="font-medium">{j.fullName}</span>
+											<span class="block font-mono text-xs text-muted-foreground">
+												{j.regNumber} · {j.studentId}
+											</span>
+										</span>
+										<span class="flex gap-1.5">
+											<Button
+												size="sm"
+												disabled={busyId === j._id}
+												onclick={() => decideRequest(j._id, j.fullName, true)}
+											>
+												Admit
+											</Button>
+											<Button
+												size="sm"
+												variant="outline"
+												disabled={busyId === j._id}
+												onclick={() => decideRequest(j._id, j.fullName, false)}
+											>
+												Reject
+											</Button>
+										</span>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+					{#if !rosterLoading && withdrawnRoster.length > 0}
+						<div class="rounded-md border border-red-200 bg-red-50/50 p-3">
+							<p class="text-sm font-semibold text-red-800">
+								Withdrawn ({withdrawnRoster.length})
+							</p>
+							<p class="text-xs text-red-700">
+								Automatically withdrawn after 4 consecutive absences. Past attendance is kept.
+								Re-add them below to re-admit.
+							</p>
+							<ul class="mt-2 flex flex-col divide-y divide-red-100">
+								{#each withdrawnRoster as w (w.personId)}
+									<li class="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
+										<span class="min-w-0">
+											<span class="font-medium">{w.fullName}</span>
+											<span class="block font-mono text-xs text-muted-foreground">
+												{w.regNumber} · {w.studentId}
+											</span>
+											<span class="block text-xs text-red-700">{w.withdrawReason}</span>
+										</span>
+										<Button
+											size="sm"
+											variant="outline"
+											disabled={busyId === w.personId}
+											onclick={() => addExisting(w.personId, w.fullName)}
+										>
+											Re-admit
+										</Button>
+									</li>
+								{/each}
+							</ul>
 						</div>
 					{/if}
 				</Card.Content>

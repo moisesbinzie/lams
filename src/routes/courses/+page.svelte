@@ -22,9 +22,9 @@
 <div class="text-center">
 	<h1 class="text-2xl font-bold text-lams-navy">My courses</h1>
 	<p class="text-sm text-muted-foreground">
-		Your programs and the courses you take in them. Join open courses — including repeats from
-		earlier semesters — or leave ones with nothing recorded. Your program rep or lecturer can
-		also add you.
+		Select a semester and search for the courses you take, then join them directly — or send a
+		request for courses in other programmes. Leave courses with nothing recorded. Your program
+		rep or lecturer can also add you.
 	</p>
 </div>
 

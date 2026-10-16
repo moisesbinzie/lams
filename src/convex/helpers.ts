@@ -69,6 +69,28 @@ export async function sha256Hex(text: string): Promise<string> {
 export type AutoStatus = 'Present' | 'Late' | 'Out_of_Range' | 'Absent';
 
 /**
+ * Whether the newest-first statuses of the last `required` closed lectures
+ * form an unbroken no-show streak that withdraws a student from a course.
+ *
+ * Only `Absent` (including a missing row after close) and `Out_of_Range`
+ * continue the streak — the student was not confirmed present. `Present`,
+ * `Late` and `Excused` break it: time off that was agreed never counts
+ * against the student. Anything unrecognised breaks the streak rather than
+ * withdrawing someone on ambiguous data.
+ */
+export function isNoShowStreak(
+	statusesNewestFirst: (string | null | undefined)[],
+	required: number
+): boolean {
+	if (required < 1 || statusesNewestFirst.length < required) return false;
+	for (let i = 0; i < required; i++) {
+		const st = statusesNewestFirst[i] ?? 'Absent';
+		if (st !== 'Absent' && st !== 'Out_of_Range') return false;
+	}
+	return true;
+}
+
+/**
  * Refuses a station pin taken from a GPS fix coarser than the radius it has to
  * prove. A pin captured at ±300 m for a 50 m room can sit streets away from the
  * hall, and every honest scan then reads as hundreds of metres Out_of_Range —

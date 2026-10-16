@@ -6,154 +6,174 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { ensureSession, sessionMe, sessionStatus } from '$lib/lams/session.svelte';
 	import {
-		AlertTriangle,
-		Ban,
+		BookOpen,
 		Camera,
 		CheckCircle2,
 		CircleCheck,
 		ClipboardCheck,
 		Clock,
-		DoorOpen,
 		GraduationCap,
-		Hand,
 		HelpCircle,
 		MapPin,
 		MinusCircle,
 		MonitorSmartphone,
 		ScanLine,
+		Settings,
 		ShieldCheck,
 		Smartphone,
 		XCircle
 	} from '@lucide/svelte';
 
 	/**
-	 * Written for students, not for whoever specified the system.
-	 *
-	 * Nothing on this page needs a technical vocabulary to be understood: no
-	 * secrets, tokens, hashes, gates or accuracy circles. If a sentence here
-	 * would make a first-year stop reading to work out what it means, it is the
-	 * wrong sentence. The reasoning behind the design lives in the code comments
-	 * next to the code that enforces it.
+	 * User guide for LAMS: how each role uses the system, in formal plain
+	 * English. Each section is procedural — what to do, in what order — so a
+	 * first-year student, a lecturer and an administrator can each read only
+	 * their own section and succeed.
 	 */
 
-	const steps = [
+	const studentSteps = [
 		{
-			icon: Camera,
-			title: 'Point your camera at the screen',
-			body: 'The screen at the front of the hall shows a square barcode. Open your camera the way you normally photograph anything and hold it up to the square.'
+			icon: BookOpen,
+			title: 'Step 1 — Sign in and join your courses',
+			body: 'Sign in with your registration number and PIN. Open My courses, select the current semester, and join each course you take. If a course belongs to another programme, use Request to join and wait for approval.'
 		},
 		{
-			icon: Smartphone,
-			title: 'Tap the link that appears',
-			body: 'Your phone opens LAMS by itself. If you are already signed in, that is the last thing you do.'
+			icon: Camera,
+			title: 'Step 2 — Scan the screen in the hall',
+			body: 'When the lecture starts, point your phone camera at the square barcode (QR code) on the screen at the front of the hall. Your phone opens the attendance page automatically.'
 		},
 		{
 			icon: MapPin,
-			title: 'Say yes when asked for your location',
-			body: 'Your phone asks once. Allowing it is what marks you present — without it, LAMS cannot tell whether you are in the hall.'
+			title: 'Step 3 — Allow your location once',
+			body: 'When your phone requests location access, accept it. Your position at the moment of scanning is what confirms that you are inside the hall. Without it, your record cannot be confirmed.'
+		},
+		{
+			icon: CheckCircle2,
+			title: 'Step 4 — Confirm and check your record',
+			body: 'Your result appears immediately: Present, Late, Out of range, Absent or Excused. Open My attendance at any time to review your full record and report any error.'
 		}
 	];
 
-	/** One line each, in the student's own words rather than the system's. */
+	/** Attendance statuses, stated exactly as they appear on the record. */
 	const statuses = [
-		{ icon: CircleCheck, label: 'Present', meaning: 'You were there, in time, inside the room.' },
-		{ icon: Clock, label: 'Late', meaning: 'You were there, but after the lecture had started.' },
+		{ icon: CircleCheck, label: 'Present', meaning: 'You were recorded inside the hall within the on-time window (normally the first 5 minutes).' },
+		{ icon: Clock, label: 'Late', meaning: 'You were recorded inside the hall after the on-time window but before the lecture closed (normally within 10 minutes).' },
 		{
 			icon: MapPin,
 			label: 'Out of range',
 			meaning:
-				'Your phone said you were too far from the screen. If that is wrong, tell your rep or lecturer and they can change it.'
+				'Your phone reported a position outside the 50 metre radius around the screen. If you were in the hall, report the record so your lecturer can review it.'
 		},
-		{ icon: XCircle, label: 'Absent', meaning: 'Nothing was recorded for you before the lecture closed.' },
+		{ icon: XCircle, label: 'Absent', meaning: 'No record was submitted for you before the lecture closed.' },
 		{
 			icon: MinusCircle,
 			label: 'Excused',
-			meaning: 'You were away and it was agreed. This does not count against you.'
+			meaning: 'Your absence was approved in advance or afterwards. An excused lecture does not count against your attendance rate.'
 		}
 	];
 
-	const problems = [
+	const lecturerSteps = [
 		{
-			icon: MapPin,
-			question: 'It said I was too far away, but I was in the room',
-			answer:
-				'Phones are not accurate indoors, especially in a hall full of people. Your rep sees this too and can correct it, and the change is kept on your record. Nothing disappears.'
+			icon: BookOpen,
+			title: 'Step 1 — Confirm your courses',
+			body: 'Open the lecturer console and confirm that each course you teach is assigned to you, with its programme, year of study and semester. Contact the administrator if anything is missing.'
 		},
-		{
-			icon: Smartphone,
-			question: 'My location will not turn on',
-			answer:
-				'Nothing is lost — a scan still goes through, marked for your lecturer to check. It also helps to turn location on for the browser you are scanning with, so the check works next time.'
-		},
-		{
-			icon: Ban,
-			question: 'I have no phone, or the camera will not focus',
-			answer:
-				'Your program rep can add you by hand. They have to say why, and their name goes on the record — that is normal and it is not held against you.'
-		},
-		{
-			icon: AlertTriangle,
-			question: 'The screen says it has been moved',
-			answer:
-				'The screen has been carried out of the room it belongs to, so it has stopped recording anything. Tell your program rep. Once it is put back, scanning starts again and you can scan in.'
-		},
-		{
-			icon: Clock,
-			question: 'The screen says the code has expired',
-			answer:
-				'The code changes every 10 seconds so a photo of the screen cannot be used later. Just scan the screen again — the page opens by itself.'
-		},
-		{
-			icon: ShieldCheck,
-			question: 'Something on my record looks wrong',
-			answer:
-				'Open My attendance and report it. Say what happened, and your rep or lecturer can put it right. The original value is always kept, so nobody can quietly edit your history.'
-		}
-	];
-
-	const roles = [
 		{
 			icon: ScanLine,
-			who: 'You, as a student',
-			body: 'Scan the screen, allow your location. Then check your own attendance and report anything that looks wrong.'
+			title: 'Step 2 — Start the lecture',
+			body: 'Select the course and press Start here. Your current location becomes the lecture position with a 50 metre radius. The station QR code appears on screen for students to scan.'
 		},
 		{
-			icon: Hand,
-			who: 'Program rep',
-			body: 'Start the lecture, put the screen at the front of the hall and leave it there. Add anyone without a working phone by hand, with a reason.'
+			icon: MonitorSmartphone,
+			title: 'Step 3 — Display the station code',
+			body: 'Keep the station screen visible at the front of the hall for the full attendance window. The code changes automatically. If the screen is carried out of the room, scanning stops until it is returned.'
+		},
+		{
+			icon: ClipboardCheck,
+			title: 'Step 4 — Review and correct records',
+			body: 'After the lecture, open Records to review attendance. You may correct, excuse or remove any record. Every change is kept in the audit trail with the original value. Approve or reject student join requests from the roster.'
+		}
+	];
+
+	const adminSteps = [
+		{
+			icon: Settings,
+			title: 'Step 1 — Set up the academic structure',
+			body: 'Create the academic year and its semesters, then create programmes with their duration in years. Add courses to the catalogue and place each course in the correct programme, year and semester.'
 		},
 		{
 			icon: GraduationCap,
-			who: 'Lecturer',
-			body: 'Set up courses and programs, start lectures, and correct or excuse any record afterwards. Every change is logged.'
+			title: 'Step 2 — Assign lecturers and representatives',
+			body: 'Assign each course to its lecturer or lecturers. Register students into their programmes and appoint programme representatives where required.'
+		},
+		{
+			icon: ShieldCheck,
+			title: 'Step 3 — Oversee attendance and enrolment',
+			body: 'Review attendance across all lectures, semesters and programmes. Decide disputed records, approve join requests that lecturers have not handled, and re-admit students who were automatically withdrawn where appropriate.'
+		},
+		{
+			icon: ClipboardCheck,
+			title: 'Step 4 — Maintain accurate records',
+			body: 'Export attendance reports for official use. Withdraw students who are no longer taking a course; their past attendance is always retained. A student with four consecutive absences in one course is withdrawn automatically and shown as Withdrawn.'
 		}
 	];
 
-	const timeline = [
-		{ at: 'Before', title: 'Your rep or lecturer opens the lecture', body: 'They set where the screen stands and how long you have to arrive.' },
-		{ at: 'Start', title: 'The screen appears', body: 'A code is created for this lecture only, and the barcode goes live.' },
-		{ at: 'Every 10s', title: 'The code changes', body: 'This is what stops a photo of the screen being used later.' },
-		{ at: '0–10 min', title: 'You scan as you arrive', body: 'Your name shows up on the rep’s list straight away, with the time and your distance.' },
-		{ at: 'Close', title: 'Anyone not scanned becomes absent', body: 'The lecture closes itself, so nobody is left out by an oversight.' },
-		{ at: 'After', title: 'Anything can be put right', body: 'A lecturer can correct, excuse or remove any record. What it was before is always kept.' }
-	];
-
-	const kept = [
-		'Your name and registration number',
-		'The exact time you scanned',
-		'How far your phone was from the screen',
-		'Whether that reading was precise enough to rely on',
-		'Which phone the scan came from',
-		'Anything that looked odd, and why',
-		'Any later change, with the original kept',
-		'Whether you disputed it, and your note'
+	const faqs = [
+		{
+			icon: MapPin,
+			question: 'My record states Out of range, but I was in the hall. What should I do?',
+			answer:
+				'Mobile telephones are less accurate indoors, particularly in crowded halls. Open My attendance, select the record and report it with a short note. Your programme representative or lecturer will review the evidence and correct the record where appropriate. The original value is always retained.'
+		},
+		{
+			icon: Smartphone,
+			question: 'My telephone cannot provide a location. Is my attendance lost?',
+			answer:
+				'No. Your scan is still submitted and is marked for lecturer review. Enable location access for the browser you scan with so that subsequent lectures are confirmed automatically.'
+		},
+		{
+			icon: Camera,
+			question: 'I have no telephone, or my camera cannot read the code. How is my attendance recorded?',
+			answer:
+				'Your programme representative can add you manually. They are required to state a reason, and their name is recorded on the entry. This is a standard procedure and is not held against you.'
+		},
+		{
+			icon: Clock,
+			question: 'The station code has expired. What should I do?',
+			answer:
+				'The station code changes at short intervals so that a photograph of the screen cannot be reused. Scan the screen again; the attendance page opens automatically.'
+		},
+		{
+			icon: ShieldCheck,
+			question: 'A record on my account is incorrect. How do I challenge it?',
+			answer:
+				'Open My attendance and report the record, stating what occurred. Your programme representative or lecturer will examine it and amend it if necessary. You will retain the full history of the change.'
+		},
+		{
+			icon: BookOpen,
+			question: 'I cannot find my course in the list. How do I join it?',
+			answer:
+				'Open My courses and select the correct semester, then search by course code or title. If the course belongs to your programme, press Join. If it belongs to another programme, press Request to join; your lecturer will approve or reject the request.'
+		},
+		{
+			icon: XCircle,
+			question: 'My course states Withdrawn. What does this mean?',
+			answer:
+				'You were withdrawn from the course after four consecutive absences. Your previous attendance records are retained. Speak to your lecturer if you believe this is incorrect; they can re-admit you.'
+		},
+		{
+			icon: ScanLine,
+			question: 'I am a lecturer. How do I start a lecture quickly?',
+			answer:
+				'Open Take attendance, select the course and press Start here. Your current location is used with a 50 metre radius. Advanced settings remain available for typing coordinates manually, repositioning the screen, or changing the on-time and late windows.'
+		}
 	];
 
 	const sections = [
-		['#mark', 'Marking yourself present'],
-		['#status', 'What your record says'],
-		['#wrong', 'If something goes wrong'],
-		['#roles', 'Who does what']
+		['#student', 'For students'],
+		['#lecturer', 'For lecturers'],
+		['#admin', 'For administrators'],
+		['#faq', 'Frequently asked questions']
 	];
 
 	const viewer = $derived(sessionMe());
@@ -181,21 +201,22 @@
 </script>
 
 <svelte:head>
-	<title>How LAMS works — LAMS</title>
+	<title>How to use LAMS — LAMS</title>
 	<meta
 		name="description"
-		content="How to mark yourself present for a lecture with LAMS: scan the screen at the front of the hall, allow your location, and that is it. What each status means and what to do if something goes wrong."
+		content="How to use LAMS: instructions for students marking attendance, lecturers starting lectures, and administrators managing records. Includes frequently asked questions."
 	/>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-8 lg:max-w-5xl">
 	<section class="flex flex-col items-start gap-3 pt-2">
-		<Badge class="gap-1.5 bg-lams-navy text-white"><MonitorSmartphone class="size-3.5" /> In plain language</Badge>
-		<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">How it works</h1>
+		<Badge class="gap-1.5 bg-lams-navy text-white"><MonitorSmartphone class="size-3.5" /> User guide</Badge>
+		<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">How to use LAMS</h1>
 		<p class="max-w-2xl text-muted-foreground">
-			Recording your attendance takes about three seconds. You scan a square barcode on the screen at the
-			front of the hall, and the rest is written down for you — no paper list, no typing your name, no queue at a
-			desk.
+			LAMS records lecture attendance electronically. Students scan the code displayed on the
+			screen at the front of the hall; the system records their name, the time and their
+			distance from the screen. This guide explains how to use the system as a student, as a
+			lecturer and as an administrator.
 		</p>
 		<nav aria-label="Sections of this page" class="flex flex-wrap gap-2 pt-1">
 			{#each sections as [href, label] (href)}
@@ -204,50 +225,37 @@
 		</nav>
 	</section>
 
-	<!-- ── Marking present ─────────────────────────────────────────────────── -->
-	<section id="mark" aria-labelledby="mark-h" class="scroll-mt-20">
+	<!-- ── Students ──────────────────────────────────────────────────────── -->
+	<section id="student" aria-labelledby="student-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title id="mark-h" class="text-lg">Marking yourself present</Card.Title>
-				<Card.Description>Three steps, and only the first one needs your hands.</Card.Description>
+				<Card.Title id="student-h" class="text-lg">For students — marking your attendance</Card.Title>
+				<Card.Description>Follow these four steps for every lecture you attend.</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<ol class="grid items-stretch gap-3 md:grid-cols-3">
-					{#each steps as step, i (step.title)}
+				<ol class="grid items-stretch gap-3 md:grid-cols-2">
+					{#each studentSteps as step (step.title)}
 						<li class="flex flex-col gap-2 rounded-lg border border-border bg-lams-light/60 p-4">
 							<span class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
-								<step.icon class="size-4" aria-hidden="true" /> {i + 1} · {step.title}
+								<step.icon class="size-4" aria-hidden="true" /> {step.title}
 							</span>
 							<span class="text-sm text-muted-foreground">{step.body}</span>
 						</li>
 					{/each}
 				</ol>
-
-				<Card.Root class="mt-4 border-lams-green/40 bg-lams-green/5">
-					<Card.Content class="pt-5">
-						<p class="flex items-start gap-2 text-sm">
-							<CheckCircle2 class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
-							<span class="text-muted-foreground">
-								<span class="font-medium text-foreground">That is genuinely the whole job.</span>
-								There is nothing to type, no code to read out, and no app to install. If you have signed in
-								before, you can have your attendance recorded before you have put your phone away.
-							</span>
-						</p>
-					</Card.Content>
-				</Card.Root>
 			</Card.Content>
 		</Card.Root>
 	</section>
 
 	<Separator />
 
-	<!-- ── Statuses ────────────────────────────────────────────────────────── -->
-	<section id="status" aria-labelledby="status-h" class="scroll-mt-20">
+	<!-- ── Statuses ──────────────────────────────────────────────────────── -->
+	<section aria-labelledby="status-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title id="status-h" class="text-lg">What your record says</Card.Title>
+				<Card.Title id="status-h" class="text-lg">What your attendance record means</Card.Title>
 				<Card.Description>
-					Nobody works this out for you, and nobody can type it in for you either.
+					Every record carries one of the following statuses.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
@@ -263,9 +271,8 @@
 					{/each}
 				</ul>
 				<p class="mt-4 text-sm text-muted-foreground">
-					You can see all of this yourself under <span class="font-medium text-foreground">My attendance</span>,
-					including how far your phone was from the screen. If you think any of it is wrong, you can report it
-					from the same page.
+					All records are available under <span class="font-medium text-foreground">My attendance</span>,
+					including the distance recorded for each scan. Any record may be reported from the same page.
 				</p>
 			</Card.Content>
 		</Card.Root>
@@ -273,67 +280,29 @@
 
 	<Separator />
 
-	<!-- ── Problems ────────────────────────────────────────────────────────── -->
-	<section id="wrong" aria-labelledby="wrong-h" class="scroll-mt-20">
+	<!-- ── Lecturers ─────────────────────────────────────────────────────── -->
+	<section id="lecturer" aria-labelledby="lecturer-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title id="wrong-h" class="flex items-center gap-2 text-lg">
-					<HelpCircle class="size-5 text-lams-navy" aria-hidden="true" /> If something goes wrong
-				</Card.Title>
-				<Card.Description>
-					All of these happen in real halls. None of them should cost you the lecture.
-				</Card.Description>
+				<Card.Title id="lecturer-h" class="text-lg">For lecturers — managing lectures</Card.Title>
+				<Card.Description>Prepare the course, start the lecture and review the records.</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<dl class="flex flex-col gap-2">
-					{#each problems as p (p.question)}
-						<div class="rounded-lg border border-border p-3">
-							<dt class="flex items-start gap-2 text-sm font-semibold">
-								<p.icon class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
-								<span>{p.question}</span>
-							</dt>
-							<dd class="mt-1 pl-6 text-sm text-muted-foreground">{p.answer}</dd>
-						</div>
-					{/each}
-				</dl>
-			</Card.Content>
-		</Card.Root>
-	</section>
-
-	<Separator />
-
-	<!-- ── Why it cannot be faked, said plainly ────────────────────────────── -->
-	<section aria-labelledby="why-h" class="scroll-mt-20">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title id="why-h" class="flex items-center gap-2 text-lg">
-					<ShieldCheck class="size-5 text-lams-green" aria-hidden="true" /> Why this is hard to fake
-				</Card.Title>
-				<Card.Description>
-					Four ordinary things working together. None of them slows you down.
-				</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				<ul class="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
-					{#each [
-						{ head: 'The screen keeps changing.', body: 'The barcode holds a code that changes every 10 seconds, so a photograph of it stops working almost immediately. There is nothing useful to send to someone at home.' },
-						{ head: 'Your phone says where it is.', body: 'It reports its own position at the moment you scan, so being in the hall is checked by your handset rather than by somebody else’s.' },
-						{ head: 'The screen has to stay put.', body: 'LAMS knows which room the screen belongs to. If it is carried out of that room it stops recording, so attendance cannot be taken in the wrong place.' },
-						{ head: 'You sign in on one phone.', body: 'Your account belongs to the handset you set it up on, so somebody else cannot use your sign-in on theirs.' }
-					] as r (r.head)}
-						<li class="flex gap-2">
-							<span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lams-green" aria-hidden="true"></span>
-							<span>
-								<b class="font-medium text-foreground">{r.head}</b>
-								{r.body}
+				<ol class="grid items-stretch gap-3 md:grid-cols-2">
+					{#each lecturerSteps as step (step.title)}
+						<li class="flex flex-col gap-2 rounded-lg border border-border bg-lams-light/60 p-4">
+							<span class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
+								<step.icon class="size-4" aria-hidden="true" /> {step.title}
 							</span>
+							<span class="text-sm text-muted-foreground">{step.body}</span>
 						</li>
 					{/each}
-				</ul>
+				</ol>
 				<p class="mt-4 text-sm text-muted-foreground">
-					And where a check cannot be certain, it says so rather than guessing. If your phone’s location is too
-					imprecise to tell, your record is marked for a person to look at instead of being quietly counted for
-					or against you.
+					To start a lecture, select the course and press Start here. Your current location is
+					used automatically with a 50 metre radius. Students who are absent for four consecutive
+					lectures in one course are withdrawn from that course automatically; their previous
+					records are retained and they appear as Withdrawn on the roster.
 				</p>
 			</Card.Content>
 		</Card.Root>
@@ -341,77 +310,21 @@
 
 	<Separator />
 
-	<!-- ── Roles ────────────────────────────────────────────────────────── -->
-	<section aria-labelledby="roles-h" class="scroll-mt-20">
+	<!-- ── Administrators ────────────────────────────────────────────────── -->
+	<section id="admin" aria-labelledby="admin-h" class="scroll-mt-20">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title id="roles-h" class="text-lg">Who does what</Card.Title>
-			</Card.Header>
-			<Card.Content class="grid gap-4 sm:grid-cols-3">
-				{#each roles as role (role.who)}
-					<div class="rounded-lg border border-border p-3">
-						<p class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
-							<role.icon class="size-4" aria-hidden="true" />
-							{role.who}
-						</p>
-						<p class="mt-1 text-sm text-muted-foreground">{role.body}</p>
-					</div>
-				{/each}
-			</Card.Content>
-		</Card.Root>
-	</section>
-
-	<Separator />
-
-	<section aria-labelledby="kept-h" class="scroll-mt-20">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title id="kept-h" class="flex items-center gap-2 text-lg">
-					<ClipboardCheck class="size-5 text-lams-green" aria-hidden="true" /> What is written down
-				</Card.Title>
-				<Card.Description>All of it is visible to you, and you can query any of it.</Card.Description>
+				<Card.Title id="admin-h" class="text-lg">For administrators — oversight and records</Card.Title>
+				<Card.Description>Configure the institution, assign staff and maintain accurate records.</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<ul class="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 md:grid-cols-4">
-					{#each kept as item (item)}
-						<li class="flex items-start gap-2">
-							<CircleCheck class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
-							<span>{item}</span>
-						</li>
-					{/each}
-				</ul>
-				<p class="mt-4 text-xs text-muted-foreground">
-					Only a program rep or lecturer can add a student by hand, and they have to give a reason. Nobody can put
-					themselves into a program they do not belong to.
-				</p>
-			</Card.Content>
-		</Card.Root>
-	</section>
-
-				<section aria-labelledby="timeline-h" class="scroll-mt-20">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title id="timeline-h" class="flex items-center gap-2 text-lg">
-					<DoorOpen class="size-5 text-lams-navy" aria-hidden="true" /> What happens during a lecture
-				</Card.Title>
-				<Card.Description>The parts you never have to do anything about.</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				<ol class="relative flex flex-col gap-5 border-l-2 border-border pl-6">
-					{#each timeline as step (step.at)}
-						<li class="relative">
-							<span
-								class="absolute -left-[1.9rem] top-1 size-3 rounded-full bg-lams-green ring-4 ring-background"
-								aria-hidden="true"
-							></span>
-							<p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-lams-navy">
-								<span
-									class="rounded bg-lams-light px-1.5 py-0.5 font-mono text-xs font-medium text-lams-navy"
-									>{step.at}</span
-								>
-								{step.title}
-							</p>
-							<p class="text-sm text-muted-foreground">{step.body}</p>
+				<ol class="grid items-stretch gap-3 md:grid-cols-2">
+					{#each adminSteps as step (step.title)}
+						<li class="flex flex-col gap-2 rounded-lg border border-border bg-lams-light/60 p-4">
+							<span class="flex items-center gap-2 text-sm font-semibold text-lams-navy">
+								<step.icon class="size-4" aria-hidden="true" /> {step.title}
+							</span>
+							<span class="text-sm text-muted-foreground">{step.body}</span>
 						</li>
 					{/each}
 				</ol>
@@ -421,19 +334,48 @@
 
 	<Separator />
 
-			<section class="flex flex-col items-center gap-3 rounded-lg bg-lams-light/70 p-8 text-center">
-					<p class="text-lg font-semibold text-lams-navy">That is the whole system.</p>
-					<p class="max-w-md text-sm text-muted-foreground">
-						{#if isAuthed}
-							You are signed in — continue where you left off.
-						{:else}
-							One scan, one record, and nothing for a student to type. Sign in to see your own attendance, or to run
-							a lecture.
-						{/if}
-					</p>
-					<div class="flex flex-wrap justify-center gap-2">
-						<Button href={dashboardHref}>{dashboardLabel}</Button>
-						<Button variant="outline" href="/">Back to the start</Button>
-					</div>
-				</section>
-			</div>
+	<!-- ── FAQ ───────────────────────────────────────────────────────────── -->
+	<section id="faq" aria-labelledby="faq-h" class="scroll-mt-20">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title id="faq-h" class="flex items-center gap-2 text-lg">
+					<HelpCircle class="size-5 text-lams-navy" aria-hidden="true" /> Frequently asked questions
+				</Card.Title>
+				<Card.Description>
+					Answers to the questions most commonly raised by students, lecturers and administrators.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<dl class="flex flex-col gap-2">
+					{#each faqs as f (f.question)}
+						<div class="rounded-lg border border-border p-3">
+							<dt class="flex items-start gap-2 text-sm font-semibold">
+								<f.icon class="mt-0.5 size-4 shrink-0 text-lams-green" aria-hidden="true" />
+								<span>{f.question}</span>
+							</dt>
+							<dd class="mt-1 pl-6 text-sm text-muted-foreground">{f.answer}</dd>
+						</div>
+					{/each}
+				</dl>
+			</Card.Content>
+		</Card.Root>
+	</section>
+
+	<Separator />
+
+	<section class="flex flex-col items-center gap-3 rounded-lg bg-lams-light/70 p-8 text-center">
+		<p class="text-lg font-semibold text-lams-navy">Attendance in three seconds.</p>
+		<p class="max-w-md text-sm text-muted-foreground">
+			{#if isAuthed}
+				You are signed in — continue where you left off.
+			{:else}
+				One scan records your name, time and distance automatically. Sign in to view your
+				attendance or to run a lecture.
+			{/if}
+		</p>
+		<div class="flex flex-wrap justify-center gap-2">
+			<Button href={dashboardHref}>{dashboardLabel}</Button>
+			<Button variant="outline" href="/">Back to the start</Button>
+		</div>
+	</section>
+</div>

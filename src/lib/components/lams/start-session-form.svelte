@@ -66,6 +66,10 @@
 			offeringId = '';
 		}
 	});
+	// One course, one choice: pre-select it so the lecturer only presses Start.
+	$effect(() => {
+		if (offerings.length === 1 && !offeringId) offeringId = offerings[0]._id;
+	});
 	let lat = $state('');
 	let lng = $state('');
 	// Where the screen itself stands. Left blank it follows the lecture
@@ -88,6 +92,12 @@
 	 * acknowledgement never outlives the fix it was about.
 	 */
 	let confirmCoarse = $state(false);
+	/** One-tap quick start: current location, 50 m radius enforced server-side. */
+	let quickLocating = $state(false);
+	let quickBusy = $state(false);
+	let quickAccuracy = $state<number | null>(null);
+	let confirmQuickCoarse = $state(false);
+	const quickTooCoarse = $derived(quickAccuracy !== null && quickAccuracy > 50);
 
 	/** Blank station fields mean "same as the lecture", so the API omits them. */
 	const usesLectureSpot = $derived(stationLat.trim() === '' && stationLng.trim() === '');
@@ -163,8 +173,55 @@
 		}
 	}
 
-	async function start(e: SubmitEvent) {
-		e.preventDefault();
+	/**
+	 * One-tap start: uses the current GPS fix and lets the server enforce the
+	 * 50 m radius, 15 m station tolerance and 5/10 min windows. No coordinates
+	 * to type and no radius to choose — the ordinary lecture just starts.
+	 */
+	async function startQuick() {
+		if (!offeringId || quickBusy || quickLocating) return;
+		// A coarse fix would fail the whole hall one scan at a time, so the
+		// first tap stops here and says so — the second tap is the starter
+		// saying they saw the warning and accept the risk.
+		if (quickTooCoarse && !confirmQuickCoarse) {
+			confirmQuickCoarse = true;
+			return;
+		}
+		quickLocating = true;
+		try {
+			const pos = await getCurrentPosition();
+			quickAccuracy = pos.accuracyM ?? null;
+			if (quickAccuracy !== null && quickAccuracy > 50 && !confirmQuickCoarse) {
+				confirmQuickCoarse = true;
+				return;
+			}
+			quickBusy = true;
+			try {
+				const client = requireConvexClient();
+				const res = (await client.mutation(api.attendance.startSessionQuick, {
+					token,
+					offeringId: offeringId as never,
+					lectureLat: pos.lat,
+					lectureLng: pos.lng,
+					...(pos.accuracyM !== undefined ? { accuracyM: pos.accuracyM } : {}),
+					...(confirmQuickCoarse ? { allowCoarsePin: true } : {})
+				})) as { sessionId: string };
+				reportSuccess(
+					`Lecture started here (±${Math.round(pos.accuracyM ?? 0)} m, 50 m radius).`,
+					6000
+				);
+				await onstarted(res.sessionId);
+			} finally {
+				quickBusy = false;
+			}
+		} catch (err) {
+			reportError(err, 'Could not start the lecture.');
+		} finally {
+			quickLocating = false;
+		}
+	}
+
+	async function start(e: SubmitEvent) {		e.preventDefault();
 		// A coarse pin would fail the whole hall one scan at a time, so the
 		// first tap stops here and says so — the second tap is the starter
 		// saying they saw the warning and accept the risk. The button itself
@@ -211,9 +268,9 @@
 	<Card.Header>
 		<Card.Title>Start a lecture now</Card.Title>
 		<Card.Description>
-			Set where the lecture is and how long students have to arrive, then start. The station QR
-			appears and students scan it from their own phones. Anyone not recorded when it closes is
-			marked absent.
+			Choose the course, then press Start. Your current location becomes the lecture
+			position with a 50 m radius — the station QR appears and students scan it from
+			their own phones. Anyone not recorded when it closes is marked absent.
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="flex flex-col gap-4">
@@ -225,7 +282,7 @@
 				lecturer can make you a rep of your program.
 			</p>
 		{:else}
-			<form class="flex flex-col gap-4" onsubmit={start}>
+			<div class="flex flex-col gap-4">
 				<div class="flex flex-col gap-1.5">
 					<Label for="soff">Course and program</Label>
 					<Select.Root
@@ -254,6 +311,46 @@
 						</Select.Content>
 					</Select.Root>
 				</div>
+
+				<div class="rounded-md border border-lams-green/40 bg-lams-green/5 p-3">
+					<p class="text-sm font-medium">Start here with your current location</p>
+					<p class="mt-0.5 text-xs text-muted-foreground">
+						50 m radius, on time for 5 minutes, then late until 10 minutes. No typing needed.
+					</p>
+					{#if quickAccuracy !== null}
+						<p class="mt-1 text-xs text-muted-foreground">
+							Last fix was accurate to ±{Math.round(quickAccuracy)} m.
+						</p>
+					{/if}
+					{#if confirmQuickCoarse && quickTooCoarse}
+						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+							This fix (±{Math.round(quickAccuracy ?? 0)} m) is coarser than the 50 m allowed
+							distance, so starting now may mark students out of range. Press Start again to go
+							ahead anyway, or use Advanced settings below to type the room's coordinates.
+						</p>
+					{/if}
+					<div class="mt-2">
+						<Button
+							type="button"
+							disabled={!offeringId || quickBusy || quickLocating}
+							onclick={startQuick}
+						>
+							{quickLocating
+								? 'Reading your location…'
+								: quickBusy
+									? 'Starting…'
+									: confirmQuickCoarse && quickTooCoarse
+										? 'Start anyway (50 m)'
+										: 'Start here — 50 m'}
+						</Button>
+					</div>
+				</div>
+
+				<details class="rounded-md border border-border">
+					<summary class="cursor-pointer list-none px-3 py-2 text-sm font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+						Advanced settings — type coordinates, move the screen, change timings
+					</summary>
+			<form class="flex flex-col gap-4 border-t border-border p-3" onsubmit={start}>
 
 				<div class="rounded-md border border-border p-3">
 					<p class="mb-2 text-sm font-medium">Where is the lecture?</p>
@@ -415,6 +512,8 @@
 					</Button>
 				</div>
 			</form>
+				</details>
+			</div>
 		{/if}
 	</Card.Content>
 </Card.Root>

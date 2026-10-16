@@ -8,6 +8,7 @@ import {
 	DEFAULT_STATION_RADIUS_M,
 	DEFAULT_STATION_TOLERANCE_M,
 	haversineM,
+	isNoShowStreak,
 	judgeScanDevice,
 	normalizeId,
 	normalizeReg,
@@ -189,5 +190,32 @@ describe('computeAutoStatus', () => {
 		assert.equal(computeAutoStatus(100, 120, 240, 10, RADIUS), 'Present');
 		assert.equal(computeAutoStatus(200, 120, 240, 10, RADIUS), 'Late');
 		assert.equal(computeAutoStatus(300, 120, 240, 10, RADIUS), 'Absent');
+	});
+});
+
+describe('isNoShowStreak', () => {
+	it('withdraws after 4 consecutive absences (happy path)', () => {
+		assert.equal(isNoShowStreak(['Absent', 'Absent', 'Absent', 'Absent'], 4), true);
+	});
+
+	it('treats out-of-range scans as not present', () => {
+		assert.equal(isNoShowStreak(['Absent', 'Out_of_Range', 'Absent', 'Absent'], 4), true);
+	});
+
+	it('treats a missing row after close as absent', () => {
+		assert.equal(isNoShowStreak(['Absent', null, undefined, 'Absent'], 4), true);
+	});
+
+	it('breaks the streak on presence, lateness or excuse (error path)', () => {
+		assert.equal(isNoShowStreak(['Absent', 'Absent', 'Present', 'Absent'], 4), false);
+		assert.equal(isNoShowStreak(['Late', 'Absent', 'Absent', 'Absent'], 4), false);
+		assert.equal(isNoShowStreak(['Absent', 'Absent', 'Excused', 'Absent'], 4), false);
+	});
+
+	it('needs the full run: fewer lectures or garbage never withdraws (edge cases)', () => {
+		assert.equal(isNoShowStreak(['Absent', 'Absent', 'Absent'], 4), false);
+		assert.equal(isNoShowStreak([], 4), false);
+		assert.equal(isNoShowStreak(['Absent', 'Absent', 'Absent', 'Absent'], 0), false);
+		assert.equal(isNoShowStreak(['Absent', 'mystery', 'Absent', 'Absent'], 4), false);
 	});
 });

@@ -5,7 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { BookOpen, Plus } from '@lucide/svelte';
-	import type { MyEnrolment, OpenCourse } from '$lib/lams/types';
+	import type { MyEnrolment, OpenCourse, WithdrawnEnrolment } from '$lib/lams/types';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
 	/**
@@ -20,6 +20,7 @@
 
 	let enrolments = $state<MyEnrolment[]>([]);
 	let openCourses = $state<OpenCourse[]>([]);
+	let withdrawn = $state<WithdrawnEnrolment[]>([]);
 	let loading = $state(true);
 	let busyId = $state('');
 
@@ -46,12 +47,14 @@
 	async function load() {
 		try {
 			const client = requireConvexClient();
-			const [mine, open] = (await Promise.all([
+			const [mine, open, gone] = (await Promise.all([
 				client.query(api.enrolments.listMine, { token }),
-				client.query(api.enrolments.listOpenForStudent, { token })
-			])) as [MyEnrolment[], OpenCourse[]];
+				client.query(api.enrolments.listOpenForStudent, { token }),
+				client.query(api.enrolments.listMyWithdrawn, { token })
+			])) as [MyEnrolment[], OpenCourse[], WithdrawnEnrolment[]];
 			enrolments = mine;
 			openCourses = open;
+			withdrawn = gone;
 		} catch (err) {
 			reportError(err, 'Could not load your courses.');
 		} finally {
@@ -95,7 +98,7 @@
 
 {#if loading}
 	<div class="h-24 animate-pulse rounded-md bg-muted"></div>
-{:else if enrolments.length === 0 && joinable.length === 0}
+{:else if enrolments.length === 0 && joinable.length === 0 && withdrawn.length === 0}
 	<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
 		No courses yet. Ask your program rep or lecturer to add you to your program.
 	</p>
@@ -162,6 +165,27 @@
 							>
 								{busyId === o._id ? 'Joining…' : 'Join'}
 							</Button>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+		{#if withdrawn.length > 0}
+			<div class="rounded-lg border border-red-200 bg-red-50/50">
+				<div class="flex flex-wrap items-center gap-2 px-4 pt-3">
+					<p class="text-sm font-bold text-red-800">Withdrawn ({withdrawn.length})</p>
+				</div>
+				<p class="px-4 text-xs text-red-700">
+					You were withdrawn from these courses after 4 consecutive absences. Your past
+					attendance is kept. Speak to your lecturer to rejoin.
+				</p>
+				<ul class="flex flex-col divide-y divide-red-100 px-4 pb-2">
+					{#each withdrawn as w (w._id)}
+						<li class="py-2">
+							<p class="text-sm font-semibold">{w.courseCode} — {w.courseTitle}</p>
+							<p class="text-xs text-red-700">
+								{w.programName} · {w.semesterName} · {w.withdrawReason}
+							</p>
 						</li>
 					{/each}
 				</ul>
