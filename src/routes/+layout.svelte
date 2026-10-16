@@ -43,6 +43,12 @@
 	 * second copy in the header would just be visual noise.
 	 */
 	const hasBodyNav = $derived(path !== '/' && path !== '/how-it-works' && !path.startsWith('/signin'));
+	/**
+	 * The landing page carries its own hero with the same actions, so a second
+	 * pill row in the header would just duplicate it. Every other public page
+	 * keeps the row.
+	 */
+	const isLanding = $derived(path === '/');
 	const nav = $derived.by(() => {
 		const how = { href: '/how-it-works', label: 'How to use', icon: Info };
 		const dashboard = { href: '/home', label: 'My account', icon: House };
@@ -115,7 +121,7 @@
 		<div class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 py-2.5 lg:max-w-5xl">
 			<div class="flex items-center gap-x-3 gap-y-2">
 				<a href={homeHref} class="flex shrink-0 items-center gap-3" aria-label="LAMS home">
-					<img src="/lams-logo.png" alt="" class="size-10 rounded-lg" />
+					<img src="/lams-logo.png" alt="" class="size-12 rounded-lg" />
 					<span class="leading-tight">
 						<span class="block text-lg font-extrabold tracking-tight text-lams-navy">LAMS</span>
 						<span class="hidden text-xs text-muted-foreground sm:block">
@@ -160,7 +166,7 @@
 				</div>
 			</div>
 
-			{#if status !== 'checking' && status !== 'unavailable' && !hasBodyNav}
+			{#if status !== 'checking' && status !== 'unavailable' && !hasBodyNav && !isLanding}
 				<!--
 					Public pages only: every other page renders its own section
 					strip in the body, so this row would duplicate it. Scrolls
