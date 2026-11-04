@@ -179,7 +179,7 @@
 								<Table.Cell>{b.present}</Table.Cell>
 								<Table.Cell>{b.late}</Table.Cell>
 								<Table.Cell>{b.absent}</Table.Cell>
-								<Table.Cell class="font-semibold {b.attendPct < 75 ? 'text-amber-700' : 'text-emerald-700'}">
+								<Table.Cell class="font-semibold">
 									{b.attendPct}%
 								</Table.Cell>
 							</Table.Row>

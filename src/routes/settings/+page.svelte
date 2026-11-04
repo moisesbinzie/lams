@@ -147,7 +147,7 @@
 				<Card.Header>
 					<Card.Title>Lecturer accounts</Card.Title>
 					<Card.Description>
-						Lecturer accounts now live in the admin console, where you can create accounts and assign courses.
+						Lecturer accounts now live in the admin console, where you can add accounts and assign courses.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>

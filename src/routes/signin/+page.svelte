@@ -287,7 +287,7 @@
 					</span>
 					<div class="flex-1">
 						<p class="font-semibold">I am an admin</p>
-						<p class="text-sm text-muted-foreground">Create lecturers, reset passwords, assign courses.</p>
+						<p class="text-sm text-muted-foreground">Add lecturers, reset passwords, assign courses.</p>
 					</div>
 					<Button onclick={() => { mode = 'admin'; resetMessages(); }}>Continue</Button>
 				</Card.Content>

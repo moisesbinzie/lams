@@ -317,9 +317,7 @@
 									<Table.Cell class="text-xs">{r.absent}</Table.Cell>
 									<Table.Cell class="text-xs">{r.excused}</Table.Cell>
 									<Table.Cell>
-										<span
-											class="font-semibold {r.attendPct < 75 ? 'text-amber-700' : 'text-emerald-700'}"
-										>
+										<span class="font-semibold">
 											{r.attendPct}%
 										</span>
 									</Table.Cell>

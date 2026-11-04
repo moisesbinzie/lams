@@ -336,7 +336,7 @@
 
 				{#if lecturers.length === 0}
 					<p class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-						No lecturers yet. Create the first one above — they sign in on the lecturer door with
+						No lecturers yet. Add the first one above — they sign in on the lecturer door with
 						the temporary password.
 					</p>
 				{:else}
