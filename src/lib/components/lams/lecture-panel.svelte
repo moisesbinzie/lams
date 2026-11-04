@@ -37,7 +37,7 @@
 	/** GPS uncertainty of each fix above, when it came from a live reading. Typing clears it. */
 	let pinAccuracy = $state<number | null>(null);
 	let stationPinAccuracy = $state<number | null>(null);
-	let radius = $state('15');
+	let radius = $state('50');
 	// The three-tier window: on time, late, then too late to count.
 	let onTimeMin = $state('5');
 	let lateUntilMin = $state('10');
@@ -291,7 +291,7 @@
 				<details class="rounded-md border border-border p-3">
 					<summary class="cursor-pointer text-sm font-medium">Advanced: screen position and timing</summary>
 					<p class="mt-1 text-xs text-muted-foreground">
-						Defaults work for most classrooms (15 m radius, 5 min on time, 10 min late). Open only when
+						Defaults work for most classrooms (50 m radius, 5 min on time, 10 min late). Open only when
 						the screen sits away from you or you need a wider window.
 					</p>
 					<div class="mt-3 flex flex-col gap-3">

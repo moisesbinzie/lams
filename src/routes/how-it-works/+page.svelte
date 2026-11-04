@@ -62,7 +62,7 @@
 			icon: MapPin,
 			label: 'Out of range',
 			meaning:
-				'Your phone reported a position outside the 15 metre radius around the screen. If you were in the classroom, report the record so your lecturer can review it.'
+				'Your phone reported a position outside the 50 metre radius around the screen. If you were in the classroom, report the record so your lecturer can review it.'
 		},
 		{ icon: XCircle, label: 'Absent', meaning: 'No record was submitted for you before the lecture closed.' },
 		{
@@ -81,7 +81,7 @@
 		{
 			icon: ScanLine,
 			title: 'Step 2 — Generate the QR code',
-			body: 'Select the course and press Generate QR code. Your current location becomes the lecture position with a 15 metre radius. The station QR code appears on screen for students to scan.'
+			body: 'Select the course and press Generate QR code. Your current location becomes the lecture position with a 50 metre radius. The station QR code appears on screen for students to scan.'
 		},
 		{
 			icon: MonitorSmartphone,
@@ -165,7 +165,7 @@
 			icon: ScanLine,
 			question: 'I am a lecturer. How do I generate a QR code quickly?',
 			answer:
-				'Open Take attendance, select the course and press Generate QR code. Your current location is used with a 15 metre radius. Advanced settings remain available for typing coordinates manually, repositioning the screen, or changing the on-time and late windows.'
+				'Open Take attendance, select the course and press Generate QR code. Your current location is used with a 50 metre radius. Advanced settings remain available for typing coordinates manually, repositioning the screen, or changing the on-time and late windows.'
 		}
 	];
 
@@ -300,7 +300,7 @@
 				</ol>
 				<p class="mt-4 text-sm text-muted-foreground">
 					To generate a QR code, select the course and press Generate QR code. Your current location is
-					used automatically with a 15 metre radius. Students who are absent for four consecutive
+					used automatically with a 50 metre radius. Students who are absent for four consecutive
 					lectures in one course are withdrawn from that course automatically; their previous
 					records are retained and they appear as Withdrawn on the roster.
 				</p>

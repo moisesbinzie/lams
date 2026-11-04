@@ -79,7 +79,7 @@
 	/** GPS uncertainty of each fix above, when it came from a live reading. Typing clears it. */
 	let pinAccuracy = $state<number | null>(null);
 	let stationPinAccuracy = $state<number | null>(null);
-	let radius = $state('15');
+	let radius = $state('50');
 	let onTimeMin = $state('5');
 	let lateUntilMin = $state('10');
 	let locating = $state(false);
@@ -90,7 +90,7 @@
 	 * acknowledgement never outlives the fix it was about.
 	 */
 	let confirmCoarse = $state(false);
-	/** One-tap quick start: current location, 15 m radius enforced server-side. */
+	/** One-tap quick start: current location, 50 m radius enforced server-side. */
 	let quickLocating = $state(false);
 	let quickBusy = $state(false);
 	let quickAccuracy = $state<number | null>(null);
@@ -98,7 +98,7 @@
 	let quickBest = $state<string | null>(null);
 	let confirmQuickCoarse = $state(false);
 	/** Default student radius in metres, shared by the quick-start warnings. */
-	const DEFAULT_RADIUS_M = 15;
+	const DEFAULT_RADIUS_M = 50;
 	const quickTooCoarse = $derived(quickAccuracy !== null && quickAccuracy > DEFAULT_RADIUS_M);
 	/**
 	 * Metres from the sampled fix to where this course usually meets, when the
@@ -190,7 +190,7 @@
 	/**
 	 * One-tap start: samples the current position the hardened way (best fix
 	 * over a few seconds, as student scans do) and lets the server enforce the
-	 * 15 m radius, 15 m station tolerance and 5/10 min windows. No coordinates
+	 * 50 m radius, 15 m station tolerance and 5/10 min windows. No coordinates
 	 * to type and no radius to choose — the ordinary lecture just starts.
 	 *
 	 * Two warnings can still stop the first tap: a fix coarser than the room,
@@ -245,7 +245,7 @@
 					...(confirmFarPin ? { allowFarPin: true } : {})
 				})) as { sessionId: string };
 				reportSuccess(
-					`Lecture started here (±${Math.round(pos.accuracyM ?? 0)} m, 15 m radius).`,
+					`Lecture started here (±${Math.round(pos.accuracyM ?? 0)} m, 50 m radius).`,
 					6000
 				);
 				await onstarted(res.sessionId);
@@ -340,7 +340,7 @@
 		<Card.Title>Generate QR code</Card.Title>
 		<Card.Description>
 			Choose the course, then press Generate QR code. Your current location becomes the lecture
-			position with a 15 m radius — the station QR appears and students scan it from
+			position with a 50 m radius — the station QR appears and students scan it from
 			their own phones. Anyone not recorded when it closes is marked absent.
 		</Card.Description>
 	</Card.Header>
@@ -391,7 +391,7 @@
 				<div class="rounded-md border border-lams-green/40 bg-lams-green/5 p-3">
 					<p class="text-sm font-medium">Generate QR code here with your current location</p>
 					<p class="mt-0.5 text-xs text-muted-foreground">
-						15 m radius, on time for 5 minutes, then late until 10 minutes. No typing needed.
+						50 m radius, on time for 5 minutes, then late until 10 minutes. No typing needed.
 					</p>
 					{#if quickAccuracy !== null}
 						<p class="mt-1 text-xs text-muted-foreground">
@@ -400,7 +400,7 @@
 					{/if}
 					{#if confirmQuickCoarse && quickTooCoarse}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-							This fix (±{Math.round(quickAccuracy ?? 0)} m) is coarser than the 15 m allowed
+							This fix (±{Math.round(quickAccuracy ?? 0)} m) is coarser than the 50 m allowed
 							distance, so starting now may mark students out of range. Press Generate QR code
 							again to go ahead anyway, or use Advanced settings below to type the room's
 							coordinates.
@@ -436,8 +436,8 @@
 								: quickBusy
 									? 'Generating…'
 									: (confirmQuickCoarse && quickTooCoarse) || confirmFarPin
-										? 'Generate anyway (15 m)'
-										: 'Generate QR code — 15 m'}
+										? 'Generate anyway (50 m)'
+										: 'Generate QR code — 50 m'}
 						</Button>
 					</div>
 				</div>

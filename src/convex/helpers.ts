@@ -5,14 +5,14 @@
  * rep does not say otherwise. Shared with the station backfill migration so a
  * session migrated from the lecture coordinates looks exactly like a fresh one.
  */
-export const DEFAULT_STATION_RADIUS_M = 15;
+export const DEFAULT_STATION_RADIUS_M = 50;
 
 /**
  * How far the station *screen itself* may sit from the room it was pinned to
  * before every scan is refused.
  *
- * The same size as `DEFAULT_STATION_RADIUS_M` today: the student radius is
- * classroom-sized, and the screen is one fixed object that is not supposed to
+ * Deliberately tighter than `DEFAULT_STATION_RADIUS_M`: the student radius is
+ * room-sized (50 m), and the screen is one fixed object that is not supposed to
  * travel — so the default here is sized for a screen that stays on the front
  * desk.
  */

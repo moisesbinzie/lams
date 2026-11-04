@@ -168,7 +168,7 @@ export const startSession = mutation({
 		if (args.lectureLat < -90 || args.lectureLat > 90) throw new Error('Invalid latitude.');
 		if (args.lectureLng < -180 || args.lectureLng > 180) throw new Error('Invalid longitude.');
 
-		const radiusM = args.radiusM ?? 15;
+		const radiusM = args.radiusM ?? 50;
 		// Three tiers: on time, late, then too late to count. Both thresholds
 		// are adjustable so a lecturer can widen them for a long discussion.
 		const onTimeSec = args.onTimeSec ?? DEFAULT_ON_TIME_SEC;
@@ -258,7 +258,7 @@ export const startSession = mutation({
 
 /**
  * One-tap lecture start. The lecturer picks a course and presses Start: the
- * client sends its current GPS fix and the server enforces a 15 m station
+ * client sends its current GPS fix and the server enforces a 50 m station
  * radius, 15 m station tolerance, 5 min on-time and 10 min late windows.
  * No caller-supplied radius or window is accepted, so a wide pin can never
  * be smuggled in from the client.
@@ -296,8 +296,8 @@ export const startSessionQuick = mutation({
 		if (args.lectureLat < -90 || args.lectureLat > 90) throw new Error('Invalid latitude.');
 		if (args.lectureLng < -180 || args.lectureLng > 180) throw new Error('Invalid longitude.');
 
-		// Enforced server-side: the quick path is always a 15 m room pin.
-		const radiusM = 15;
+		// Enforced server-side: the quick path is always a 50 m room pin.
+		const radiusM = 50;
 		const stationRadiusM = DEFAULT_STATION_RADIUS_M;
 		const stationToleranceM = DEFAULT_STATION_TOLERANCE_M;
 		const onTimeSec = DEFAULT_ON_TIME_SEC;
