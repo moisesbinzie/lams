@@ -337,9 +337,9 @@
 
 <Card.Root>
 	<Card.Header>
-		<Card.Title>Start a lecture now</Card.Title>
+		<Card.Title>Generate QR code</Card.Title>
 		<Card.Description>
-			Choose the course, then press Start. Your current location becomes the lecture
+			Choose the course, then press Generate QR code. Your current location becomes the lecture
 			position with a 15 m radius — the station QR appears and students scan it from
 			their own phones. Anyone not recorded when it closes is marked absent.
 		</Card.Description>
@@ -389,7 +389,7 @@
 				</div>
 
 				<div class="rounded-md border border-lams-green/40 bg-lams-green/5 p-3">
-					<p class="text-sm font-medium">Start here with your current location</p>
+					<p class="text-sm font-medium">Generate QR code here with your current location</p>
 					<p class="mt-0.5 text-xs text-muted-foreground">
 						15 m radius, on time for 5 minutes, then late until 10 minutes. No typing needed.
 					</p>
@@ -401,22 +401,23 @@
 					{#if confirmQuickCoarse && quickTooCoarse}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
 							This fix (±{Math.round(quickAccuracy ?? 0)} m) is coarser than the 15 m allowed
-							distance, so starting now may mark students out of range. Press Start again to go
-							ahead anyway, or use Advanced settings below to type the room's coordinates.
+							distance, so starting now may mark students out of range. Press Generate QR code
+							again to go ahead anyway, or use Advanced settings below to type the room's
+							coordinates.
 						</p>
 					{/if}
 					{#if confirmFarPin && quickFarM !== null && quickFarM > FAR_PIN_WARN_M}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
 							This is {formatFarM(quickFarM)} from where this course usually meets — you may be
 							pinning the wrong place (a stale location from outside the classroom does this). Move
-							into the classroom and press Start again for a fresh fix, or press Start again to start
-							here anyway because the lecture genuinely moved rooms.
+							into the classroom and press Generate QR code again for a fresh fix, or press Generate
+							QR code again to start here anyway because the lecture genuinely moved rooms.
 						</p>
 					{:else if confirmFarPin}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-							This is far from where this course usually meets. Press Start again to start here
-							anyway because the lecture genuinely moved rooms — otherwise move into the classroom
-							and start again for a fresh fix.
+							This is far from where this course usually meets. Press Generate QR code again to
+							start here anyway because the lecture genuinely moved rooms — otherwise move into
+							the classroom and start again for a fresh fix.
 						</p>
 					{/if}
 					{#if quickLocating && quickBest}
@@ -433,10 +434,10 @@
 							{quickLocating
 								? 'Reading your location…'
 								: quickBusy
-									? 'Starting…'
+									? 'Generating…'
 									: (confirmQuickCoarse && quickTooCoarse) || confirmFarPin
-										? 'Start anyway (15 m)'
-										: 'Start here — 15 m'}
+										? 'Generate anyway (15 m)'
+										: 'Generate QR code — 15 m'}
 						</Button>
 					</div>
 				</div>
@@ -576,7 +577,7 @@
 						class="rounded-md border border-amber-300 bg-amber-50 p-3"
 						role="alert"
 					>
-						<p class="text-sm font-medium text-amber-900">Start anyway with this fix?</p>
+						<p class="text-sm font-medium text-amber-900">Generate anyway with this fix?</p>
 						<p class="mt-1 text-xs text-amber-900">
 							{#if pinTooCoarse}
 								The lecture position is only accurate to ±{Math.round(pinAccuracy ?? 0)} m, which is
@@ -586,7 +587,7 @@
 								The screen position is only accurate to ±{Math.round(stationPinAccuracy ?? 0)} m,
 								which is coarser than the {radius} m allowed distance.
 							{/if}
-							Starting now may mark students out of range. Press Start lecture again to go ahead
+							Starting now may mark students out of range. Press Generate QR code again to go ahead
 							anyway, or improve the fix above first.
 						</p>
 					</div>
@@ -597,10 +598,10 @@
 						class="rounded-md border border-amber-300 bg-amber-50 p-3"
 						role="alert"
 					>
-						<p class="text-sm font-medium text-amber-900">Start here anyway?</p>
+						<p class="text-sm font-medium text-amber-900">Generate here anyway?</p>
 						<p class="mt-1 text-xs text-amber-900">
 							These coordinates are far from where this course usually meets. If the lecture
-							genuinely moved rooms, press Start lecture again to go ahead. Otherwise check the
+							genuinely moved rooms, press Generate QR code again to go ahead. Otherwise check the
 							coordinates above first — starting in the wrong place marks students out of range.
 						</p>
 					</div>
@@ -608,7 +609,7 @@
 
 				<div>
 					<Button type="submit" disabled={busy || !offeringId || !lat || !lng}>
-						{busy ? 'Starting…' : confirmCoarse && (pinTooCoarse || stationTooCoarse) ? 'Start anyway' : confirmFarPin ? 'Start here anyway' : 'Start lecture'}
+						{busy ? 'Generating…' : confirmCoarse && (pinTooCoarse || stationTooCoarse) ? 'Generate anyway' : confirmFarPin ? 'Generate here anyway' : 'Generate QR code'}
 					</Button>
 				</div>
 			</form>

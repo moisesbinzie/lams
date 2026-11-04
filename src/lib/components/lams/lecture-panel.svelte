@@ -193,9 +193,9 @@
 <div class="flex flex-col gap-4">
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>Start a lecture</Card.Title>
+			<Card.Title>Generate QR code</Card.Title>
 			<Card.Description>
-				Pick one of your assigned courses, share your location, and start. The lecture closes itself.
+				Pick one of your assigned courses, share your location, and generate the QR code. The lecture closes itself.
 			</Card.Description>
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-4">
@@ -367,7 +367,7 @@
 						class="rounded-md border border-amber-300 bg-amber-50 p-3"
 						role="alert"
 					>
-						<p class="text-sm font-medium text-amber-900">Start anyway with this fix?</p>
+						<p class="text-sm font-medium text-amber-900">Generate anyway with this fix?</p>
 						<p class="mt-1 text-xs text-amber-900">
 							{#if pinTooCoarse}
 								The lecture position is only accurate to ±{Math.round(pinAccuracy ?? 0)} m, which is
@@ -377,7 +377,7 @@
 								The screen position is only accurate to ±{Math.round(stationPinAccuracy ?? 0)} m,
 								which is coarser than the {radius} m allowed distance.
 							{/if}
-							Starting now may mark students out of range. Press Start lecture again to go ahead
+							Starting now may mark students out of range. Press Generate QR code again to go ahead
 							anyway, or improve the fix above first.
 						</p>
 					</div>
@@ -389,10 +389,10 @@
 						disabled={busy || !offeringId || !lat || !lng}
 					>
 						{busy
-							? 'Starting…'
+							? 'Generating…'
 							: confirmCoarse && (pinTooCoarse || stationTooCoarse)
-								? 'Start anyway'
-								: 'Start lecture'}
+								? 'Generate anyway'
+								: 'Generate QR code'}
 					</Button>
 				</form>
 			{/if}
