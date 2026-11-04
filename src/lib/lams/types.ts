@@ -125,8 +125,6 @@ export interface ProgramCoursePlacement {
 	lecturerName: string | null;
 	lecturerUsername: string | null;
 	studentCount: number;
-	/** Number of meeting slots for this offering. */
-	meetingCount: number;
 	createdAt: number;
 }
 
@@ -144,7 +142,6 @@ export interface StudentCourse {
 	semesterName: string;
 	semesterYear: number | null;
 	addedBy: 'self' | 'rep' | 'lecturer';
-	meetingCount: number;
 	enrolledAt: number;
 }
 
@@ -166,7 +163,7 @@ export interface StudentCourseOption {
 	addedBy: 'self' | 'rep' | 'lecturer' | null;
 }
 
-/** A course one student could be given, from every program they belong to. */
+/** A course placement offered to a program year in a semester. */
 export interface Offering {
 	_id: string;
 	courseId: string | null;
@@ -191,7 +188,6 @@ export interface Offering {
 	lecturerName?: string | null;
 	lecturerUsername?: string | null;
 	studentCount: number;
-	meetingCount?: number;
 	createdAt?: number;
 }
 
@@ -334,15 +330,6 @@ export interface MyEnrolment {
 	semesterName: string;
 	programName: string;
 	addedBy: 'self' | 'rep' | 'lecturer';
-	meetings: {
-		_id: string;
-		kind: 'weekly' | 'makeup';
-		dayOfWeek: number | null;
-		date: string | null;
-		startTime: string;
-		endTime: string;
-		room: string;
-	}[];
 }
 
 export type AttendanceMethod = 'scan' | 'station' | 'rep' | 'manual' | 'absent';
