@@ -1,6 +1,6 @@
 // The stationary station code.
 //
-// The QR at the front of the hall stays in the same place all lecture, but the
+// The QR at the front of the classroom stays in the same place all lecture, but the
 // code inside it does not: a fresh six-digit code every 60 seconds, derived
 // from a secret minted when the session opened. A student who scans it with
 // their own phone establishes two things at once:
@@ -22,7 +22,7 @@
 //
 // What this cannot do is survive a deliberately spoofed GPS fix. A determined
 // student with a mock-location app, or anyone using a desktop browser with
-// developer tools open, can place themselves inside the hall from anywhere. No
+// developer tools open, can place themselves inside the classroom from anywhere. No
 // browser-delivered location is a security boundary. Treat the whole scheme as
 // a strong deterrent against casual sharing plus a legible audit trail for
 // review — never as proof.

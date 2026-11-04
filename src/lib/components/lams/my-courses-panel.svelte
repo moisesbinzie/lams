@@ -72,7 +72,7 @@
 			const client = requireConvexClient();
 			await client.mutation(api.enrolments.enrolSelf, { token, offeringId: offeringId as never });
 			await load();
-			reportSuccess('Enrolled. Your timetable builds itself from here.');
+			reportSuccess('Enrolled.');
 		} catch (err) {
 			reportError(err, 'Could not join that course.');
 		} finally {
@@ -119,7 +119,7 @@
 							<div>
 								<p class="text-sm font-semibold">{e.courseCode} — {e.courseTitle}</p>
 								<p class="text-xs text-muted-foreground">
-									{e.semesterName} · {e.meetings.length} meeting time{e.meetings.length === 1 ? '' : 's'} · joined
+									{e.semesterName} · joined
 									{e.addedBy === 'self' ? 'by you' : `by ${e.addedBy}`}
 								</p>
 							</div>

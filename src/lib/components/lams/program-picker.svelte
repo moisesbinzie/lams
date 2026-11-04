@@ -9,8 +9,8 @@
 	 * Two shapes on purpose:
 	 *   - `chips` — every program visible as a button, for a short list where the
 	 *     current choice should always be on screen;
-	 *   - `select` — a dropdown, for the timetable and student filters where the
-	 *     list can run to dozens and a row of chips would push the page down.
+	 *   - `select` — a dropdown, for student filters where the list can run to
+	 *     dozens and a row of chips would push the page down.
 	 */
 	let {
 		programs,

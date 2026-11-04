@@ -5,17 +5,16 @@
  * rep does not say otherwise. Shared with the station backfill migration so a
  * session migrated from the lecture coordinates looks exactly like a fresh one.
  */
-export const DEFAULT_STATION_RADIUS_M = 50;
+export const DEFAULT_STATION_RADIUS_M = 15;
 
 /**
  * How far the station *screen itself* may sit from the room it was pinned to
  * before every scan is refused.
  *
- * Much smaller than `DEFAULT_STATION_RADIUS_M`. The student radius has to hold a
- * whole lecture hall; the screen is one fixed object and is not supposed to
- * travel. At 50 m a station could be carried to a neighbouring building and
- * still pass, which defeats the point of pinning a room to it at all — so the
- * default here is sized for a screen that stays on the front desk.
+ * The same size as `DEFAULT_STATION_RADIUS_M` today: the student radius is
+ * classroom-sized, and the screen is one fixed object that is not supposed to
+ * travel — so the default here is sized for a screen that stays on the front
+ * desk.
  */
 export const DEFAULT_STATION_TOLERANCE_M = 15;
 
@@ -25,7 +24,7 @@ export const DEFAULT_STATION_TOLERANCE_M = 15;
  * Optional in the schema because sessions predating the station-placement check
  * have no value. Falling back to the student radius is the conservative choice —
  * it is wider, so an un-backfilled session blocks later than a fresh one rather
- * than stranding a whole hall on a stale row.
+ * than stranding a whole classroom on a stale row.
  */
 export function toleranceFor(session: { stationToleranceM?: number; stationRadiusM?: number }): number {
 	return session.stationToleranceM ?? session.stationRadiusM ?? DEFAULT_STATION_TOLERANCE_M;
@@ -76,7 +75,7 @@ export type AutoStatus = 'Present' | 'Late' | 'Out_of_Range' | 'Absent';
  * nothing else catches it, because the display device then agrees with the pin
  * it was started from. History is the only witness: a course meets in the same
  * room week after week, so a pin half a kilometre from every previous one is
- * almost certainly not the hall.
+ * almost certainly not the classroom.
  */
 export const FAR_PIN_WARN_M = 500;
 
@@ -111,8 +110,8 @@ export function isNoShowStreak(
 
 /**
  * Refuses a station pin taken from a GPS fix coarser than the radius it has to
- * prove. A pin captured at ±300 m for a 50 m room can sit streets away from the
- * hall, and every honest scan then reads as hundreds of metres Out_of_Range —
+ * prove. A pin captured at ±300 m for a 15 m room can sit streets away from the
+ * classroom, and every honest scan then reads as hundreds of metres Out_of_Range —
  * the failure mode that only "widen the radius to 1000 m" papers over.
  *
  * Returns the refusal message, or null when the pin may be used. A pin with no

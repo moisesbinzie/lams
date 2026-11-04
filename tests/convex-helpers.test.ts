@@ -35,10 +35,10 @@ describe('toleranceFor', () => {
 		assert.equal(DEFAULT_STATION_TOLERANCE_M, 15);
 	});
 
-	it('defaults the station tolerance to less than the student radius', () => {
+	it('defaults the station tolerance to no more than the student radius', () => {
 		// The whole design: a screen that may wander as far as the students do is
 		// not pinned to a room.
-		assert.ok(DEFAULT_STATION_TOLERANCE_M < DEFAULT_STATION_RADIUS_M);
+		assert.ok(DEFAULT_STATION_TOLERANCE_M <= DEFAULT_STATION_RADIUS_M);
 	});
 });
 

@@ -36,7 +36,7 @@
 		<div class="text-center">
 			<h1 class="text-2xl font-bold text-lams-navy">Scan attendance</h1>
 			<p class="text-sm text-muted-foreground">
-				Point your camera at the code on the screen at the front of the hall. Your name, the time and
+				Point your camera at the code on the screen at the front of the classroom. Your name, the time and
 				how far you were from the screen are recorded for you.
 			</p>
 		</div>

@@ -12,10 +12,9 @@
 	import AcademicYearPanel from '$lib/components/lams/academic-year-panel.svelte';
 	import ProgramsPanel from '$lib/components/lams/programs-panel.svelte';
 	import StudentsPanel from '$lib/components/lams/students-panel.svelte';
-	import TimetablePanel from '$lib/components/lams/timetable-panel.svelte';
 
 	/**
-	 * The setup console: four tabs that follow the structure itself, in the
+	 * The setup console: three tabs that follow the structure itself, in the
 	 * order it has to be built.
 	 *
 	 *   1. Academic year  — years and their semesters. Nothing else can exist first.
@@ -23,18 +22,17 @@
 	 *                       semester. The course catalogue lives here too, because
 	 *                       adding a course and placing it are one decision.
 	 *   3. Students       — the roll, and the courses each student studies.
-	 *   4. Timetable      — when those courses meet, as a week.
 	 *
 	 * Admins only. Lecturers used to share these screens, but their job now
-	 * lives in the main tabs (Take attendance, Lectures, Records, Timetable,
-	 * Settings) — a lecturer who lands here is sent to `/lectures`.
+	 * lives in the main tabs (Take attendance, Lectures, Records, Settings) —
+	 * a lecturer who lands here is sent to `/lectures`.
 	 */
 	let token = getToken();
 	let role = $state('');
 	let isAdmin = $state(false);
 	let tab = $state('academic-year');
 
-	const VALID_TABS = new Set(['academic-year', 'programs', 'students', 'timetable']);
+	const VALID_TABS = new Set(['academic-year', 'programs', 'students']);
 
 	onMount(async () => {
 		const requested = page.url.searchParams.get('tab');
@@ -74,8 +72,7 @@
 	const adminTabs = [
 		{ key: 'academic-year', label: 'Academic year' },
 		{ key: 'programs', label: 'Programs' },
-		{ key: 'students', label: 'Students' },
-		{ key: 'timetable', label: 'Timetable' }
+		{ key: 'students', label: 'Students' }
 	] as const;
 
 	const tabs = adminTabs;
@@ -91,8 +88,8 @@
 			</h1>
 			<p class="text-xs text-muted-foreground">
 				Work left to right: create the academic year, place courses in your programs, register
-				students and give them their courses, then timetable the week. Lecturer accounts and
-				their assignments live in the admin console.
+				students and give them their courses. Lecturer accounts and their assignments live in
+				the admin console.
 			</p>
 		</div>
 	</div>
@@ -111,10 +108,8 @@
 						<AcademicYearPanel />
 					{:else if t.key === 'programs'}
 						<ProgramsPanel />
-					{:else if t.key === 'students'}
-						<StudentsPanel />
 					{:else}
-						<TimetablePanel />
+						<StudentsPanel />
 					{/if}
 				</Tabs.Content>
 			{/each}

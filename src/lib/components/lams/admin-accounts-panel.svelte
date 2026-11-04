@@ -307,7 +307,7 @@
 						<Input id="ln" bind:value={newFullName} placeholder="e.g. Jane Mwale" required />
 					</div>
 					<div class="flex items-end">
-						<Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create lecturer'}</Button>
+						<Button type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add lecturer'}</Button>
 					</div>
 				</form>
 				<p class="text-xs text-muted-foreground">

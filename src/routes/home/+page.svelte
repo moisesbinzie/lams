@@ -10,7 +10,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { LogOut, CalendarDays, BarChart3, ScanLine, BookOpen, Pencil } from '@lucide/svelte';
+	import { LogOut, BarChart3, ScanLine, BookOpen, Pencil } from '@lucide/svelte';
 	import type { Me, MyEnrolment, MyAttendanceRow, ProgramRep } from '$lib/lams/types';
 	import { reportError } from '$lib/lams/notify.svelte';
 	import StudentNav from '$lib/components/lams/student-nav.svelte';
@@ -189,8 +189,8 @@
 			still needs to join and drop courses like anyone else.
 
 			It is also the loudest thing on the page on purpose — a full row, a size
-			up, and lifted off the surface with its own shadow. A student standing in
-			a hall is looking for one target, not reading cards.
+			up, and lifted off the surface with its own shadow. A student standing in a
+			classroom is looking for one target, not reading cards.
 
 			Two columns, not three: the site column is 768 px, so a three-column
 			state would only ever have applied at a viewport width the content never
@@ -205,13 +205,8 @@
 				<ScanLine class="size-8 shrink-0" />
 				<span class="flex flex-col">
 					<span class="text-lg font-bold">Scan attendance</span>
-					<span class="text-xs font-normal opacity-90">Point your phone at the screen in the hall</span>
+					<span class="text-xs font-normal opacity-90">Point your phone at the screen in the classroom</span>
 				</span>
-			</Button>
-			<Button href="/timetable" size="lg" variant="outline" class="h-auto flex-col items-start gap-1 py-4 text-left">
-				<CalendarDays class="size-5" />
-				<span class="text-sm font-semibold">My timetable</span>
-				<span class="text-xs font-normal opacity-80">When my courses meet</span>
 			</Button>
 			<Button href="/attendance" size="lg" variant="outline" class="h-auto flex-col items-start gap-1 py-4 text-left">
 				<BarChart3 class="size-5" />

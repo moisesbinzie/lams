@@ -194,7 +194,7 @@
 
 		const station = parseStationUrl(read, window.location.origin);
 		if (!station) {
-			rejected = 'That code is not a LAMS attendance code. Point the camera at the screen at the front of the hall.';
+			rejected = 'That code is not a LAMS attendance code. Point the camera at the screen at the front of the classroom.';
 			return;
 		}
 

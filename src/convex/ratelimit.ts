@@ -12,7 +12,7 @@
 //     student fumbling with a camera. Much looser limits; see `STATION_LIMITS`.
 //
 // Keying on the thing being probed rather than the caller keeps a single-target
-// sweep slow without punishing a whole lecture hall signing in at once from
+// sweep slow without punishing a whole classroom signing in at once from
 // behind one NAT address.
 
 const WINDOW_MS = 15 * 60 * 1000;

@@ -43,7 +43,7 @@ function formatFarM(m: number): string {
  * woke its radio often reports where it last had signal — kilometres away
  * with a plausible accuracy — and the coarse-pin gate cannot see that. A
  * course meets in the same room week after week, so a pin half a kilometre
- * from all previous ones is almost certainly not the hall, and starting there
+ * from all previous ones is almost certainly not the classroom, and starting there
  * would mark the whole room out of range one scan at a time.
  *
  * Returns the refusal message, or null when the pin may be used. No history
@@ -65,7 +65,7 @@ async function farPinError(ctx: any, offeringId: unknown, lat: number, lng: numb
 	if (!Number.isFinite(nearest) || nearest <= FAR_PIN_WARN_M) return null;
 	return (
 		`This is ${formatFarM(nearest)} from where this course usually meets. ` +
-		`If you are standing in the hall, wait for a better fix and try again — ` +
+		`If you are standing in the classroom, wait for a better fix and try again — ` +
 		`starting here would mark students out of range. ` +
 		`If the lecture genuinely moved rooms, confirm to start here anyway.`
 	);
@@ -128,7 +128,7 @@ export const startSession = mutation({
 		/**
 		 * Defaults to the lecture position — a station in the room is the usual case.
 		 * Set when the screen sits somewhere else, e.g. mounted in a doorway while
-		 * the lecture itself is at the back of the hall.
+		 * the lecture itself is at the back of the classroom.
 		 */
 		stationLat: v.optional(v.number()),
 		stationLng: v.optional(v.number()),
@@ -168,7 +168,7 @@ export const startSession = mutation({
 		if (args.lectureLat < -90 || args.lectureLat > 90) throw new Error('Invalid latitude.');
 		if (args.lectureLng < -180 || args.lectureLng > 180) throw new Error('Invalid longitude.');
 
-		const radiusM = args.radiusM ?? 50;
+		const radiusM = args.radiusM ?? 15;
 		// Three tiers: on time, late, then too late to count. Both thresholds
 		// are adjustable so a lecturer can widen them for a long discussion.
 		const onTimeSec = args.onTimeSec ?? DEFAULT_ON_TIME_SEC;
@@ -190,7 +190,7 @@ export const startSession = mutation({
 		if (stationLat < -90 || stationLat > 90) throw new Error('Invalid station latitude.');
 		if (stationLng < -180 || stationLng > 180) throw new Error('Invalid station longitude.');
 		// The pin is what every scan is measured against, so a fix coarser than
-		// the student radius is refused here rather than failing the whole hall
+		// the student radius is refused here rather than failing the whole classroom
 		// one scan at a time — unless the starter explicitly overrode after
 		// seeing the warning in the UI. An explicit station fix is judged on its
 		// own accuracy; when the station falls back to the lecture position, the
@@ -258,7 +258,7 @@ export const startSession = mutation({
 
 /**
  * One-tap lecture start. The lecturer picks a course and presses Start: the
- * client sends its current GPS fix and the server enforces a 50 m station
+ * client sends its current GPS fix and the server enforces a 15 m station
  * radius, 15 m station tolerance, 5 min on-time and 10 min late windows.
  * No caller-supplied radius or window is accepted, so a wide pin can never
  * be smuggled in from the client.
@@ -296,8 +296,8 @@ export const startSessionQuick = mutation({
 		if (args.lectureLat < -90 || args.lectureLat > 90) throw new Error('Invalid latitude.');
 		if (args.lectureLng < -180 || args.lectureLng > 180) throw new Error('Invalid longitude.');
 
-		// Enforced server-side: the quick path is always a 50 m room pin.
-		const radiusM = 50;
+		// Enforced server-side: the quick path is always a 15 m room pin.
+		const radiusM = 15;
 		const stationRadiusM = DEFAULT_STATION_RADIUS_M;
 		const stationToleranceM = DEFAULT_STATION_TOLERANCE_M;
 		const onTimeSec = DEFAULT_ON_TIME_SEC;
@@ -381,7 +381,7 @@ export const usualMeetingPlace = query({
  * and a code is only good for its own slot and the two neighbours. A student
  * whose phone then spends longer than that — a sign-in round trip, a cold start,
  * a slow location fix on a bad connection, which is exactly the situation in the
- * halls this is built for — arrives holding a code that has already rolled, and
+ * classrooms this is built for — arrives holding a code that has already rolled, and
  * is refused for a reason that is not their fault. This lets that scan be
  * finished silently instead of sending them back to squint at the screen again.
  *
@@ -461,7 +461,7 @@ export const getSession = query({
  * Only a recorder who may take this program's attendance can call it. The secret
  * is deliberately returned rather than the code itself — the display derives
  * each code locally so the screen keeps refreshing on a timer with no network
- * round trip, and in a hall with poor signal that is the difference between a
+	 * round trip, and in a classroom with poor signal that is the difference between a
  * working station and a frozen one. A rep is already fully trusted over their
  * own program's attendance, so the secret adds no exposure they did not have.
  */
@@ -659,12 +659,12 @@ export const submitStationScan = mutation({
 		const distanceM = proximity.distanceM ?? undefined;
 
 		// A fix coarser than the radius usually cannot tell inside from outside —
-		// a phone reporting ±150 m for a 50 m radius is not evidence either way.
+		// a phone reporting ±150 m for a 15 m radius is not evidence either way.
 		// So the distance is withheld from the status calculation entirely unless
 		// `judgeProximity` reached a confident verdict, and the record is flagged
 		// for a human instead. Letting a coarse fix produce a confident verdict
 		// in either direction would either fail honest students sitting in the
-		// hall or wave through absent ones. The one exception lives inside
+		// classroom or wave through absent ones. The one exception lives inside
 		// `judgeProximity`: a fix whose whole error circle still lies outside the
 		// radius disproves presence and stays a confident Out_of_Range.
 		const noFix = proximity.distanceM === null;

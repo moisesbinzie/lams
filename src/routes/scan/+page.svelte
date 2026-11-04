@@ -500,7 +500,7 @@
 	<div class="text-center">
 		<h1 class="text-2xl font-bold text-lams-navy">Take attendance</h1>
 		<p class="text-sm text-muted-foreground">
-			Put this screen at the front of the hall. Students scan it with their own phones.
+			Put this screen at the front of the classroom. Students scan it with their own phones.
 		</p>
 	</div>
 

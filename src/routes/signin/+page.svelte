@@ -81,7 +81,7 @@
 	}
 
 	/**
-	 * Hall networks drop single requests. A refusal (wrong PIN, unknown name)
+	 * Campus networks drop single requests. A refusal (wrong PIN, unknown name)
 	 * arrives as data and is never retried; a thrown failure — the request
 	 * itself never completing — is tried once more after a short pause before
 	 * the student is told it failed.

@@ -11,7 +11,7 @@
 	const steps = [
 		{ icon: ClipboardCheck, text: 'Join your programme — once, with help from your representative.' },
 		{ icon: BookOpen, text: 'Pick your courses for the semester.' },
-		{ icon: ScanLine, text: 'Scan the screen in the hall. Done.' }
+		{ icon: ScanLine, text: 'Scan the screen in the classroom. Done.' }
 	];
 
 	const viewer = $derived(sessionMe());

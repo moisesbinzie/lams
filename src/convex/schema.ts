@@ -164,7 +164,7 @@ export default defineSchema({
 	/**
 	 * Singleton app settings, keyed by `key`. Only `activeYear` is stored
 	 * today: the academic year that drives default semester pickers across
-	 * Setup (Programs, Timetable). One row, `key: 'activeYear'`.
+	 * Setup (Programs). One row, `key: 'activeYear'`.
 	 */
 	appSettings: defineTable({
 		key: v.string(),
@@ -368,7 +368,7 @@ export default defineSchema({
 		/**
 		 * Where the QR station physically stands. Kept separate from the lecture
 		 * position so the two radii can differ — the screen may sit at a doorway
-		 * while the lecture is at the back of the hall. Sessions opened before the
+		 * while the lecture is at the back of the classroom. Sessions opened before the
 		 * station existed are backfilled from the lecture coordinates by
 		 * `migrations.ts`.
 		 */
@@ -378,7 +378,7 @@ export default defineSchema({
 		stationRadiusM: v.number(),
 		/**
 		 * The GPS uncertainty reported when the station was pinned, if it was
-		 * pinned from a live fix rather than typed by hand. Kept so a hall of
+		 * pinned from a live fix rather than typed by hand. Kept so a classroom of
 		 * Out_of_Range scans can be traced back to a coarse pin.
 		 */
 		stationAccuracyM: v.optional(v.number()),
@@ -390,7 +390,7 @@ export default defineSchema({
 		 * have no value; the gate falls back to `stationRadiusM` when it is absent.
 		 *
 		 * Separate from `stationRadiusM` on purpose: that radius is generous
-		 * because a whole hall of students has to fit inside it, while the screen
+		 * because a whole classroom of students has to fit inside it, while the screen
 		 * is a fixed object expected to stay put. Defaulting one to the other
 		 * would let the station be carried to the next building and still count.
 		 */

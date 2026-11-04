@@ -33,7 +33,7 @@
 	 *
 	 *   anon     -> How to use
 	 *   admin    -> Admin console, Set up, Records, Settings, How
-	 *   lecturer -> Take attendance, Lectures, Records, Timetable, Settings, How
+	 *   lecturer -> Take attendance, Lectures, Records, Settings, How
 	 *   rep      -> My account, Take attendance, How
 	 *   student  -> My account, How
 	 *
@@ -110,7 +110,7 @@
 	<title>LAMS — Lecture Attendance</title>
 	<meta
 		name="description"
-		content="Lecture attendance made fast and simple. Students scan a QR code on the screen at the front of the hall, and their name, time and distance from the station are recorded automatically. Attend • Track • Succeed."
+		content="Lecture attendance made fast and simple. Students scan a QR code on the screen at the front of the classroom, and their name, time and distance from the station are recorded automatically. Attend • Track • Succeed."
 	/>
 	<link rel="icon" href="/lams-mark.png" />
 	<link rel="apple-touch-icon" href="/lams-logo.png" />
@@ -214,7 +214,7 @@
 			class="mx-auto flex w-full max-w-3xl flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground sm:flex-row sm:justify-between sm:text-left lg:max-w-5xl"
 		>
 			<p class="font-semibold text-lams-navy">Attend • Track • Succeed</p>
-			<p>Scan the screen at the front of the hall, and the rest is recorded for you.</p>
+			<p>Scan the screen at the front of the classroom, and the rest is recorded for you.</p>
 			<a href="/how-it-works" class="underline underline-offset-2 hover:text-foreground"
 				>How to use</a
 			>

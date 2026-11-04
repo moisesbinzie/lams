@@ -317,7 +317,7 @@
 												<Input
 													id={`n-${r._id}`}
 													bind:value={disputeNote}
-													placeholder="e.g. I was not in the hall that day"
+													placeholder="e.g. I was not in the classroom that day"
 												/>
 											</div>
 											<Button type="submit" size="sm">Send to lecturer</Button>

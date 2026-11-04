@@ -125,7 +125,7 @@ export interface ProgramCoursePlacement {
 	lecturerName: string | null;
 	lecturerUsername: string | null;
 	studentCount: number;
-	/** Weekly + make-up slots set on the Timetable tab. */
+	/** Number of meeting slots for this offering. */
 	meetingCount: number;
 	createdAt: number;
 }
@@ -166,38 +166,7 @@ export interface StudentCourseOption {
 	addedBy: 'self' | 'rep' | 'lecturer' | null;
 }
 
-/** One weekly meeting as the timetable grid draws it. */
-export interface TimetableSlot {
-	meetingId: string;
-	offeringId: string;
-	courseCode: string;
-	courseTitle: string;
-	yearOfStudy: number | null;
-	dayOfWeek: number;
-	startTime: string;
-	endTime: string;
-	room: string;
-}
-
-/** A course placed in the selected semester, for the grid's legend/picker. */
-export interface TimetableGridCourse {
-	offeringId: string;
-	courseId: string;
-	courseCode: string;
-	courseTitle: string;
-	hoursPerWeek: number | null;
-	yearOfStudy: number | null;
-	lecturerNames: string[];
-}
-
-export interface TimetableGrid {
-	programName: string;
-	semesterName: string;
-	semesterYear: number;
-	slots: TimetableSlot[];
-	courses: TimetableGridCourse[];
-}
-
+/** A course one student could be given, from every program they belong to. */
 export interface Offering {
 	_id: string;
 	courseId: string | null;
@@ -222,41 +191,8 @@ export interface Offering {
 	lecturerName?: string | null;
 	lecturerUsername?: string | null;
 	studentCount: number;
-	/** Weekly + make-up slots set on this offering. */
 	meetingCount?: number;
 	createdAt?: number;
-}
-
-export interface Meeting {
-	_id: string;
-	kind: 'weekly' | 'makeup';
-	dayName: string;
-	dayOfWeek: number | null;
-	date: string | null;
-	startTime: string;
-	endTime: string;
-	room: string;
-	note: string;
-}
-
-export interface TimetableEntry {
-	meetingId: string;
-	offeringId: string;
-	courseCode: string;
-	courseTitle: string;
-	room: string;
-	startTime: string;
-	endTime: string;
-}
-
-export interface TimetableWeekly extends TimetableEntry {
-	dayOfWeek: number;
-	dayName: string;
-}
-
-export interface TimetableMakeup extends TimetableEntry {
-	date: string;
-	note: string;
 }
 
 /** What the station screen needs to render its rotating code and say where it is. */

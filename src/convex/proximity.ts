@@ -58,7 +58,7 @@ export function judgeProximity(
  *   - A student's reading that cannot be decided is recorded and flagged. That
  *     is the safe direction — it never silently loses a present student.
  *   - Here the reading *gates* the whole session. Refusing every scan because a
- *     phone could not get a fix would empty a real lecture hall, so the burden
+ *     phone could not get a fix would empty a real classroom, so the burden
  *     of proof is on the accusation: only a reading whose entire error circle
  *     lies beyond the room counts as "the station moved".
  *

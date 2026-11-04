@@ -3,7 +3,7 @@
 // Until now a session's pinned coordinates were only ever used to judge
 // *students* — the distance between a phone and the screen. Nothing checked
 // where the screen itself was, so a station that had been picked up and carried
-// out of the hall kept issuing perfectly valid codes to whoever stood in front
+// out of the classroom kept issuing perfectly valid codes to whoever stood in front
 // of it, and the "you must be in the room" promise was really "you must be near
 // wherever the rep typed a number".
 //

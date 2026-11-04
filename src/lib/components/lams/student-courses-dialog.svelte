@@ -205,8 +205,8 @@
 									<span class="min-w-0">
 										<span class="font-mono font-medium">{c.courseCode}</span> — {c.courseTitle}
 										<span class="block text-xs text-muted-foreground">
-											{c.programName} · Year {c.yearOfStudy ?? '—'} · {c.semesterName} ·
-											{c.meetingCount} slot{c.meetingCount === 1 ? '' : 's'} · added by {c.addedBy}
+											{c.programName} · Year {c.yearOfStudy ?? '—'} · {c.semesterName} · added by
+											{c.addedBy}
 										</span>
 									</span>
 									<Button

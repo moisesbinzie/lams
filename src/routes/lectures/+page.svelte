@@ -58,7 +58,6 @@
 		<img src="/lams-logo.png" alt="LAMS" class="size-12 rounded-lg" />
 		<div>
 			<h1 class="flex flex-wrap items-center gap-2 text-xl font-bold text-lams-navy">
-				Lectures
 				{#if isAdmin}
 					<Badge class="bg-amber-600 text-white">Admin account</Badge>
 				{:else}

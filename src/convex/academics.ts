@@ -189,7 +189,7 @@ export const removeSemester = mutation({
 
 /**
  * The active academic year: the one that drives default semester pickers in
- * Setup (Programs board, Timetable). Any signed-in actor may read it;
+ * Setup (Programs board). Any signed-in actor may read it;
  * only admins may set it. Null until the first year is marked active.
  */
 export const getActiveYear = query({
@@ -532,7 +532,7 @@ export const removeCourse = mutation({
  * One offering, resolved into everything a screen needs to draw it.
  *
  * Kept as a plain builder rather than a registered function on purpose:
- * `listOfferings`, `listProgramBoard` and the timetable all speak the same row
+ * `listOfferings`, `listProgramBoard` all speak the same row
  * shape, and three copies of it would drift the first time a field is added.
  * Display names are stored next to their ids so the client never has to join.
  */

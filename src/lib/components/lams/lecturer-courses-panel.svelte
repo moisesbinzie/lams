@@ -12,7 +12,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Table from '$lib/components/ui/table';
 	import { BookOpen, Plus, Search, UserPlus, UserMinus, UserRoundCheck } from '@lucide/svelte';
-	import type { Meeting, Offering, ProgramRow, WithdrawnRosterEntry, JoinRequest } from '$lib/lams/types';
+	import type { Offering, ProgramRow, WithdrawnRosterEntry, JoinRequest } from '$lib/lams/types';
 	import { parseRosterCsv } from '$lib/lams/csv';
 	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
 
@@ -49,7 +49,6 @@
 			addedBy: 'self' | 'rep' | 'lecturer';
 		}[]
 	>([]);
-	let meetings = $state<Meeting[]>([]);
 	/** Person ids currently representing the selected course's program. */
 	let repIds = $state<Set<string>>(new Set());
 	/** Students automatically withdrawn from the selected course (4 consecutive absences). */
@@ -154,7 +153,6 @@
 	async function loadRoster() {
 		if (!token || !selectedId) {
 			roster = [];
-			meetings = [];
 			repIds = new Set();
 			withdrawnRoster = [];
 			joinRequests = [];
@@ -164,12 +162,8 @@
 		rosterLoading = true;
 		try {
 			const client = requireConvexClient();
-			const [rows, slots, reps, gone, requests] = (await Promise.all([
+			const [rows, reps, gone, requests] = (await Promise.all([
 				client.query(api.enrolments.listForOffering, {
-					token,
-					offeringId: selectedId as never
-				}),
-				client.query(api.timetable.listForOffering, {
 					token,
 					offeringId: selectedId as never
 				}),
@@ -197,13 +191,11 @@
 					status: string;
 					addedBy: 'self' | 'rep' | 'lecturer';
 				}[],
-				Meeting[],
 				{ personId: string }[],
 				WithdrawnRosterEntry[],
 				JoinRequest[]
 			];
 			roster = rows;
-			meetings = slots;
 			repIds = new Set(reps.map((r) => String(r.personId)));
 			withdrawnRoster = gone;
 			joinRequests = requests;
@@ -608,11 +600,6 @@
 							<Badge variant="secondary">
 								{o.studentCount} student{o.studentCount === 1 ? '' : 's'}
 							</Badge>
-							{#if (o.meetingCount ?? 0) > 0}
-								<Badge variant="outline">
-									{o.meetingCount} slot{o.meetingCount === 1 ? '' : 's'}
-								</Badge>
-							{/if}
 						</span>
 					</button>
 				{/each}
@@ -629,18 +616,6 @@
 						{selected.programName}{selected.yearOfStudy
 							? ` · Year ${selected.yearOfStudy}`
 							: ''} · {selected.semesterName}
-						{#if meetings.length > 0}
-							<span class="block mt-1">
-								Meets:
-								{#each meetings as m, i (m._id)}
-									{m.kind === 'weekly'
-										? `${m.dayName} ${m.startTime}–${m.endTime}`
-										: `${m.date} ${m.startTime}–${m.endTime}`}{m.room
-										? ` (Room ${m.room})`
-										: ''}{i < meetings.length - 1 ? ' · ' : ''}
-								{/each}
-							</span>
-						{/if}
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="flex flex-wrap items-center gap-2">

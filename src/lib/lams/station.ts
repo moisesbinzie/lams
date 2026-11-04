@@ -6,7 +6,7 @@
 //
 // Deriving on the display rather than fetching a new code every 60 seconds
 // means the screen refreshes on a timer with no network round trip — it keeps
-// working in exactly the lecture halls where the signal is worst.
+// working in exactly the classrooms where the signal is worst.
 
 export const STATION_PERIOD_SEC = 60;
 

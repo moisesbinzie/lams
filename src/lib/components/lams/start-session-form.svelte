@@ -79,9 +79,7 @@
 	/** GPS uncertainty of each fix above, when it came from a live reading. Typing clears it. */
 	let pinAccuracy = $state<number | null>(null);
 	let stationPinAccuracy = $state<number | null>(null);
-	let radius = $state('50');
-	// How far the screen may be carried from its spot before scanning stops.
-	let tolerance = $state('15');
+	let radius = $state('15');
 	let onTimeMin = $state('5');
 	let lateUntilMin = $state('10');
 	let locating = $state(false);
@@ -92,14 +90,16 @@
 	 * acknowledgement never outlives the fix it was about.
 	 */
 	let confirmCoarse = $state(false);
-	/** One-tap quick start: current location, 50 m radius enforced server-side. */
+	/** One-tap quick start: current location, 15 m radius enforced server-side. */
 	let quickLocating = $state(false);
 	let quickBusy = $state(false);
 	let quickAccuracy = $state<number | null>(null);
 	/** Best fix seen while sampling, shown under the button while locating. */
 	let quickBest = $state<string | null>(null);
 	let confirmQuickCoarse = $state(false);
-	const quickTooCoarse = $derived(quickAccuracy !== null && quickAccuracy > 50);
+	/** Default student radius in metres, shared by the quick-start warnings. */
+	const DEFAULT_RADIUS_M = 15;
+	const quickTooCoarse = $derived(quickAccuracy !== null && quickAccuracy > DEFAULT_RADIUS_M);
 	/**
 	 * Metres from the sampled fix to where this course usually meets, when the
 	 * usual room is known and the fix sits far from it. Armed by the pre-check
@@ -114,7 +114,7 @@
 	const usesLectureSpot = $derived(stationLat.trim() === '' && stationLng.trim() === '');
 	/**
 	 * A pin captured from a fix coarser than the radius would fail the whole
-	 * hall one scan at a time, so the server refuses it — this is the same
+	 * classroom one scan at a time, so the server refuses it — this is the same
 	 * check up front, with the way out spelt out (better fix or wider radius).
 	 */
 	const pinTooCoarse = $derived(pinAccuracy !== null && pinAccuracy > Number(radius));
@@ -190,7 +190,7 @@
 	/**
 	 * One-tap start: samples the current position the hardened way (best fix
 	 * over a few seconds, as student scans do) and lets the server enforce the
-	 * 50 m radius, 15 m station tolerance and 5/10 min windows. No coordinates
+	 * 15 m radius, 15 m station tolerance and 5/10 min windows. No coordinates
 	 * to type and no radius to choose — the ordinary lecture just starts.
 	 *
 	 * Two warnings can still stop the first tap: a fix coarser than the room,
@@ -200,7 +200,7 @@
 	 */
 	async function startQuick() {
 		if (!offeringId || quickBusy || quickLocating) return;
-		// A coarse fix would fail the whole hall one scan at a time, so the
+		// A coarse fix would fail the whole classroom one scan at a time, so the
 		// first tap stops here and says so — the second tap is the starter
 		// saying they saw the warning and accept the risk.
 		if (quickTooCoarse && !confirmQuickCoarse) {
@@ -220,7 +220,7 @@
 				}
 			});
 			quickAccuracy = pos.accuracyM ?? null;
-			if (quickAccuracy !== null && quickAccuracy > 50 && !confirmQuickCoarse) {
+			if (quickAccuracy !== null && quickAccuracy > DEFAULT_RADIUS_M && !confirmQuickCoarse) {
 				confirmQuickCoarse = true;
 				return;
 			}
@@ -245,7 +245,7 @@
 					...(confirmFarPin ? { allowFarPin: true } : {})
 				})) as { sessionId: string };
 				reportSuccess(
-					`Lecture started here (±${Math.round(pos.accuracyM ?? 0)} m, 50 m radius).`,
+					`Lecture started here (±${Math.round(pos.accuracyM ?? 0)} m, 15 m radius).`,
 					6000
 				);
 				await onstarted(res.sessionId);
@@ -290,7 +290,7 @@
 
 	async function start(e: SubmitEvent) {
 		e.preventDefault();
-		// A coarse pin would fail the whole hall one scan at a time, so the
+		// A coarse pin would fail the whole classroom one scan at a time, so the
 		// first tap stops here and says so — the second tap is the starter
 		// saying they saw the warning and accept the risk. The button itself
 		// always works: a warning must never strand a lecture.
@@ -309,7 +309,6 @@
 				...(pinAccuracy !== null ? { accuracyM: pinAccuracy } : {}),
 				radiusM: Number(radius),
 				stationRadiusM: Number(radius),
-				stationToleranceM: Number(tolerance),
 				// Omitted entirely when blank, so the server falls back to the
 				// lecture position rather than being handed an empty coordinate.
 				...(usesLectureSpot
@@ -341,7 +340,7 @@
 		<Card.Title>Start a lecture now</Card.Title>
 		<Card.Description>
 			Choose the course, then press Start. Your current location becomes the lecture
-			position with a 50 m radius — the station QR appears and students scan it from
+			position with a 15 m radius — the station QR appears and students scan it from
 			their own phones. Anyone not recorded when it closes is marked absent.
 		</Card.Description>
 	</Card.Header>
@@ -392,7 +391,7 @@
 				<div class="rounded-md border border-lams-green/40 bg-lams-green/5 p-3">
 					<p class="text-sm font-medium">Start here with your current location</p>
 					<p class="mt-0.5 text-xs text-muted-foreground">
-						50 m radius, on time for 5 minutes, then late until 10 minutes. No typing needed.
+						15 m radius, on time for 5 minutes, then late until 10 minutes. No typing needed.
 					</p>
 					{#if quickAccuracy !== null}
 						<p class="mt-1 text-xs text-muted-foreground">
@@ -401,7 +400,7 @@
 					{/if}
 					{#if confirmQuickCoarse && quickTooCoarse}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-							This fix (±{Math.round(quickAccuracy ?? 0)} m) is coarser than the 50 m allowed
+							This fix (±{Math.round(quickAccuracy ?? 0)} m) is coarser than the 15 m allowed
 							distance, so starting now may mark students out of range. Press Start again to go
 							ahead anyway, or use Advanced settings below to type the room's coordinates.
 						</p>
@@ -409,14 +408,14 @@
 					{#if confirmFarPin && quickFarM !== null && quickFarM > FAR_PIN_WARN_M}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
 							This is {formatFarM(quickFarM)} from where this course usually meets — you may be
-							pinning the wrong place (a stale location from outside the hall does this). Move
-							into the hall and press Start again for a fresh fix, or press Start again to start
+							pinning the wrong place (a stale location from outside the classroom does this). Move
+							into the classroom and press Start again for a fresh fix, or press Start again to start
 							here anyway because the lecture genuinely moved rooms.
 						</p>
 					{:else if confirmFarPin}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
 							This is far from where this course usually meets. Press Start again to start here
-							anyway because the lecture genuinely moved rooms — otherwise move into the hall
+							anyway because the lecture genuinely moved rooms — otherwise move into the classroom
 							and start again for a fresh fix.
 						</p>
 					{/if}
@@ -436,8 +435,8 @@
 								: quickBusy
 									? 'Starting…'
 									: (confirmQuickCoarse && quickTooCoarse) || confirmFarPin
-										? 'Start anyway (50 m)'
-										: 'Start here — 50 m'}
+										? 'Start anyway (15 m)'
+										: 'Start here — 15 m'}
 						</Button>
 					</div>
 				</div>
@@ -539,23 +538,14 @@
 								Screen is where I am
 							</Button>
 						</div>
-					</div>
-					<div class="mt-2 flex flex-col gap-1 sm:max-w-40">
-						<Label for="stol">Screen may move (m)</Label>
-						<Input id="stol" type="number" min="1" max={radius} bind:value={tolerance} />
-					</div>
-					{#if stationTooCoarse}
+						</div>
+						{#if stationTooCoarse}
 						<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
 							This screen fix (±{Math.round(stationPinAccuracy ?? 0)} m) is coarser than the {radius} m
 							allowed distance. Wait for a better fix, type the screen's spot by hand, or widen the
 							allowed distance below.
 						</p>
 					{/if}
-					<p class="mt-2 text-xs text-muted-foreground">
-						The screen checks it is still in this room. If it is carried more than {tolerance} m away,
-						scanning stops and students are told why — nobody is marked absent because of it. Keep this small:
-						it is about the screen staying put, not about students.
-					</p>
 				</div>
 
 				<div class="rounded-md border border-border p-3">

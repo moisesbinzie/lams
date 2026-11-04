@@ -10,7 +10,6 @@
 	import { Label } from '$lib/components/ui/label';
 	import {
 		BookOpen,
-		CalendarDays,
 		GraduationCap,
 		Plus,
 		Trash2,
@@ -26,8 +25,8 @@
 	 *
 	 * The whole point of this shape is the semester. A course is not simply "in"
 	 * a program — it is taught in a particular year, in a particular semester,
-	 * which is also what a timetable and a set of lecture records hang off. The
-	 * columns make that visible instead of burying it in a form field.
+	 * which is also what a set of lecture records hangs off. The columns make
+	 * that visible instead of burying it in a form field.
 	 *
 	 * Semester fallback: only the semesters a program actually uses are shown as
 	 * tabs. If a program has no placements yet, every semester is offered, so a
@@ -240,10 +239,6 @@
 																<span class="flex items-center gap-1">
 																	<Users class="size-3" aria-hidden="true" />
 																	{p.studentCount} student{p.studentCount === 1 ? '' : 's'}
-																</span>
-																<span class="flex items-center gap-1">
-																	<CalendarDays class="size-3" aria-hidden="true" />
-																	{p.meetingCount} slot{p.meetingCount === 1 ? '' : 's'}
 																</span>
 															</p>
 														</div>

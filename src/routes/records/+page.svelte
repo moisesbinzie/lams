@@ -18,7 +18,7 @@
 	import StudentRecordsDialog from '$lib/components/lams/student-records-dialog.svelte';
 	import LecturerNav from '$lib/components/lams/lecturer-nav.svelte';
 	import type { ProgramRow, Offering, ReportRow, Semester } from '$lib/lams/types';
-	import { reportError, reportSuccess } from '$lib/lams/notify.svelte';
+	import { reportError } from '$lib/lams/notify.svelte';
 	import { toast } from 'svelte-sonner';
 
 	let token = getToken();
@@ -36,7 +36,6 @@
 	// below and no lecturer navigation.
 	let role = $state('');
 
-	let belowPct = $derived(rows.filter((r) => r.attendPct < 75).length);
 	const average = $derived(
 		rows.length ? Math.round(rows.reduce((sum, r) => sum + r.attendPct, 0) / rows.length) : 0
 	);
@@ -125,29 +124,6 @@
 			rows = res.rows;
 		} catch (err) {
 			reportError(err, 'Could not load the report.');
-		}
-	}
-
-	async function excuse(status: 'Excused' | 'Present' | 'Absent') {
-		if (!offeringId) return;
-		if (!confirm(`Mark everyone below 75% as ${status} for every past lecture in this course?`)) return;
-		try {
-			const client = requireConvexClient();
-			const targets = rows.filter((r) => r.attendPct < 75).map((r) => r.personId as never);
-			if (targets.length === 0) {
-				reportSuccess('Nobody is below 75%.');
-				return;
-			}
-			const res = await client.mutation(api.reports.excuseRange, {
-				token,
-				offeringId: offeringId as never,
-				personIds: targets,
-				status
-			});
-			reportSuccess(`${res.changed} record(s) changed.`);
-			await loadReport();
-		} catch (err) {
-			reportError(err, 'Could not change those records.');
 		}
 	}
 
@@ -250,7 +226,7 @@
 				</Card.Content>
 			</Card.Root>
 		{:else}
-			<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
 				<div class="rounded-md border border-border p-3 text-center">
 					<p class="text-2xl font-bold">{totalLectures}</p>
 					<p class="text-xs text-muted-foreground">Lectures taken</p>
@@ -262,10 +238,6 @@
 				<div class="rounded-md border border-border p-3 text-center">
 					<p class="text-2xl font-bold">{rows.length}</p>
 					<p class="text-xs text-muted-foreground">Students</p>
-				</div>
-				<div class="rounded-md border border-border p-3 text-center">
-					<p class="text-2xl font-bold text-amber-700">{belowPct}</p>
-					<p class="text-xs text-muted-foreground">Below 75%</p>
 				</div>
 			</div>
 
@@ -289,12 +261,6 @@
 						>
 							<Printer class="size-3.5" /> Save as PDF
 						</Button>
-					</div>
-					<div class="flex flex-wrap items-center gap-2">
-						<span class="text-xs text-muted-foreground">Bulk change for everyone below 75%:</span>
-						<Button variant="outline" size="sm" onclick={() => excuse('Excused')}>Mark excused</Button>
-						<Button variant="outline" size="sm" onclick={() => excuse('Present')}>Mark present</Button>
-						<Button variant="outline" size="sm" onclick={() => excuse('Absent')}>Mark absent</Button>
 					</div>
 					<p class="text-xs text-muted-foreground">
 						Approved absences (excused) are left out of every percentage, so they never work against a
@@ -326,7 +292,7 @@
 						</Table.Header>
 						<Table.Body>
 							{#each visible as r (r.regNumber)}
-								<Table.Row class={r.attendPct < 75 ? 'bg-amber-50' : ''}>
+								<Table.Row>
 									<Table.Cell class="font-medium whitespace-nowrap">
 										<span class="flex flex-wrap items-center gap-1.5">
 											{r.fullName}

@@ -50,7 +50,7 @@ describe('haversineM', () => {
 		assert.ok(Math.abs(d - 111194.9) < 1, `got ${d}`);
 	});
 
-	it('measures a few metres within a hall', () => {
+	it('measures a few metres within a classroom', () => {
 		const d = haversineM(-13.9626, 33.7741, -13.96265, 33.77415);
 		assert.ok(d > 1 && d < 20, `got ${d}`);
 	});

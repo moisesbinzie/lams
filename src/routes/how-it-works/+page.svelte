@@ -39,13 +39,13 @@
 		},
 		{
 			icon: Camera,
-			title: 'Step 2 — Scan the screen in the hall',
-			body: 'When the lecture starts, point your phone camera at the square barcode (QR code) on the screen at the front of the hall. Your phone opens the attendance page automatically.'
+			title: 'Step 2 — Scan the screen in the classroom',
+			body: 'When the lecture starts, point your phone camera at the square barcode (QR code) on the screen at the front of the classroom. Your phone opens the attendance page automatically.'
 		},
 		{
 			icon: MapPin,
 			title: 'Step 3 — Allow your location once',
-			body: 'When your phone requests location access, accept it. Your position at the moment of scanning is what confirms that you are inside the hall. Without it, your record cannot be confirmed.'
+			body: 'When your phone requests location access, accept it. Your position at the moment of scanning is what confirms that you are inside the classroom. Without it, your record cannot be confirmed.'
 		},
 		{
 			icon: CheckCircle2,
@@ -56,13 +56,13 @@
 
 	/** Attendance statuses, stated exactly as they appear on the record. */
 	const statuses = [
-		{ icon: CircleCheck, label: 'Present', meaning: 'You were recorded inside the hall within the on-time window (normally the first 5 minutes).' },
-		{ icon: Clock, label: 'Late', meaning: 'You were recorded inside the hall after the on-time window but before the lecture closed (normally within 10 minutes).' },
+		{ icon: CircleCheck, label: 'Present', meaning: 'You were recorded inside the classroom within the on-time window (normally the first 5 minutes).' },
+		{ icon: Clock, label: 'Late', meaning: 'You were recorded inside the classroom after the on-time window but before the lecture closed (normally within 10 minutes).' },
 		{
 			icon: MapPin,
 			label: 'Out of range',
 			meaning:
-				'Your phone reported a position outside the 50 metre radius around the screen. If you were in the hall, report the record so your lecturer can review it.'
+				'Your phone reported a position outside the 15 metre radius around the screen. If you were in the classroom, report the record so your lecturer can review it.'
 		},
 		{ icon: XCircle, label: 'Absent', meaning: 'No record was submitted for you before the lecture closed.' },
 		{
@@ -80,13 +80,13 @@
 		},
 		{
 			icon: ScanLine,
-			title: 'Step 2 — Start the lecture',
-			body: 'Select the course and press Start here. Your current location becomes the lecture position with a 50 metre radius. The station QR code appears on screen for students to scan.'
+			title: 'Step 2 — Generate the QR code',
+			body: 'Select the course and press Generate QR code. Your current location becomes the lecture position with a 15 metre radius. The station QR code appears on screen for students to scan.'
 		},
 		{
 			icon: MonitorSmartphone,
 			title: 'Step 3 — Display the station code',
-			body: 'Keep the station screen visible at the front of the hall for the full attendance window. The code changes automatically. If the screen is carried out of the room, scanning stops until it is returned.'
+			body: 'Keep the station screen visible at the front of the classroom for the full attendance window. The code changes automatically. If the screen is carried out of the room, scanning stops until it is returned.'
 		},
 		{
 			icon: ClipboardCheck,
@@ -121,9 +121,9 @@
 	const faqs = [
 		{
 			icon: MapPin,
-			question: 'My record states Out of range, but I was in the hall. What should I do?',
+			question: 'My record states Out of range, but I was in the classroom. What should I do?',
 			answer:
-				'Mobile telephones are less accurate indoors, particularly in crowded halls. Open My attendance, select the record and report it with a short note. Your programme representative or lecturer will review the evidence and correct the record where appropriate. The original value is always retained.'
+				'Mobile telephones are less accurate indoors, particularly in crowded classrooms. Open My attendance, select the record and report it with a short note. Your programme representative or lecturer will review the evidence and correct the record where appropriate. The original value is always retained.'
 		},
 		{
 			icon: Smartphone,
@@ -163,9 +163,9 @@
 		},
 		{
 			icon: ScanLine,
-			question: 'I am a lecturer. How do I start a lecture quickly?',
+			question: 'I am a lecturer. How do I generate a QR code quickly?',
 			answer:
-				'Open Take attendance, select the course and press Start here. Your current location is used with a 50 metre radius. Advanced settings remain available for typing coordinates manually, repositioning the screen, or changing the on-time and late windows.'
+				'Open Take attendance, select the course and press Generate QR code. Your current location is used with a 15 metre radius. Advanced settings remain available for typing coordinates manually, repositioning the screen, or changing the on-time and late windows.'
 		}
 	];
 
@@ -214,7 +214,7 @@
 		<h1 class="text-3xl font-extrabold tracking-tight text-lams-navy sm:text-4xl">How to use LAMS</h1>
 		<p class="max-w-2xl text-muted-foreground">
 			LAMS records lecture attendance electronically. Students scan the code displayed on the
-			screen at the front of the hall; the system records their name, the time and their
+			screen at the front of the classroom; the system records their name, the time and their
 			distance from the screen. This guide explains how to use the system as a student, as a
 			lecturer and as an administrator.
 		</p>
@@ -299,8 +299,8 @@
 					{/each}
 				</ol>
 				<p class="mt-4 text-sm text-muted-foreground">
-					To start a lecture, select the course and press Start here. Your current location is
-					used automatically with a 50 metre radius. Students who are absent for four consecutive
+					To generate a QR code, select the course and press Generate QR code. Your current location is
+					used automatically with a 15 metre radius. Students who are absent for four consecutive
 					lectures in one course are withdrawn from that course automatically; their previous
 					records are retained and they appear as Withdrawn on the roster.
 				</p>

@@ -261,7 +261,7 @@
 			<Card.Description>
 				A university year holds its semesters. Everything else in the system hangs off a
 				semester: courses are placed into one, and lectures are recorded against one. The
-				active year drives default pickers in Programs and Timetable.
+				active year drives default pickers in Programs.
 			</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-3">
@@ -297,7 +297,7 @@
 									</Button>
 								{:else}
 									<span class="text-xs text-muted-foreground">
-										Defaults in Programs and Timetable use this year.
+										Defaults in Programs use this year.
 									</span>
 								{/if}
 								<Button

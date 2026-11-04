@@ -86,7 +86,7 @@
 
 			const restored = takePendingScan(sessionId) ?? code;
 			if (!restored) {
-				error = 'That code is missing. Scan the screen at the front of the hall again.';
+				error = 'That code is missing. Scan the screen at the front of the classroom again.';
 				stage = 'failed';
 				return;
 			}
@@ -276,7 +276,7 @@
 	<!--
 		Same shape as `/scanner`: the page is the shared student width so the strip
 		and heading line up across tabs, and the scan flow itself is a narrow
-		centred column — it is read on a phone, one-handed, in a hall.
+		centred column — it is read on a phone, one-handed, in a classroom.
 	-->
 	<div class="mx-auto flex w-full max-w-md flex-col gap-6">
 	<div class="text-center">
@@ -339,7 +339,7 @@
 				<MapPin class="size-8 animate-pulse text-lams-navy" aria-hidden="true" />
 				<p class="text-sm font-medium">Checking you are at the station…</p>
 				<p class="text-sm text-muted-foreground">
-					Allow location access if your phone asks. That is what proves you are in the hall.
+					Allow location access if your phone asks. That is what proves you are in the classroom.
 				</p>
 				{#if locationBest}
 					<p class="text-xs text-muted-foreground" aria-live="polite">

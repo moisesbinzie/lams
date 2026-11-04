@@ -8,7 +8,6 @@
 import {
 	BarChart3,
 	BookOpen,
-	CalendarDays,
 	ScanLine,
 	Settings,
 	Settings2,
@@ -24,8 +23,8 @@ export interface StudentNavItem {
 
 /**
  * Where a student can go. Order is deliberate: the account itself first, then
- * what they open in a lecture (scan, timetable), then the records they come
- * back to check.
+ * what they open in a lecture (scan), then the records they come back to
+ * check.
  *
  * Labels are kept short on purpose — this renders as a single row inside the
  * page, and the narrowest student page (`/scanner`) is `max-w-md`.
@@ -33,7 +32,6 @@ export interface StudentNavItem {
 export const STUDENT_NAV: StudentNavItem[] = [
 	{ href: '/home', label: 'My account', icon: UserRound },
 	{ href: '/scanner', label: 'Scan', icon: ScanLine },
-	{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
 	{ href: '/attendance', label: 'Attendance', icon: BarChart3 },
 	{ href: '/courses', label: 'Courses', icon: BookOpen }
 ];
@@ -47,7 +45,7 @@ export const STUDENT_NAV: StudentNavItem[] = [
  *
  * Order is the job order: run a lecture first (Take attendance), then manage
  * the courses behind it (Lectures = roster), review what happened (Records),
- * plan the week (Timetable), and finally the account itself (Settings).
+ * and finally the account itself (Settings).
  * There is deliberately no Set up — that console lives at `/manage` for
  * admins only; lecturers only ever see the courses assigned to them.
  */
@@ -55,7 +53,6 @@ export const LECTURER_NAV: StudentNavItem[] = [
 	{ href: '/scan', label: 'Take attendance', icon: ScanLine },
 	{ href: '/lectures', label: 'Lectures', icon: BookOpen },
 	{ href: '/records', label: 'Records', icon: BarChart3 },
-	{ href: '/timetable', label: 'Timetable', icon: CalendarDays },
 	{ href: '/settings', label: 'Settings', icon: Settings }
 ];
 

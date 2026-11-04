@@ -37,9 +37,7 @@
 	/** GPS uncertainty of each fix above, when it came from a live reading. Typing clears it. */
 	let pinAccuracy = $state<number | null>(null);
 	let stationPinAccuracy = $state<number | null>(null);
-	let radius = $state('50');
-	// How far the screen may be carried from its spot before scanning stops.
-	let tolerance = $state('15');
+	let radius = $state('15');
 	// The three-tier window: on time, late, then too late to count.
 	let onTimeMin = $state('5');
 	let lateUntilMin = $state('10');
@@ -50,7 +48,7 @@
 	const usesStationSpot = $derived(stationLat.trim() !== '' && stationLng.trim() !== '');
 	/**
 	 * A pin captured from a fix coarser than the radius would fail the whole
-	 * hall one scan at a time, so the server refuses it — this is the same
+	 * classroom one scan at a time, so the server refuses it — this is the same
 	 * check up front, with the way out spelt out (better fix or wider radius).
 	 */
 	const pinTooCoarse = $derived(pinAccuracy !== null && pinAccuracy > Number(radius));
@@ -142,7 +140,7 @@
 
 	async function start(e: SubmitEvent) {
 		e.preventDefault();
-		// A coarse pin would fail the whole hall one scan at a time, so the
+		// A coarse pin would fail the whole classroom one scan at a time, so the
 		// first tap stops here and says so — the second tap is the starter
 		// saying they saw the warning and accept the risk. The button itself
 		// always works: a warning must never strand a lecture.
@@ -161,7 +159,6 @@
 				...(pinAccuracy !== null ? { accuracyM: pinAccuracy } : {}),
 				radiusM: Number(radius),
 				stationRadiusM: Number(radius),
-				stationToleranceM: Number(tolerance),
 				// Blank station fields mean "same as the lecture", so nothing is sent
 				// and the server falls back to the lecture position.
 				...(stationLat.trim() === '' || stationLng.trim() === ''
@@ -294,8 +291,8 @@
 				<details class="rounded-md border border-border p-3">
 					<summary class="cursor-pointer text-sm font-medium">Advanced: screen position and timing</summary>
 					<p class="mt-1 text-xs text-muted-foreground">
-						Defaults work for most halls (50 m radius, 5 min on time, 10 min late). Open only when the
-						screen sits away from you or you need a wider window.
+						Defaults work for most classrooms (15 m radius, 5 min on time, 10 min late). Open only when
+						the screen sits away from you or you need a wider window.
 					</p>
 					<div class="mt-3 flex flex-col gap-3">
 						<div>
@@ -331,10 +328,6 @@
 								<div class="flex items-end">
 									<Button type="button" variant="outline" onclick={pinStationHere}>Screen is where I am</Button>
 								</div>
-							</div>
-							<div class="mt-2 flex flex-col gap-1 sm:max-w-40">
-								<Label for="tol">Screen may move (m)</Label>
-								<Input id="tol" type="number" min="1" max={radius} bind:value={tolerance} />
 							</div>
 							{#if stationTooCoarse}
 								<p class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">

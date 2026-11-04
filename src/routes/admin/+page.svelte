@@ -42,8 +42,8 @@
 	/**
 	 * The admin console: overview + accounts only.
 	 *
-	 * The teaching structure lives where it is built — the setup console at
-	 * `/manage` (academic year, programs, students, timetable). This page
+	* The teaching structure lives where it is built — the setup console at
+	 * `/manage` (academic year, programs, students). This page
 	 * links there instead of embedding it, so there is one write path.
 	 *
 	 * Overview also carries the setup checklist. Its job is to answer "what do I
@@ -165,7 +165,7 @@
 			</h1>
 			<p class="text-xs text-muted-foreground">
 				Signed in as <strong>{me?.username ?? '…'}</strong>. Lecturer accounts live here; the
-				academic year, programs, students and timetables are built in the setup console.
+				academic year, programs and students are built in the setup console.
 			</p>
 		</div>
 	</div>
@@ -237,7 +237,7 @@
 						<ol class="flex flex-col gap-3">
 							<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
 								<span>
-									<strong>1. Create lecturer accounts</strong>
+									<strong>1. Add lecturer accounts</strong>
 									<span class="block text-xs text-muted-foreground">
 										Usernames plus a generated temporary password — in this console.
 									</span>
@@ -304,16 +304,15 @@
 
 				<Card.Root>
 					<Card.Header>
-						<Card.Title class="text-base">Students and timetables</Card.Title>
+						<Card.Title class="text-base">Students</Card.Title>
 						<Card.Description>
-							Once courses are placed, register the roll and give each student their courses, then
-							timetable the week — both in the setup console.
+							Once courses are placed, register the roll and give each student their courses — both
+							in the setup console.
 						</Card.Description>
 					</Card.Header>
-				<Card.Content class="flex flex-wrap gap-2">
-					<Button href="/manage?tab=students" variant="outline">Register students</Button>
-					<Button href="/manage?tab=timetable" variant="outline">Build the timetable</Button>
-				</Card.Content>
+					<Card.Content class="flex flex-wrap gap-2">
+						<Button href="/manage?tab=students" variant="outline">Register students</Button>
+					</Card.Content>
 				</Card.Root>
 
 				{#if rename?.needsMigration}
